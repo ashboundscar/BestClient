@@ -1512,6 +1512,26 @@ void CMenus::RenderSettingsBestClientFun(CUIRect MainView)
 			return false;
 		};
 
+		auto IsCheckOnBoard = [&](const auto &Board, bool WhiteTurn) {
+			for(int y = 0; y < 8; ++y)
+			{
+				for(int x = 0; x < 8; ++x)
+				{
+					const char Piece = Board[y][x];
+					if(Piece == '.' || IsWhitePiece(Piece) != WhiteTurn)
+						continue;
+					if((char)toupper((unsigned char)Piece) == 'K')
+						return IsUnderAttack(Board, x, y, WhiteTurn);
+				}
+			}
+			return false;
+		};
+
+		// Todo
+		// 1. check
+		// 2. checkmate/stalemate
+		// 3. castling
+		// 4. en passant
 		auto IsValidMoveOnBoard = [&](const auto &Board, int FromX, int FromY, int ToX, int ToY) {
 			if(FromX == ToX && FromY == ToY)
 				return false;
@@ -1531,6 +1551,7 @@ void CMenus::RenderSettingsBestClientFun(CUIRect MainView)
 			const int AbsDy = abs(Dy);
 			const char UpperPiece = (char)toupper((unsigned char)Piece);
 
+			bool IsBasicMoveValid = false;
 			if(UpperPiece == 'P')
 			{
 				const int Forward = IsWhitePiece(Piece) ? -1 : 1;
@@ -1538,28 +1559,38 @@ void CMenus::RenderSettingsBestClientFun(CUIRect MainView)
 				if(Dx == 0 && Target == '.')
 				{
 					if(Dy == Forward)
-						return true;
-					if(FromY == StartRow && Dy == Forward * 2 && Board[FromY + Forward][FromX] == '.')
-						return true;
+						IsBasicMoveValid = true;
+					else if(FromY == StartRow && Dy == Forward * 2 && Board[FromY + Forward][FromX] == '.')
+						IsBasicMoveValid = true;
 				}
-				if(AbsDx == 1 && Dy == Forward && Target != '.' && IsWhitePiece(Target) != IsWhitePiece(Piece))
-					return true;
-				return false;
+				else if(AbsDx == 1 && Dy == Forward && Target != '.' && IsWhitePiece(Target) != IsWhitePiece(Piece))
+					IsBasicMoveValid = true;
 			}
-			if(UpperPiece == 'N')
-				return (AbsDx == 1 && AbsDy == 2) || (AbsDx == 2 && AbsDy == 1);
-			if(UpperPiece == 'B')
-				return AbsDx == AbsDy && IsPathClearOnBoard(Board, FromX, FromY, ToX, ToY);
-			if(UpperPiece == 'R')
-				return (Dx == 0 || Dy == 0) && IsPathClearOnBoard(Board, FromX, FromY, ToX, ToY);
-			if(UpperPiece == 'Q')
-				return ((AbsDx == AbsDy) || (Dx == 0 || Dy == 0)) && IsPathClearOnBoard(Board, FromX, FromY, ToX, ToY);
-			if (UpperPiece == 'K') {
+			else if(UpperPiece == 'N')
+				IsBasicMoveValid = (AbsDx == 1 && AbsDy == 2) || (AbsDx == 2 && AbsDy == 1);
+			else if(UpperPiece == 'B')
+				IsBasicMoveValid = AbsDx == AbsDy && IsPathClearOnBoard(Board, FromX, FromY, ToX, ToY);
+			else if(UpperPiece == 'R')
+				IsBasicMoveValid = (Dx == 0 || Dy == 0) && IsPathClearOnBoard(Board, FromX, FromY, ToX, ToY);
+			else if(UpperPiece == 'Q')
+				IsBasicMoveValid = ((AbsDx == AbsDy) || (Dx == 0 || Dy == 0)) && IsPathClearOnBoard(Board, FromX, FromY, ToX, ToY);
+			else if (UpperPiece == 'K') {
 				if(IsUnderAttack(Board, ToX, ToY, IsWhitePiece(Piece)))
 					return false;
-				return AbsDx <= 1 && AbsDy <= 1;
+				IsBasicMoveValid = AbsDx <= 1 && AbsDy <= 1;
 			}
-			return false;
+
+			if(!IsBasicMoveValid)
+				return false;
+			
+			// check check
+			TChessBoard TempBoard = CopyChessBoard();
+			TempBoard[ToY][ToX] = Piece;
+			TempBoard[FromY][FromX] = '.';
+			if(IsCheckOnBoard(TempBoard, IsWhitePiece(Piece)))
+				return false;
+			
+			return true;
 		};
 
 		auto CollectLegalMovesOnBoard = [&](const auto &Board, bool WhiteTurn) {
