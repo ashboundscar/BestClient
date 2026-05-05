@@ -407,7 +407,7 @@ void CCamera::OnRender()
 			m_aLastPos[g_Config.m_ClDummy] = GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy];
 			GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy] = m_PrevCenter;
 			GameClient()->m_Controls.m_aMouseInputType[g_Config.m_ClDummy] = CControls::EMouseInputType::AUTOMATED;
-			GameClient()->m_Controls.ClampMousePos();
+			// GameClient()->m_Controls.ClampMousePos();
 			m_CamType = CAMTYPE_SPEC;
 		}
 		const vec2 TargetCenter = GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy];
@@ -435,7 +435,7 @@ void CCamera::OnRender()
 		{
 			GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy] = m_aLastPos[g_Config.m_ClDummy];
 			GameClient()->m_Controls.m_aMouseInputType[g_Config.m_ClDummy] = CControls::EMouseInputType::AUTOMATED;
-			GameClient()->m_Controls.ClampMousePos();
+			// GameClient()->m_Controls.ClampMousePos();
 			m_CamType = CAMTYPE_PLAYER;
 		}
 
@@ -453,7 +453,35 @@ void CCamera::OnRender()
 	}
 	else
 		m_ForceFreeviewPos = m_Center;
+	if(m_CamType == CAMTYPE_SPEC)
+	{
+		const float SmoothFreeviewSpeed = 180.0f;
+		const float SmoothFreeviewAcceleration = 2.5f;
+		const float FrameTime = Client()->RenderFrameTime();
+		vec2 FreeviewMove = vec2(0.0f, 0.0f);
+		static vec2 SmoothFreeviewVelocity = vec2(0.0f, 0.0f);
 
+		if(Input()->KeyIsPressed(KEY_KP_4))
+			FreeviewMove.x -= 1.0f;
+		if(Input()->KeyIsPressed(KEY_KP_6))
+			FreeviewMove.x += 1.0f;
+		if(Input()->KeyIsPressed(KEY_KP_8))
+			FreeviewMove.y -= 1.0f;
+		if(Input()->KeyIsPressed(KEY_KP_2))
+			FreeviewMove.y += 1.0f;
+
+		const vec2 TargetVelocity = FreeviewMove * SmoothFreeviewSpeed;
+		SmoothFreeviewVelocity += (TargetVelocity - SmoothFreeviewVelocity) * minimum(FrameTime * SmoothFreeviewAcceleration, 1.0f);
+
+		if(absolute(SmoothFreeviewVelocity.x) < 0.1f && absolute(SmoothFreeviewVelocity.y) < 0.1f)
+			SmoothFreeviewVelocity = vec2(0.0f, 0.0f);
+
+		if(SmoothFreeviewVelocity.x != 0.0f || SmoothFreeviewVelocity.y != 0.0f)
+		{
+			m_ForceFreeviewPos = m_Center + SmoothFreeviewVelocity * FrameTime;
+			m_ForceFreeview = true;
+		}
+	}
 	const int SpecId = GameClient()->m_Snap.m_SpecInfo.m_SpectatorId;
 
 	// start smoothing from the current position when the target changes
