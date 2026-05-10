@@ -95,6 +95,7 @@ namespace FontIcon
 	inline const char *const TRASH = "\uF1F8";
 	inline const char *const TRIANGLE_EXCLAMATION = "\uF071";
 	inline const char *const UNDO = "\uF2EA";
+	inline const char *const UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER = "\uF424";
 	inline const char *const USER = "\uF007";
 	inline const char *const VIDEO = "\uF03D";
 	inline const char *const XMARK = "\uF00D";

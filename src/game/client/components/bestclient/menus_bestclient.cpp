@@ -265,6 +265,17 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			else
 				Phase = Expanded ? 1.0f : 0.0f;
 		};
+		const auto DoOpenHudEditorButton = [&](CButtonContainer *pButtonContainer, CUIRect *pButtonRect) {
+			const bool CanOpenHudEditor = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
+			const bool Clicked = Ui()->DoButton_FontIcon(pButtonContainer, FontIcon::UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, CanOpenHudEditor ? 0 : -1, pButtonRect, BUTTONFLAG_LEFT);
+			GameClient()->m_Tooltips.DoToolTip(pButtonContainer, pButtonRect, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Available in-game or in demo playback"));
+			if(Clicked && CanOpenHudEditor)
+			{
+				SetActive(false);
+				GameClient()->m_HudEditor.Activate();
+			}
+			return Clicked && CanOpenHudEditor;
+		};
 
 		static CScrollRegion s_BestClientVisualsScrollRegion;
 		vec2 VisualsScrollOffset(0.0f, 0.0f);
@@ -1017,6 +1028,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			static float s_MusicPlayerPhase = 0.0f;
 			static float s_MusicPlayerStaticColorPhase = 0.0f;
 			static float s_MusicPlayerVisualizerPhase = 0.0f;
+			static CButtonContainer s_MusicPlayerResizeButton;
 			static CButtonContainer s_MusicPlayerResetButton;
 			const bool MusicPlayerEnabled = g_Config.m_BcMusicPlayer != 0;
 			const bool StaticColorOn = MusicPlayerEnabled && g_Config.m_BcMusicPlayerColorMode == 0;
@@ -1042,8 +1054,15 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
+			const float IconButtonWidth = LineSize + 8.0f;
+			const float IconButtonSpacing = 4.0f;
+			CUIRect TitleLabel, Buttons, ResizeButton, ResizeHitbox, ResetButton, ResetHitbox;
+			Label.VSplitRight(IconButtonWidth * 2.0f + IconButtonSpacing, &TitleLabel, &Buttons);
+			Buttons.VSplitLeft(IconButtonWidth, &ResizeButton, &Buttons);
+			Buttons.VSplitLeft(IconButtonSpacing, nullptr, &Buttons);
+			ResetButton = Buttons;
+			ResizeHitbox = ResizeButton;
+			DoOpenHudEditorButton(&s_MusicPlayerResizeButton, &ResizeHitbox);
 			ResetHitbox = ResetButton;
 			const bool MusicPlayerResetClicked = Ui()->DoButton_FontIcon(&s_MusicPlayerResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
 			GameClient()->m_Tooltips.DoToolTip(&s_MusicPlayerResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
@@ -1147,12 +1166,17 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		// Keystrokes (right column block)
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_KEYSTROKES))
 		{
+			static CButtonContainer s_KeystrokesResizeButton;
 			const float ContentHeight = MarginSmall * 4.0f + LineSize * 6.0f;
 			CUIRect Content, Label, Button;
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
-			Ui()->DoLabel(&Label, BCLocalize("Keystrokes"), HeadlineFontSize, TEXTALIGN_ML);
+			CUIRect TitleLabel, ResizeButton, ResizeHitbox;
+			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResizeButton);
+			ResizeHitbox = ResizeButton;
+			DoOpenHudEditorButton(&s_KeystrokesResizeButton, &ResizeHitbox);
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Keystrokes"), HeadlineFontSize, TEXTALIGN_ML);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcKeystrokesKeyboard, BCLocalize("Show keyboard HUD"), &g_Config.m_BcKeystrokesKeyboard, &Content, LineSize);
@@ -1770,6 +1794,17 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				BCUiAnimations::UpdatePhase(Phase, Expanded ? 1.0f : 0.0f, Client()->RenderFrameTime(), ModuleUiRevealAnimationDuration());
 			else
 				Phase = Expanded ? 1.0f : 0.0f;
+		};
+		const auto DoOpenHudEditorButton = [&](CButtonContainer *pButtonContainer, CUIRect *pButtonRect) {
+			const bool CanOpenHudEditor = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
+			const bool Clicked = Ui()->DoButton_FontIcon(pButtonContainer, FontIcon::UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, CanOpenHudEditor ? 0 : -1, pButtonRect, BUTTONFLAG_LEFT);
+			GameClient()->m_Tooltips.DoToolTip(pButtonContainer, pButtonRect, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Available in-game or in demo playback"));
+			if(Clicked && CanOpenHudEditor)
+			{
+				SetActive(false);
+				GameClient()->m_HudEditor.Activate();
+			}
+			return Clicked && CanOpenHudEditor;
 		};
 
 		static CScrollRegion s_BestClientGameplayScrollRegion;
@@ -2488,6 +2523,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			const float ColorPickerSpacing = 5.0f;
 			static float s_FinishPredictionPhase = 0.0f;
 			static float s_FinishPredictionTimePhase = 0.0f;
+			static CButtonContainer s_FinishPredictionResizeButton;
 			const bool FinishPredictionExpanded = g_Config.m_BcFinishPrediction != 0;
 			const bool FinishPredictionBarMode = g_Config.m_BcFinishPredictionMode == 1;
 			UpdateRevealPhase(s_FinishPredictionPhase, FinishPredictionExpanded);
@@ -2503,7 +2539,11 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
-			Ui()->DoLabel(&Label, BCLocalize("Finish Prediction"), HeadlineFontSize, TEXTALIGN_ML);
+			CUIRect TitleLabel, ResizeButton, ResizeHitbox;
+			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResizeButton);
+			ResizeHitbox = ResizeButton;
+			DoOpenHudEditorButton(&s_FinishPredictionResizeButton, &ResizeHitbox);
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Finish Prediction"), HeadlineFontSize, TEXTALIGN_ML);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcFinishPrediction, BCLocalize("Show finish prediction HUD"), &g_Config.m_BcFinishPrediction, &Content, LineSize);
 
