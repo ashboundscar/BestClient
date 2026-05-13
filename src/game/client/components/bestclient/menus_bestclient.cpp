@@ -268,7 +268,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		const auto DoOpenHudEditorButton = [&](CButtonContainer *pButtonContainer, CUIRect *pButtonRect) {
 			const bool CanOpenHudEditor = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
 			const bool Clicked = Ui()->DoButton_FontIcon(pButtonContainer, FontIcon::UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, CanOpenHudEditor ? 0 : -1, pButtonRect, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(pButtonContainer, pButtonRect, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Available in-game or in demo playback"));
+			GameClient()->m_Tooltips.DoToolTip(pButtonContainer, pButtonRect, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Join a game first"));
+			GameClient()->m_Tooltips.SetFadeTime(pButtonContainer, 0.0f);
 			if(Clicked && CanOpenHudEditor)
 			{
 				SetActive(false);
@@ -1772,6 +1773,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			SetActive(false);
 			GameClient()->m_HudEditor.Activate();
 		}
+		GameClient()->m_Tooltips.DoToolTip(&s_OpenHudEditorButton, &Button, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Join a game first"));
+		GameClient()->m_Tooltips.SetFadeTime(&s_OpenHudEditorButton, 0.0f);
 	}
 	else if(s_CurTab == BESTCLIENT_TAB_GAMEPLAY)
 	{
@@ -1798,7 +1801,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		const auto DoOpenHudEditorButton = [&](CButtonContainer *pButtonContainer, CUIRect *pButtonRect) {
 			const bool CanOpenHudEditor = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
 			const bool Clicked = Ui()->DoButton_FontIcon(pButtonContainer, FontIcon::UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, CanOpenHudEditor ? 0 : -1, pButtonRect, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(pButtonContainer, pButtonRect, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Available in-game or in demo playback"));
+			GameClient()->m_Tooltips.DoToolTip(pButtonContainer, pButtonRect, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Join a game first"));
+			GameClient()->m_Tooltips.SetFadeTime(pButtonContainer, 0.0f);
 			if(Clicked && CanOpenHudEditor)
 			{
 				SetActive(false);
