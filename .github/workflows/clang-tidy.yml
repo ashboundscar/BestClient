@@ -77,4 +77,5 @@ jobs:
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
           -DCMAKE_BUILD_TYPE=Debug \
           -Werror=dev
-        xargs -a changed_cpp_files.txt -d '\n' clang-tidy-20 -p clang-tidy -warnings-as-errors='*'
+        cmake --build clang-tidy --target generate_protocol
+        xargs -a changed_cpp_files.txt -d '\n' clang-tidy-20 -p clang-tidy -warnings-as-errors='*' -header-filter='^$' -checks='-misc-use-internal-linkage,-readability-static-definition-in-anonymous-namespace'

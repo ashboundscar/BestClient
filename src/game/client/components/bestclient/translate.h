@@ -1,6 +1,6 @@
 /* Copyright © 2026 BestProject Team */
-#ifndef GAME_CLIENT_COMPONENTS_BestClient_TRANSLATE_H
-#define GAME_CLIENT_COMPONENTS_BestClient_TRANSLATE_H
+#ifndef GAME_CLIENT_COMPONENTS_BESTCLIENT_TRANSLATE_H
+#define GAME_CLIENT_COMPONENTS_BESTCLIENT_TRANSLATE_H
 
 #include <game/client/component.h>
 #include <game/client/components/chat.h>
@@ -71,4 +71,4 @@ public:
 	void AutoTranslate(CChat::CLine &Line);
 };
 
-#endif
+#endif // GAME_CLIENT_COMPONENTS_BESTCLIENT_TRANSLATE_H

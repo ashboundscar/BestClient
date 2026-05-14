@@ -1,6 +1,6 @@
 /* Copyright © 2026 BestProject Team */
-#ifndef GAME_CLIENT_COMPONENTS_BESTCLIENT_CHATBUBBLES_H
-#define GAME_CLIENT_COMPONENTS_BESTCLIENT_CHATBUBBLES_H
+#ifndef GAME_CLIENT_COMPONENTS_BESTCLIENT_CHAT_BUBBLES_H
+#define GAME_CLIENT_COMPONENTS_BESTCLIENT_CHAT_BUBBLES_H
 
 #include <base/color.h>
 
@@ -100,4 +100,4 @@ public:
 	virtual void OnWindowResize() override; // so it resets when font is changed
 };
 
-#endif
+#endif // GAME_CLIENT_COMPONENTS_BESTCLIENT_CHAT_BUBBLES_H

@@ -77,6 +77,15 @@ namespace
 		pReader->m_Pos = NewPos;
 		return (int64_t)NewPos;
 	}
+
+	int64_t FfmpegFrameDurationTs(const AVFrame *pFrame)
+	{
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 0, 100)
+		return pFrame->duration;
+#else
+		return pFrame->pkt_duration;
+#endif
+	}
 #endif
 
 	int ClampFrameDurationMs(int DurationMs)
@@ -553,9 +562,10 @@ namespace MediaDecoder
 				}
 
 				int FrameDurationMs = 0;
-				if(pFrame->duration > 0)
+				const int64_t FrameDurationTs = FfmpegFrameDurationTs(pFrame);
+				if(FrameDurationTs > 0)
 				{
-					const int64_t Rescaled = av_rescale_q(pFrame->duration, pStream->time_base, AVRational{1, 1000});
+					const int64_t Rescaled = av_rescale_q(FrameDurationTs, pStream->time_base, AVRational{1, 1000});
 					if(Rescaled > 0)
 						FrameDurationMs = (int)minimum<int64_t>(Rescaled, MEDIA_MAX_FRAME_MS);
 				}
@@ -575,13 +585,13 @@ namespace MediaDecoder
 
 					// Some demuxers/decoders fill AVFrame::duration inconsistently (wrong time base),
 					// especially at the start. If PTS diff suggests a sane duration, prefer that.
-					constexpr int MAX_REASONABLE_MS = 200; // >= 5 FPS
-					if(PtsDiffMs > 0 && PtsDiffMs <= MAX_REASONABLE_MS && DurationMs > MAX_REASONABLE_MS && DurationMs >= PtsDiffMs * 4)
+					constexpr int MaxReasonableMs = 200; // >= 5 FPS
+					if(PtsDiffMs > 0 && PtsDiffMs <= MaxReasonableMs && DurationMs > MaxReasonableMs && DurationMs >= PtsDiffMs * 4)
 					{
 						DurationMs = PtsDiffMs;
 						ImplicitTiming = true;
 					}
-					else if(PreferredFrameDurationMsFromRate > 0 && DurationMs > MAX_REASONABLE_MS && DurationMs >= PreferredFrameDurationMsFromRate * 4)
+					else if(PreferredFrameDurationMsFromRate > 0 && DurationMs > MaxReasonableMs && DurationMs >= PreferredFrameDurationMsFromRate * 4)
 					{
 						DurationMs = PreferredFrameDurationMsFromRate;
 						ImplicitTiming = true;
@@ -600,28 +610,28 @@ namespace MediaDecoder
 
 				if(ImplicitTiming)
 				{
-					constexpr int MAX_REASONABLE_IMPLICIT_MS = 200; // >= 5 FPS
-					if(DurationMs > MAX_REASONABLE_IMPLICIT_MS)
+					constexpr int MaxReasonableImplicitMs = 200; // >= 5 FPS
+					if(DurationMs > MaxReasonableImplicitMs)
 						DurationMs = FallbackFrameDurationMs;
 				}
 			}
 
 			// Adaptive fallback: if we ever see a sane faster duration, use it for subsequent missing-timing frames.
 			{
-				constexpr int MAX_REASONABLE_FALLBACK_UPDATE_MS = 200; // >= 5 FPS
-				if(DurationMs > 0 && DurationMs <= MAX_REASONABLE_FALLBACK_UPDATE_MS)
+				constexpr int MaxReasonableFallbackUpdateMs = 200; // >= 5 FPS
+				if(DurationMs > 0 && DurationMs <= MaxReasonableFallbackUpdateMs)
 					FallbackFrameDurationMs = minimum(FallbackFrameDurationMs, ClampFrameDurationMs(DurationMs));
 			}
 
 			// Startup smoothing: some formats/codecs produce bogus long durations for the first few frames.
 			// Cap initial per-frame durations relative to the fallback to avoid a "slideshow" start.
 			{
-				constexpr size_t STARTUP_FRAME_CLAMP_COUNT = 60;
+				constexpr size_t StartupFrameClampCount = 60;
 				const size_t FrameIndex = DecodedFrames.m_vFrames.size();
-				if(FrameIndex < STARTUP_FRAME_CLAMP_COUNT && FallbackFrameDurationMs > 0)
+				if(FrameIndex < StartupFrameClampCount && FallbackFrameDurationMs > 0)
 				{
-					constexpr int MAX_STARTUP_FRAME_MS_ABS = 200; // >= 5 FPS
-					const int StartupMaxFrameMs = minimum(MAX_STARTUP_FRAME_MS_ABS, ClampFrameDurationMs(FallbackFrameDurationMs * 2));
+					constexpr int MaxStartupFrameMsAbs = 200; // >= 5 FPS
+					const int StartupMaxFrameMs = minimum(MaxStartupFrameMsAbs, ClampFrameDurationMs(FallbackFrameDurationMs * 2));
 					if(DurationMs > StartupMaxFrameMs)
 						DurationMs = StartupMaxFrameMs;
 				}
@@ -688,8 +698,8 @@ namespace MediaDecoder
 				{
 					const int64_t Ms = (1000ll * (int64_t)Rate.den) / (int64_t)Rate.num;
 					// Never allow the FPS fallback to be slower than the default (prevents "startup slideshow").
-					constexpr int64_t MAX_REASONABLE_FALLBACK_MS = 200; // >= 5 FPS
-					if(Ms > 0 && Ms <= MAX_REASONABLE_FALLBACK_MS)
+					constexpr int64_t MaxReasonableFallbackMs = 200; // >= 5 FPS
+					if(Ms > 0 && Ms <= MaxReasonableFallbackMs)
 					{
 						const int CandidateMs = ClampFrameDurationMs((int)Ms);
 						PreferredFrameDurationMsFromRate = CandidateMs;

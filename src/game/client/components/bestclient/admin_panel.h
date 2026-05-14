@@ -1,6 +1,6 @@
 /* Copyright © 2026 BestProject Team */
-#ifndef GAME_CLIENT_COMPONENTS_ADMIN_PANEL_H
-#define GAME_CLIENT_COMPONENTS_ADMIN_PANEL_H
+#ifndef GAME_CLIENT_COMPONENTS_BESTCLIENT_ADMIN_PANEL_H
+#define GAME_CLIENT_COMPONENTS_BESTCLIENT_ADMIN_PANEL_H
 
 #include <engine/console.h>
 
@@ -118,4 +118,4 @@ private:
 	CButtonContainer m_ActionPresetLongButton;
 };
 
-#endif
+#endif // GAME_CLIENT_COMPONENTS_BESTCLIENT_ADMIN_PANEL_H

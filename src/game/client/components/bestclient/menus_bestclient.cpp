@@ -205,9 +205,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 	int TabCount = 0;
 	int FirstVisibleTab = -1;
-	for(int TabIndex = 0; TabIndex < NUM_BESTCLIENT_TABS; ++TabIndex)
+	for(const int Tab : aTabOrder)
 	{
-		const int Tab = aTabOrder[TabIndex];
 		if(IsTabHidden(Tab))
 			continue;
 		if(FirstVisibleTab == -1)
@@ -227,9 +226,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 	const float TabWidth = TabBar.w / (float)TabCount;
 	int VisibleIndex = 0;
-	for(int TabIndex = 0; TabIndex < NUM_BESTCLIENT_TABS; ++TabIndex)
+	for(const int Tab : aTabOrder)
 	{
-		const int Tab = aTabOrder[TabIndex];
 		if(IsTabHidden(Tab))
 			continue;
 
@@ -532,12 +530,12 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				static CUi::SDropDownState s_3DParticlesTypeState;
 				static CScrollRegion s_3DParticlesTypeScrollRegion;
 				s_3DParticlesTypeState.m_SelectionPopupContext.m_pScrollRegion = &s_3DParticlesTypeScrollRegion;
-				const char *ap3DParticleTypes[3] = {
+				const char *Ap3DParticleTypes[3] = {
 					BCLocalize("Cube"),
 					BCLocalize("Heart"),
 					BCLocalize("Mixed"),
 				};
-				g_Config.m_Bc3dParticlesType = Ui()->DoDropDown(&TypeSelect, g_Config.m_Bc3dParticlesType - 1, ap3DParticleTypes, (int)std::size(ap3DParticleTypes), s_3DParticlesTypeState) + 1;
+				g_Config.m_Bc3dParticlesType = Ui()->DoDropDown(&TypeSelect, g_Config.m_Bc3dParticlesType - 1, Ap3DParticleTypes, (int)std::size(Ap3DParticleTypes), s_3DParticlesTypeState) + 1;
 
 				Expand.HSplitTop(LineSize, &Row, &Expand);
 				Ui()->DoScrollbarOption(&g_Config.m_Bc3dParticlesSizeMax, &g_Config.m_Bc3dParticlesSizeMax, &Row, BCLocalize("Size"), 2, 200);
@@ -557,11 +555,11 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				static CUi::SDropDownState s_3DParticlesColorModeState;
 				static CScrollRegion s_3DParticlesColorModeScrollRegion;
 				s_3DParticlesColorModeState.m_SelectionPopupContext.m_pScrollRegion = &s_3DParticlesColorModeScrollRegion;
-				const char *ap3DParticleColorModes[2] = {
+				const char *Ap3DParticleColorModes[2] = {
 					BCLocalize("Custom"),
 					BCLocalize("Random"),
 				};
-				g_Config.m_Bc3dParticlesColorMode = Ui()->DoDropDown(&ColorModeSelect, g_Config.m_Bc3dParticlesColorMode - 1, ap3DParticleColorModes, (int)std::size(ap3DParticleColorModes), s_3DParticlesColorModeState) + 1;
+				g_Config.m_Bc3dParticlesColorMode = Ui()->DoDropDown(&ColorModeSelect, g_Config.m_Bc3dParticlesColorMode - 1, Ap3DParticleColorModes, (int)std::size(Ap3DParticleColorModes), s_3DParticlesColorModeState) + 1;
 
 				if(g_Config.m_Bc3dParticlesColorMode == 1)
 				{
@@ -3465,9 +3463,8 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	static CButtonContainer s_aShowTabButtons[NUM_BESTCLIENT_TABS] = {};
 	int HideableTabCount = 0;
 	int HideableVisibleIndex = 0;
-	for(int TabIndex = 0; TabIndex < NUM_BESTCLIENT_TABS; ++TabIndex)
+	for(const int Tab : aTabOrder)
 	{
-		const int Tab = aTabOrder[TabIndex];
 		// Keep Info visible the same way as in legacy BestClient.
 		if(Tab == BESTCLIENT_TAB_INFO)
 			continue;

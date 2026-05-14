@@ -62,9 +62,9 @@ bool CRJelly::IsEnabledFor(int ClientId) const
 	if(m_pClient == nullptr || !g_Config.m_BcJellyTee || ClientId < 0 || ClientId >= MAX_JELLY_CLIENTS)
 		return false;
 
-	for(int Dummy = 0; Dummy < NUM_DUMMIES; ++Dummy)
+	for(const int LocalId : m_pClient->m_aLocalIds)
 	{
-		if(ClientId == m_pClient->m_aLocalIds[Dummy])
+		if(ClientId == LocalId)
 			return true;
 	}
 

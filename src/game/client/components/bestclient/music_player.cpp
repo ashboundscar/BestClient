@@ -165,6 +165,7 @@ struct SNowPlayingSnapshot
 	BestClientVisualizer::SVisualizerFrame m_Visualizer;
 };
 
+#if (defined(CONF_PLATFORM_LINUX) && BC_MUSICPLAYER_HAS_DBUS) || BC_MUSICPLAYER_HAS_WINRT
 static bool ShouldForceOrderedNavigation(const SNowPlayingSnapshot &Snapshot)
 {
 	if(!Snapshot.m_Valid)
@@ -173,6 +174,7 @@ static bool ShouldForceOrderedNavigation(const SNowPlayingSnapshot &Snapshot)
 	const bool HasQueueContext = Snapshot.m_CanPrev && Snapshot.m_CanNext && Snapshot.m_DurationMs > 0;
 	return HasAlbumContext || HasQueueContext;
 }
+#endif
 
 static uint32_t HashBytes(std::string_view Value)
 {
@@ -310,6 +312,7 @@ static std::string BuildSnapshotTrackKey(const SNowPlayingSnapshot &Snapshot)
 	return Snapshot.m_ServiceId + "|" + Snapshot.m_Title + "|" + Snapshot.m_Artist + "|" + std::to_string(Snapshot.m_DurationMs);
 }
 
+#if BC_MUSICPLAYER_HAS_WINRT
 static std::string TrimCopy(std::string Value)
 {
 	auto IsSpace = [](unsigned char c) {
@@ -347,7 +350,9 @@ static void ApplyBrowserMediaFallbacks(std::string &Title, std::string &Artist, 
 	if(Title == Artist)
 		Artist.clear();
 }
+#endif
 
+#if defined(CONF_PLATFORM_LINUX) && BC_MUSICPLAYER_HAS_DBUS
 static int MusicServicePriorityScore(std::string_view ServiceId, bool IsCurrentService)
 {
 	const int Priority = BestClientVisualizer::PlayerSourcePriority(ServiceId);
@@ -359,6 +364,7 @@ static int MusicServicePriorityScore(std::string_view ServiceId, bool IsCurrentS
 		Score += 1000;
 	return Score;
 }
+#endif
 
 struct SGameTimerDisplay
 {
