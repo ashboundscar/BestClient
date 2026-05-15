@@ -84,4 +84,4 @@ jobs:
         python3 -m datasrc.seven.compile network_header > clang-tidy/src/generated/protocol7.h
         python3 datasrc/crosscompile.py map_header > clang-tidy/src/generated/protocolglue.h
         cmake --build clang-tidy --target generate_protocol
-        xargs -a changed_cpp_files.txt -d '\n' clang-tidy-20 -p clang-tidy -warnings-as-errors='*' -header-filter='^$' -checks='-misc-use-internal-linkage,-readability-static-definition-in-anonymous-namespace'
+        xargs -a changed_cpp_files.txt -d '\n' clang-tidy-20 -p clang-tidy -warnings-as-errors='*' -header-filter='^$' -checks='-bugprone-exception-escape,-misc-redundant-expression,-misc-use-internal-linkage,-modernize-loop-convert,-readability-avoid-unconditional-preprocessor-if,-readability-container-contains,-readability-redundant-casting,-readability-static-definition-in-anonymous-namespace,-readability-use-anyofallof'

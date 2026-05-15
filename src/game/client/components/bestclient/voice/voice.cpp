@@ -11,19 +11,22 @@
 
 #include <engine/client.h>
 #include <engine/font_icons.h>
-#include <engine/storage.h>
 #include <engine/shared/config.h>
 #include <engine/shared/http.h>
 #include <engine/shared/json.h>
+#include <engine/storage.h>
 #include <engine/textrender.h>
 
 #include <game/client/animstate.h>
 #include <game/client/bc_ui_animations.h>
+#include <game/client/components/countryflags.h>
 #include <game/client/components/hud_layout.h>
 #include <game/client/gameclient.h>
-#include <game/client/components/countryflags.h>
 #include <game/client/ui_scrollregion.h>
 #include <game/localization.h>
+
+#include <SDL.h>
+#include <opus.h>
 
 #include <algorithm>
 #include <cctype>
@@ -32,506 +35,503 @@
 #include <limits>
 #include <unordered_set>
 
-#include <SDL.h>
-#include <opus.h>
-
 namespace
 {
-constexpr int CAPTURE_READ_SAMPLES = 4096;
-constexpr int MAX_RECEIVE_PACKETS_PER_TICK = 64;
-constexpr int MAX_CAPTURE_QUEUE_SAMPLES = BestClientVoice::SAMPLE_RATE * 2;
-constexpr int MAX_DECODED_QUEUE_SAMPLES = BestClientVoice::FRAME_SIZE * 8;
-constexpr int MAX_MIC_MONITOR_QUEUE_SAMPLES = BestClientVoice::SAMPLE_RATE * 2;
-constexpr int PLAYBACK_TARGET_FRAMES = BestClientVoice::FRAME_SIZE * 3;
-constexpr int PLAYBACK_MAX_RESYNC_FRAMES = BestClientVoice::FRAME_SIZE * 4;
-constexpr int MAX_PACKET_GAP_FOR_PLC = 3;
-constexpr int PEER_TIMEOUT_SECONDS = 10;
-constexpr int VOICE_TALKING_TIMEOUT_MS = 350;
-constexpr int VOICE_MAX_BITRATE_KBPS = 128;
-constexpr int VOICE_HEARTBEAT_SECONDS = 5;
-constexpr int VOICE_SERVER_STALE_SECONDS = 10;
-constexpr int VOICE_IDLE_SHUTDOWN_SECONDS = 5;
-constexpr int VOICE_START_RETRY_SECONDS = 5;
-constexpr float VOICE_TILE_WORLD_SIZE = 32.0f;
-constexpr float PANEL_PADDING = 14.0f;
-constexpr float PANEL_HEADER_HEIGHT = 34.0f;
-constexpr float PANEL_SECTION_BUTTON_SIZE = 34.0f;
-constexpr float PANEL_ROW_HEIGHT = 48.0f;
-constexpr int SERVER_LIST_PING_TIMEOUT_SEC = 2;
-constexpr int SERVER_LIST_PING_INTERVAL_SEC = 30;
-constexpr const char *VOICE_MASTER_LIST_URL = "https://150.241.70.188:3000/voice/servers.json";
-constexpr const char *DEFAULT_VOICE_SERVER_ADDRESS = "150.241.70.188:8777";
-constexpr const char *VOICE_MUTED_CFG_PATH = "BestClient/voice_muted.cfg";
+	constexpr int CAPTURE_READ_SAMPLES = 4096;
+	constexpr int MAX_RECEIVE_PACKETS_PER_TICK = 64;
+	constexpr int MAX_CAPTURE_QUEUE_SAMPLES = BestClientVoice::SAMPLE_RATE * 2;
+	constexpr int MAX_DECODED_QUEUE_SAMPLES = BestClientVoice::FRAME_SIZE * 8;
+	constexpr int MAX_MIC_MONITOR_QUEUE_SAMPLES = BestClientVoice::SAMPLE_RATE * 2;
+	constexpr int PLAYBACK_TARGET_FRAMES = BestClientVoice::FRAME_SIZE * 3;
+	constexpr int PLAYBACK_MAX_RESYNC_FRAMES = BestClientVoice::FRAME_SIZE * 4;
+	constexpr int MAX_PACKET_GAP_FOR_PLC = 3;
+	constexpr int PEER_TIMEOUT_SECONDS = 10;
+	constexpr int VOICE_TALKING_TIMEOUT_MS = 350;
+	constexpr int VOICE_MAX_BITRATE_KBPS = 128;
+	constexpr int VOICE_HEARTBEAT_SECONDS = 5;
+	constexpr int VOICE_SERVER_STALE_SECONDS = 10;
+	constexpr int VOICE_IDLE_SHUTDOWN_SECONDS = 5;
+	constexpr int VOICE_START_RETRY_SECONDS = 5;
+	constexpr float VOICE_TILE_WORLD_SIZE = 32.0f;
+	constexpr float PANEL_PADDING = 14.0f;
+	constexpr float PANEL_HEADER_HEIGHT = 34.0f;
+	constexpr float PANEL_SECTION_BUTTON_SIZE = 34.0f;
+	constexpr float PANEL_ROW_HEIGHT = 48.0f;
+	constexpr int SERVER_LIST_PING_TIMEOUT_SEC = 2;
+	constexpr int SERVER_LIST_PING_INTERVAL_SEC = 30;
+	constexpr const char *VOICE_MASTER_LIST_URL = "https://150.241.70.188:3000/voice/servers.json";
+	constexpr const char *DEFAULT_VOICE_SERVER_ADDRESS = "150.241.70.188:8777";
+	constexpr const char *VOICE_MUTED_CFG_PATH = "BestClient/voice_muted.cfg";
 
-enum
-{
-	VOICE_SECTION_SERVERS = 0,
-	VOICE_SECTION_MEMBERS,
-	VOICE_SECTION_SETTINGS,
-};
-
-ColorRGBA VoiceSectionBgColor()
-{
-	return ColorRGBA(0.0f, 0.0f, 0.0f, 0.18f);
-}
-
-ColorRGBA VoiceCardBgColor()
-{
-	return ColorRGBA(0.02f, 0.02f, 0.03f, 0.24f);
-}
-
-ColorRGBA VoiceRowBgColor()
-{
-	return ColorRGBA(0.03f, 0.03f, 0.04f, 0.24f);
-}
-
-ColorRGBA VoiceRowHotColor()
-{
-	return ColorRGBA(0.10f, 0.11f, 0.13f, 0.30f);
-}
-
-ColorRGBA VoiceRowSelectedColor()
-{
-	return ColorRGBA(0.16f, 0.18f, 0.22f, 0.40f);
-}
-
-ColorRGBA VoiceIconButtonColor(bool Active)
-{
-	return Active ? ColorRGBA(0.18f, 0.20f, 0.24f, 0.34f) : ColorRGBA(0.02f, 0.02f, 0.03f, 0.22f);
-}
-
-[[maybe_unused]] bool ReadVoiceString(const uint8_t *pData, int DataSize, int &Offset, std::string &Out, int MaxLen = 128)
-{
-	uint16_t Size = 0;
-	if(!BestClientVoice::ReadU16(pData, DataSize, Offset, Size))
-		return false;
-	if(Size > (uint16_t)MaxLen)
-		return false;
-	if(Offset + (int)Size > DataSize)
-		return false;
-	Out.assign((const char *)pData + Offset, (size_t)Size);
-	Offset += (int)Size;
-	return true;
-}
-
-[[maybe_unused]] void WriteVoiceString(std::vector<uint8_t> &vOut, const std::string &Str, int MaxLen = 128)
-{
-	const uint16_t Size = (uint16_t)minimum<size_t>(Str.size(), (size_t)MaxLen);
-	BestClientVoice::WriteU16(vOut, Size);
-	vOut.insert(vOut.end(), Str.begin(), Str.begin() + Size);
-}
-
-ColorRGBA VoiceMuteButtonColor(bool Active)
-{
-	return Active ? ColorRGBA(0.45f, 0.10f, 0.10f, 0.34f) : ColorRGBA(0.02f, 0.02f, 0.03f, 0.22f);
-}
-
-void ToggleVoiceMicMute()
-{
-	if(g_Config.m_BcVoiceChatMicMuted)
+	enum
 	{
-		if(g_Config.m_BcVoiceChatHeadphonesMuted)
-			return;
-		g_Config.m_BcVoiceChatMicMuted = 0;
-	}
-	else
+		VOICE_SECTION_SERVERS = 0,
+		VOICE_SECTION_MEMBERS,
+		VOICE_SECTION_SETTINGS,
+	};
+
+	ColorRGBA VoiceSectionBgColor()
 	{
-		g_Config.m_BcVoiceChatMicMuted = 1;
-	}
-}
-
-void ToggleVoiceHeadphonesMute()
-{
-	const bool Muted = g_Config.m_BcVoiceChatHeadphonesMuted == 0;
-	g_Config.m_BcVoiceChatHeadphonesMuted = Muted ? 1 : 0;
-	if(Muted)
-		g_Config.m_BcVoiceChatMicMuted = 1;
-	else
-		g_Config.m_BcVoiceChatMicMuted = 0;
-}
-
-bool IsLegacyVoiceServerAddress(const char *pAddress)
-{
-	return !pAddress || pAddress[0] == '\0' || str_comp(pAddress, "127.0.0.1:8777") == 0 || str_comp(pAddress, "localhost:8777") == 0;
-}
-
-void EnsureDefaultVoiceServerAddress()
-{
-	if(IsLegacyVoiceServerAddress(g_Config.m_BcVoiceChatServerAddress))
-		str_copy(g_Config.m_BcVoiceChatServerAddress, DEFAULT_VOICE_SERVER_ADDRESS, sizeof(g_Config.m_BcVoiceChatServerAddress));
-}
-
-const char *GetAudioDeviceNameByIndex(int IsCapture, int Index)
-{
-	const int DeviceCount = SDL_GetNumAudioDevices(IsCapture);
-	if(DeviceCount <= 0 || Index < 0 || Index >= DeviceCount)
-		return nullptr;
-	return SDL_GetAudioDeviceName(Index, IsCapture);
-}
-
-bool IsForwardSequence(uint16_t LastSequence, uint16_t NewSequence)
-{
-	const uint16_t Delta = (uint16_t)(NewSequence - LastSequence);
-	return Delta != 0 && Delta < 0x8000;
-}
-
-void ConfigureVoiceOpusEncoder(OpusEncoder *pEncoder, int BitrateKbps)
-{
-	if(!pEncoder)
-		return;
-
-	const int ClampedBitrate = std::clamp(BitrateKbps, 6, VOICE_MAX_BITRATE_KBPS);
-	opus_encoder_ctl(pEncoder, OPUS_SET_BITRATE(ClampedBitrate * 1000));
-	opus_encoder_ctl(pEncoder, OPUS_SET_VBR(1));
-	opus_encoder_ctl(pEncoder, OPUS_SET_VBR_CONSTRAINT(0));
-	opus_encoder_ctl(pEncoder, OPUS_SET_COMPLEXITY(10));
-	opus_encoder_ctl(pEncoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
-	opus_encoder_ctl(pEncoder, OPUS_SET_DTX(0));
-
-	// Client-side resilience. Server just relays Opus payloads.
-	// Start with full-quality mode and enable FEC/loss adaptation only when needed.
-	opus_encoder_ctl(pEncoder, OPUS_SET_INBAND_FEC(0));
-	opus_encoder_ctl(pEncoder, OPUS_SET_PACKET_LOSS_PERC(0));
-}
-
-float SanitizeAudioValue(float Value)
-{
-	if(!std::isfinite(Value))
-		return 0.0f;
-	if(Value > 1000000.0f)
-		return 1000000.0f;
-	if(Value < -1000000.0f)
-		return -1000000.0f;
-	return Value;
-}
-
-float VoiceFrameRms(const int16_t *pSamples, int Count)
-{
-	if(!pSamples || Count <= 0)
-		return 0.0f;
-	double Sum = 0.0;
-	for(int i = 0; i < Count; ++i)
-	{
-		const float X = pSamples[i] / 32768.0f;
-		Sum += X * X;
-	}
-	return (float)std::sqrt(Sum / (double)Count);
-}
-
-void ApplyAutoNoiseSuppressorSimple(int16_t *pSamples, int Count, float Strength, float &NoiseFloor, float &Gate)
-{
-	if(!pSamples || Count <= 0)
-		return;
-
-	Strength = std::clamp(Strength, 0.0f, 1.0f);
-	if(Strength <= 0.0f)
-		return;
-
-	const float Rms = VoiceFrameRms(pSamples, Count);
-	if(!std::isfinite(Rms))
-		return;
-
-	if(NoiseFloor <= 0.0f)
-		NoiseFloor = Rms;
-
-	const float UpdateFast = 0.2f;
-	const float UpdateSlow = 0.05f;
-	if(Rms < NoiseFloor * 1.2f)
-		NoiseFloor += (Rms - NoiseFloor) * UpdateFast;
-	else if(Rms < NoiseFloor * 1.5f)
-		NoiseFloor += (Rms - NoiseFloor) * UpdateSlow;
-
-	NoiseFloor = std::clamp(NoiseFloor, 1.0f / 32768.0f, 0.5f);
-
-	const float MinGain = 1.0f - Strength * 0.9f;
-	const float LowSnr = 1.2f;
-	const float HighSnr = 2.5f;
-	const float Snr = Rms / (NoiseFloor + 1e-6f);
-
-	float Target = 1.0f;
-	if(Snr <= LowSnr)
-		Target = MinGain;
-	else if(Snr >= HighSnr)
-		Target = 1.0f;
-	else
-	{
-		const float T = (Snr - LowSnr) / (HighSnr - LowSnr);
-		Target = MinGain + (1.0f - MinGain) * T;
+		return ColorRGBA(0.0f, 0.0f, 0.0f, 0.18f);
 	}
 
-	const float Dt = Count / (float)BestClientVoice::SAMPLE_RATE;
-	const float AttackSec = 0.01f;
-	const float ReleaseSec = 0.08f;
-	const float AttackCoeff = 1.0f - std::exp(-Dt / AttackSec);
-	const float ReleaseCoeff = 1.0f - std::exp(-Dt / ReleaseSec);
-	if(Target > Gate)
-		Gate += (Target - Gate) * AttackCoeff;
-	else
-		Gate += (Target - Gate) * ReleaseCoeff;
-
-	Gate = std::clamp(Gate, MinGain, 1.0f);
-	if(Gate >= 0.999f)
-		return;
-
-	for(int i = 0; i < Count; ++i)
+	ColorRGBA VoiceCardBgColor()
 	{
-		const float Out = pSamples[i] * Gate;
-		pSamples[i] = (int16_t)std::clamp(Out, -32768.0f, 32767.0f);
+		return ColorRGBA(0.02f, 0.02f, 0.03f, 0.24f);
 	}
-}
 
-void ApplyAutoHpfCompressor(int16_t *pSamples, int Count, float &PrevIn, float &PrevOut, float &Env)
-{
-	if(!pSamples || Count <= 0)
-		return;
-
-	const float CutoffHz = 120.0f;
-	const float Rc = 1.0f / (2.0f * 3.14159265f * CutoffHz);
-	const float Dt = 1.0f / BestClientVoice::SAMPLE_RATE;
-	const float Alpha = Rc / (Rc + Dt);
-
-	// Rushie defaults.
-	const float Threshold = 0.20f;
-	const float Ratio = 2.5f;
-	const float AttackSec = 0.02f;
-	const float ReleaseSec = 0.20f;
-	const float MakeupGain = 1.6f;
-	const float NoiseFloor = 0.02f;
-	const float Limiter = 0.50f;
-	const float AttackCoeff = 1.0f - std::exp(-1.0f / (AttackSec * BestClientVoice::SAMPLE_RATE));
-	const float ReleaseCoeff = 1.0f - std::exp(-1.0f / (ReleaseSec * BestClientVoice::SAMPLE_RATE));
-
-	for(int i = 0; i < Count; ++i)
+	ColorRGBA VoiceRowBgColor()
 	{
-		const float X = pSamples[i] / 32768.0f;
-		const float Y = Alpha * (PrevOut + X - PrevIn);
-		PrevIn = X;
-		PrevOut = SanitizeAudioValue(Y);
-
-		const float AbsY = std::fabs(PrevOut);
-		if(AbsY > Env)
-			Env += (AbsY - Env) * AttackCoeff;
-		else
-			Env += (AbsY - Env) * ReleaseCoeff;
-
-		float Gain = 1.0f;
-		if(Env > Threshold)
-			Gain = (Threshold + (Env - Threshold) / Ratio) / Env;
-		if(Env > NoiseFloor)
-			Gain *= MakeupGain;
-
-		const float Out = std::clamp(PrevOut * Gain, -Limiter, Limiter);
-		const int Sample = (int)std::clamp(Out * 32767.0f, -32768.0f, 32767.0f);
-		pSamples[i] = (int16_t)Sample;
+		return ColorRGBA(0.03f, 0.03f, 0.04f, 0.24f);
 	}
-}
 
-std::string NormalizeVoiceNameKey(const char *pName)
-{
-	if(!pName)
-		return {};
-	const char *pBegin = pName;
-	const char *pEnd = pName + str_length(pName);
-	while(pBegin < pEnd && std::isspace((unsigned char)*pBegin))
-		pBegin++;
-	while(pEnd > pBegin && std::isspace((unsigned char)pEnd[-1]))
-		pEnd--;
-
-	std::string Key;
-	Key.reserve((size_t)(pEnd - pBegin));
-	for(const char *p = pBegin; p < pEnd; ++p)
-		Key.push_back((char)std::tolower((unsigned char)*p));
-	return Key;
-}
-
-void ParseVoiceNameList(const char *pList, std::unordered_set<std::string> &Out)
-{
-	Out.clear();
-	if(!pList || pList[0] == '\0')
-		return;
-
-	const char *p = pList;
-	while(*p)
+	ColorRGBA VoiceRowHotColor()
 	{
-		while(*p == ',' || std::isspace((unsigned char)*p))
-			p++;
-		if(*p == '\0')
-			break;
-
-		const char *pStart = p;
-		while(*p && *p != ',')
-			p++;
-
-		const char *pEnd = p;
-		while(pEnd > pStart && std::isspace((unsigned char)pEnd[-1]))
-			pEnd--;
-		std::string Key;
-		Key.reserve((size_t)(pEnd - pStart));
-		for(const char *q = pStart; q < pEnd; ++q)
-			Key.push_back((char)std::tolower((unsigned char)*q));
-		if(!Key.empty())
-			Out.insert(std::move(Key));
+		return ColorRGBA(0.10f, 0.11f, 0.13f, 0.30f);
 	}
-}
 
-void ParseVoiceMutedConfigFile(const char *pData, unsigned DataSize, std::unordered_set<std::string> &Out)
-{
-	Out.clear();
-	if(!pData || DataSize == 0)
-		return;
-
-	const char *p = pData;
-	const char *pEnd = pData + DataSize;
-	while(p < pEnd)
+	ColorRGBA VoiceRowSelectedColor()
 	{
-		const char *pLineStart = p;
-		while(p < pEnd && *p != '\n')
-			++p;
-		const char *pLineEnd = p;
-		if(p < pEnd && *p == '\n')
-			++p;
-
-		while(pLineStart < pLineEnd && std::isspace((unsigned char)*pLineStart))
-			++pLineStart;
-		while(pLineEnd > pLineStart && std::isspace((unsigned char)pLineEnd[-1]))
-			--pLineEnd;
-		if(pLineStart >= pLineEnd)
-			continue;
-		if(*pLineStart == '#' || *pLineStart == ';')
-			continue;
-
-		char aName[128];
-		str_truncate(aName, sizeof(aName), pLineStart, (int)(pLineEnd - pLineStart));
-		const std::string Key = NormalizeVoiceNameKey(aName);
-		if(!Key.empty())
-			Out.insert(Key);
+		return ColorRGBA(0.16f, 0.18f, 0.22f, 0.40f);
 	}
-}
 
-void ParseVoiceNameVolumeList(const char *pList, std::unordered_map<std::string, int> &Out)
-{
-	Out.clear();
-	if(!pList || pList[0] == '\0')
-		return;
-
-	const char *p = pList;
-	while(*p)
+	ColorRGBA VoiceIconButtonColor(bool Active)
 	{
-		while(*p == ',' || std::isspace((unsigned char)*p))
-			p++;
-		if(*p == '\0')
-			break;
+		return Active ? ColorRGBA(0.18f, 0.20f, 0.24f, 0.34f) : ColorRGBA(0.02f, 0.02f, 0.03f, 0.22f);
+	}
 
-		const char *pStart = p;
-		while(*p && *p != ',')
-			p++;
-		const char *pEnd = p;
-		while(pEnd > pStart && std::isspace((unsigned char)pEnd[-1]))
-			pEnd--;
-		if(pEnd <= pStart)
-			continue;
+	[[maybe_unused]] bool ReadVoiceString(const uint8_t *pData, int DataSize, int &Offset, std::string &Out, int MaxLen = 128)
+	{
+		uint16_t Size = 0;
+		if(!BestClientVoice::ReadU16(pData, DataSize, Offset, Size))
+			return false;
+		if(Size > (uint16_t)MaxLen)
+			return false;
+		if(Offset + (int)Size > DataSize)
+			return false;
+		Out.assign((const char *)pData + Offset, (size_t)Size);
+		Offset += (int)Size;
+		return true;
+	}
 
-		const char *pSep = nullptr;
-		for(const char *q = pStart; q < pEnd; ++q)
+	[[maybe_unused]] void WriteVoiceString(std::vector<uint8_t> &vOut, const std::string &Str, int MaxLen = 128)
+	{
+		const uint16_t Size = (uint16_t)minimum<size_t>(Str.size(), (size_t)MaxLen);
+		BestClientVoice::WriteU16(vOut, Size);
+		vOut.insert(vOut.end(), Str.begin(), Str.begin() + Size);
+	}
+
+	ColorRGBA VoiceMuteButtonColor(bool Active)
+	{
+		return Active ? ColorRGBA(0.45f, 0.10f, 0.10f, 0.34f) : ColorRGBA(0.02f, 0.02f, 0.03f, 0.22f);
+	}
+
+	void ToggleVoiceMicMute()
+	{
+		if(g_Config.m_BcVoiceChatMicMuted)
 		{
-			if(*q == '=' || *q == ':')
-			{
-				pSep = q;
-				break;
-			}
+			if(g_Config.m_BcVoiceChatHeadphonesMuted)
+				return;
+			g_Config.m_BcVoiceChatMicMuted = 0;
 		}
-		if(!pSep)
-			continue;
-
-		const char *pNameEnd = pSep;
-		while(pNameEnd > pStart && std::isspace((unsigned char)pNameEnd[-1]))
-			pNameEnd--;
-		const char *pValueStart = pSep + 1;
-		while(pValueStart < pEnd && std::isspace((unsigned char)*pValueStart))
-			pValueStart++;
-
-		if(pNameEnd <= pStart || pValueStart >= pEnd)
-			continue;
-
-		char aName[128];
-		str_truncate(aName, sizeof(aName), pStart, (int)(pNameEnd - pStart));
-		std::string Key = NormalizeVoiceNameKey(aName);
-		if(Key.empty())
-			continue;
-
-		char aValue[16];
-		str_truncate(aValue, sizeof(aValue), pValueStart, (int)(pEnd - pValueStart));
-		int Percent = std::clamp(str_toint(aValue), 0, 200);
-		Out[std::move(Key)] = Percent;
+		else
+		{
+			g_Config.m_BcVoiceChatMicMuted = 1;
+		}
 	}
-}
 
-void WriteVoiceNameList(const std::unordered_set<std::string> &Set, char *pOut, int OutSize)
-{
-	if(!pOut || OutSize <= 0)
-		return;
-	pOut[0] = '\0';
-
-	std::vector<const char *> vpKeys;
-	vpKeys.reserve(Set.size());
-	for(const auto &Key : Set)
-		vpKeys.push_back(Key.c_str());
-	std::sort(vpKeys.begin(), vpKeys.end(), [](const char *pA, const char *pB) { return str_comp(pA, pB) < 0; });
-
-	bool First = true;
-	for(const char *pKey : vpKeys)
+	void ToggleVoiceHeadphonesMute()
 	{
-		if(!First)
-			str_append(pOut, ",", OutSize);
-		First = false;
-		str_append(pOut, pKey, OutSize);
+		const bool Muted = g_Config.m_BcVoiceChatHeadphonesMuted == 0;
+		g_Config.m_BcVoiceChatHeadphonesMuted = Muted ? 1 : 0;
+		if(Muted)
+			g_Config.m_BcVoiceChatMicMuted = 1;
+		else
+			g_Config.m_BcVoiceChatMicMuted = 0;
 	}
-}
 
-void WriteVoiceNameVolumeList(const std::unordered_map<std::string, int> &Map, char *pOut, int OutSize)
-{
-	if(!pOut || OutSize <= 0)
-		return;
-	pOut[0] = '\0';
-
-	std::vector<std::pair<const char *, int>> vItems;
-	vItems.reserve(Map.size());
-	for(const auto &Pair : Map)
-		vItems.emplace_back(Pair.first.c_str(), Pair.second);
-	std::sort(vItems.begin(), vItems.end(), [](const auto &A, const auto &B) { return str_comp(A.first, B.first) < 0; });
-
-	bool First = true;
-	for(const auto &Pair : vItems)
+	bool IsLegacyVoiceServerAddress(const char *pAddress)
 	{
-		if(!First)
-			str_append(pOut, ",", OutSize);
-		First = false;
-		str_append(pOut, Pair.first, OutSize);
-		str_append(pOut, "=", OutSize);
-		char aValue[16];
-		str_format(aValue, sizeof(aValue), "%d", std::clamp(Pair.second, 0, 200));
-		str_append(pOut, aValue, OutSize);
+		return !pAddress || pAddress[0] == '\0' || str_comp(pAddress, "127.0.0.1:8777") == 0 || str_comp(pAddress, "localhost:8777") == 0;
 	}
-}
 
-float VoiceHudAlpha(CGameClient *pGameClient)
-{
-	(void)pGameClient;
-	return 1.0f;
-}
+	void EnsureDefaultVoiceServerAddress()
+	{
+		if(IsLegacyVoiceServerAddress(g_Config.m_BcVoiceChatServerAddress))
+			str_copy(g_Config.m_BcVoiceChatServerAddress, DEFAULT_VOICE_SERVER_ADDRESS, sizeof(g_Config.m_BcVoiceChatServerAddress));
+	}
 
-ColorRGBA ApplyVoiceHudAlpha(CGameClient *pGameClient, ColorRGBA Color)
-{
-	Color.a *= VoiceHudAlpha(pGameClient);
-	return Color;
-}
+	const char *GetAudioDeviceNameByIndex(int IsCapture, int Index)
+	{
+		const int DeviceCount = SDL_GetNumAudioDevices(IsCapture);
+		if(DeviceCount <= 0 || Index < 0 || Index >= DeviceCount)
+			return nullptr;
+		return SDL_GetAudioDeviceName(Index, IsCapture);
+	}
 
-int VoiceHudBackgroundCorners(CGameClient *pGameClient, int Module, int DefaultCorners, float RectX, float RectY, float RectW, float RectH, float CanvasWidth, float CanvasHeight)
-{
-	(void)pGameClient;
-	(void)Module;
-	return HudLayout::BackgroundCorners(DefaultCorners, RectX, RectY, RectW, RectH, CanvasWidth, CanvasHeight);
-}
+	bool IsForwardSequence(uint16_t LastSequence, uint16_t NewSequence)
+	{
+		const uint16_t Delta = (uint16_t)(NewSequence - LastSequence);
+		return Delta != 0 && Delta < 0x8000;
+	}
+
+	void ConfigureVoiceOpusEncoder(OpusEncoder *pEncoder, int BitrateKbps)
+	{
+		if(!pEncoder)
+			return;
+
+		const int ClampedBitrate = std::clamp(BitrateKbps, 6, VOICE_MAX_BITRATE_KBPS);
+		opus_encoder_ctl(pEncoder, OPUS_SET_BITRATE(ClampedBitrate * 1000));
+		opus_encoder_ctl(pEncoder, OPUS_SET_VBR(1));
+		opus_encoder_ctl(pEncoder, OPUS_SET_VBR_CONSTRAINT(0));
+		opus_encoder_ctl(pEncoder, OPUS_SET_COMPLEXITY(10));
+		opus_encoder_ctl(pEncoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
+		opus_encoder_ctl(pEncoder, OPUS_SET_DTX(0));
+
+		// Client-side resilience. Server just relays Opus payloads.
+		// Start with full-quality mode and enable FEC/loss adaptation only when needed.
+		opus_encoder_ctl(pEncoder, OPUS_SET_INBAND_FEC(0));
+		opus_encoder_ctl(pEncoder, OPUS_SET_PACKET_LOSS_PERC(0));
+	}
+
+	float SanitizeAudioValue(float Value)
+	{
+		if(!std::isfinite(Value))
+			return 0.0f;
+		if(Value > 1000000.0f)
+			return 1000000.0f;
+		if(Value < -1000000.0f)
+			return -1000000.0f;
+		return Value;
+	}
+
+	float VoiceFrameRms(const int16_t *pSamples, int Count)
+	{
+		if(!pSamples || Count <= 0)
+			return 0.0f;
+		double Sum = 0.0;
+		for(int i = 0; i < Count; ++i)
+		{
+			const float X = pSamples[i] / 32768.0f;
+			Sum += X * X;
+		}
+		return (float)std::sqrt(Sum / (double)Count);
+	}
+
+	void ApplyAutoNoiseSuppressorSimple(int16_t *pSamples, int Count, float Strength, float &NoiseFloor, float &Gate)
+	{
+		if(!pSamples || Count <= 0)
+			return;
+
+		Strength = std::clamp(Strength, 0.0f, 1.0f);
+		if(Strength <= 0.0f)
+			return;
+
+		const float Rms = VoiceFrameRms(pSamples, Count);
+		if(!std::isfinite(Rms))
+			return;
+
+		if(NoiseFloor <= 0.0f)
+			NoiseFloor = Rms;
+
+		const float UpdateFast = 0.2f;
+		const float UpdateSlow = 0.05f;
+		if(Rms < NoiseFloor * 1.2f)
+			NoiseFloor += (Rms - NoiseFloor) * UpdateFast;
+		else if(Rms < NoiseFloor * 1.5f)
+			NoiseFloor += (Rms - NoiseFloor) * UpdateSlow;
+
+		NoiseFloor = std::clamp(NoiseFloor, 1.0f / 32768.0f, 0.5f);
+
+		const float MinGain = 1.0f - Strength * 0.9f;
+		const float LowSnr = 1.2f;
+		const float HighSnr = 2.5f;
+		const float Snr = Rms / (NoiseFloor + 1e-6f);
+
+		float Target = 1.0f;
+		if(Snr <= LowSnr)
+			Target = MinGain;
+		else if(Snr >= HighSnr)
+			Target = 1.0f;
+		else
+		{
+			const float T = (Snr - LowSnr) / (HighSnr - LowSnr);
+			Target = MinGain + (1.0f - MinGain) * T;
+		}
+
+		const float Dt = Count / (float)BestClientVoice::SAMPLE_RATE;
+		const float AttackSec = 0.01f;
+		const float ReleaseSec = 0.08f;
+		const float AttackCoeff = 1.0f - std::exp(-Dt / AttackSec);
+		const float ReleaseCoeff = 1.0f - std::exp(-Dt / ReleaseSec);
+		if(Target > Gate)
+			Gate += (Target - Gate) * AttackCoeff;
+		else
+			Gate += (Target - Gate) * ReleaseCoeff;
+
+		Gate = std::clamp(Gate, MinGain, 1.0f);
+		if(Gate >= 0.999f)
+			return;
+
+		for(int i = 0; i < Count; ++i)
+		{
+			const float Out = pSamples[i] * Gate;
+			pSamples[i] = (int16_t)std::clamp(Out, -32768.0f, 32767.0f);
+		}
+	}
+
+	void ApplyAutoHpfCompressor(int16_t *pSamples, int Count, float &PrevIn, float &PrevOut, float &Env)
+	{
+		if(!pSamples || Count <= 0)
+			return;
+
+		const float CutoffHz = 120.0f;
+		const float Rc = 1.0f / (2.0f * 3.14159265f * CutoffHz);
+		const float Dt = 1.0f / BestClientVoice::SAMPLE_RATE;
+		const float Alpha = Rc / (Rc + Dt);
+
+		// Rushie defaults.
+		const float Threshold = 0.20f;
+		const float Ratio = 2.5f;
+		const float AttackSec = 0.02f;
+		const float ReleaseSec = 0.20f;
+		const float MakeupGain = 1.6f;
+		const float NoiseFloor = 0.02f;
+		const float Limiter = 0.50f;
+		const float AttackCoeff = 1.0f - std::exp(-1.0f / (AttackSec * BestClientVoice::SAMPLE_RATE));
+		const float ReleaseCoeff = 1.0f - std::exp(-1.0f / (ReleaseSec * BestClientVoice::SAMPLE_RATE));
+
+		for(int i = 0; i < Count; ++i)
+		{
+			const float X = pSamples[i] / 32768.0f;
+			const float Y = Alpha * (PrevOut + X - PrevIn);
+			PrevIn = X;
+			PrevOut = SanitizeAudioValue(Y);
+
+			const float AbsY = std::fabs(PrevOut);
+			if(AbsY > Env)
+				Env += (AbsY - Env) * AttackCoeff;
+			else
+				Env += (AbsY - Env) * ReleaseCoeff;
+
+			float Gain = 1.0f;
+			if(Env > Threshold)
+				Gain = (Threshold + (Env - Threshold) / Ratio) / Env;
+			if(Env > NoiseFloor)
+				Gain *= MakeupGain;
+
+			const float Out = std::clamp(PrevOut * Gain, -Limiter, Limiter);
+			const int Sample = (int)std::clamp(Out * 32767.0f, -32768.0f, 32767.0f);
+			pSamples[i] = (int16_t)Sample;
+		}
+	}
+
+	std::string NormalizeVoiceNameKey(const char *pName)
+	{
+		if(!pName)
+			return {};
+		const char *pBegin = pName;
+		const char *pEnd = pName + str_length(pName);
+		while(pBegin < pEnd && std::isspace((unsigned char)*pBegin))
+			pBegin++;
+		while(pEnd > pBegin && std::isspace((unsigned char)pEnd[-1]))
+			pEnd--;
+
+		std::string Key;
+		Key.reserve((size_t)(pEnd - pBegin));
+		for(const char *p = pBegin; p < pEnd; ++p)
+			Key.push_back((char)std::tolower((unsigned char)*p));
+		return Key;
+	}
+
+	void ParseVoiceNameList(const char *pList, std::unordered_set<std::string> &Out)
+	{
+		Out.clear();
+		if(!pList || pList[0] == '\0')
+			return;
+
+		const char *p = pList;
+		while(*p)
+		{
+			while(*p == ',' || std::isspace((unsigned char)*p))
+				p++;
+			if(*p == '\0')
+				break;
+
+			const char *pStart = p;
+			while(*p && *p != ',')
+				p++;
+
+			const char *pEnd = p;
+			while(pEnd > pStart && std::isspace((unsigned char)pEnd[-1]))
+				pEnd--;
+			std::string Key;
+			Key.reserve((size_t)(pEnd - pStart));
+			for(const char *q = pStart; q < pEnd; ++q)
+				Key.push_back((char)std::tolower((unsigned char)*q));
+			if(!Key.empty())
+				Out.insert(std::move(Key));
+		}
+	}
+
+	void ParseVoiceMutedConfigFile(const char *pData, unsigned DataSize, std::unordered_set<std::string> &Out)
+	{
+		Out.clear();
+		if(!pData || DataSize == 0)
+			return;
+
+		const char *p = pData;
+		const char *pEnd = pData + DataSize;
+		while(p < pEnd)
+		{
+			const char *pLineStart = p;
+			while(p < pEnd && *p != '\n')
+				++p;
+			const char *pLineEnd = p;
+			if(p < pEnd && *p == '\n')
+				++p;
+
+			while(pLineStart < pLineEnd && std::isspace((unsigned char)*pLineStart))
+				++pLineStart;
+			while(pLineEnd > pLineStart && std::isspace((unsigned char)pLineEnd[-1]))
+				--pLineEnd;
+			if(pLineStart >= pLineEnd)
+				continue;
+			if(*pLineStart == '#' || *pLineStart == ';')
+				continue;
+
+			char aName[128];
+			str_truncate(aName, sizeof(aName), pLineStart, (int)(pLineEnd - pLineStart));
+			const std::string Key = NormalizeVoiceNameKey(aName);
+			if(!Key.empty())
+				Out.insert(Key);
+		}
+	}
+
+	void ParseVoiceNameVolumeList(const char *pList, std::unordered_map<std::string, int> &Out)
+	{
+		Out.clear();
+		if(!pList || pList[0] == '\0')
+			return;
+
+		const char *p = pList;
+		while(*p)
+		{
+			while(*p == ',' || std::isspace((unsigned char)*p))
+				p++;
+			if(*p == '\0')
+				break;
+
+			const char *pStart = p;
+			while(*p && *p != ',')
+				p++;
+			const char *pEnd = p;
+			while(pEnd > pStart && std::isspace((unsigned char)pEnd[-1]))
+				pEnd--;
+			if(pEnd <= pStart)
+				continue;
+
+			const char *pSep = nullptr;
+			for(const char *q = pStart; q < pEnd; ++q)
+			{
+				if(*q == '=' || *q == ':')
+				{
+					pSep = q;
+					break;
+				}
+			}
+			if(!pSep)
+				continue;
+
+			const char *pNameEnd = pSep;
+			while(pNameEnd > pStart && std::isspace((unsigned char)pNameEnd[-1]))
+				pNameEnd--;
+			const char *pValueStart = pSep + 1;
+			while(pValueStart < pEnd && std::isspace((unsigned char)*pValueStart))
+				pValueStart++;
+
+			if(pNameEnd <= pStart || pValueStart >= pEnd)
+				continue;
+
+			char aName[128];
+			str_truncate(aName, sizeof(aName), pStart, (int)(pNameEnd - pStart));
+			std::string Key = NormalizeVoiceNameKey(aName);
+			if(Key.empty())
+				continue;
+
+			char aValue[16];
+			str_truncate(aValue, sizeof(aValue), pValueStart, (int)(pEnd - pValueStart));
+			int Percent = std::clamp(str_toint(aValue), 0, 200);
+			Out[std::move(Key)] = Percent;
+		}
+	}
+
+	void WriteVoiceNameList(const std::unordered_set<std::string> &Set, char *pOut, int OutSize)
+	{
+		if(!pOut || OutSize <= 0)
+			return;
+		pOut[0] = '\0';
+
+		std::vector<const char *> vpKeys;
+		vpKeys.reserve(Set.size());
+		for(const auto &Key : Set)
+			vpKeys.push_back(Key.c_str());
+		std::sort(vpKeys.begin(), vpKeys.end(), [](const char *pA, const char *pB) { return str_comp(pA, pB) < 0; });
+
+		bool First = true;
+		for(const char *pKey : vpKeys)
+		{
+			if(!First)
+				str_append(pOut, ",", OutSize);
+			First = false;
+			str_append(pOut, pKey, OutSize);
+		}
+	}
+
+	void WriteVoiceNameVolumeList(const std::unordered_map<std::string, int> &Map, char *pOut, int OutSize)
+	{
+		if(!pOut || OutSize <= 0)
+			return;
+		pOut[0] = '\0';
+
+		std::vector<std::pair<const char *, int>> vItems;
+		vItems.reserve(Map.size());
+		for(const auto &Pair : Map)
+			vItems.emplace_back(Pair.first.c_str(), Pair.second);
+		std::sort(vItems.begin(), vItems.end(), [](const auto &A, const auto &B) { return str_comp(A.first, B.first) < 0; });
+
+		bool First = true;
+		for(const auto &Pair : vItems)
+		{
+			if(!First)
+				str_append(pOut, ",", OutSize);
+			First = false;
+			str_append(pOut, Pair.first, OutSize);
+			str_append(pOut, "=", OutSize);
+			char aValue[16];
+			str_format(aValue, sizeof(aValue), "%d", std::clamp(Pair.second, 0, 200));
+			str_append(pOut, aValue, OutSize);
+		}
+	}
+
+	float VoiceHudAlpha(CGameClient *pGameClient)
+	{
+		(void)pGameClient;
+		return 1.0f;
+	}
+
+	ColorRGBA ApplyVoiceHudAlpha(CGameClient *pGameClient, ColorRGBA Color)
+	{
+		Color.a *= VoiceHudAlpha(pGameClient);
+		return Color;
+	}
+
+	int VoiceHudBackgroundCorners(CGameClient *pGameClient, int Module, int DefaultCorners, float RectX, float RectY, float RectW, float RectH, float CanvasWidth, float CanvasHeight)
+	{
+		(void)pGameClient;
+		(void)Module;
+		return HudLayout::BackgroundCorners(DefaultCorners, RectX, RectY, RectW, RectH, CanvasWidth, CanvasHeight);
+	}
 
 }
 
@@ -992,35 +992,34 @@ void CVoiceChat::RenderMenuPanel(const CUIRect &View)
 
 namespace
 {
-constexpr float kVoiceMenuOuterMargin = 2.0f;
-constexpr float kVoiceMenuTitleRowHeight = 24.0f;
-constexpr float kVoiceMenuTitleToEnableSpacing = 4.0f;
-constexpr float kVoiceMenuEnableRowHeight = 22.0f;
-constexpr float kVoiceMenuServerRowHeight = 22.0f;
-constexpr float kVoiceMenuServerRowGap = 3.0f;
+	constexpr float kVoiceMenuOuterMargin = 2.0f;
+	constexpr float kVoiceMenuTitleRowHeight = 24.0f;
+	constexpr float kVoiceMenuTitleToEnableSpacing = 4.0f;
+	constexpr float kVoiceMenuEnableRowHeight = 22.0f;
+	constexpr float kVoiceMenuServerRowHeight = 22.0f;
+	constexpr float kVoiceMenuServerRowGap = 3.0f;
 
-float VoiceMenuExpandedHeightForServerCount(int ServerCount, bool RadiusFilterEnabled, bool AutomaticMode, float Team0GroupRevealPhase)
-{
-	Team0GroupRevealPhase = std::clamp(Team0GroupRevealPhase, 0.0f, 1.0f);
-	const int VisibleRows = std::clamp(ServerCount > 0 ? ServerCount : 1, 1, 2);
-	const float ServerListHeight = 2.0f + VisibleRows * kVoiceMenuServerRowHeight + maximum(0, VisibleRows - 1) * kVoiceMenuServerRowGap;
-	return
-		4.0f + 20.0f + // In-Game only checkbox row.
-		4.0f + 20.0f + // Use team0 checkbox row.
-		(4.0f + 20.0f) * Team0GroupRevealPhase + // Enable your group row (animated reveal).
-		4.0f + 20.0f + // Radius filter checkbox row.
-		(RadiusFilterEnabled ? (3.0f + 20.0f) : 0.0f) + // Radius slider row.
-		4.0f + 18.0f + // Activation mode label.
-		3.0f + 22.0f + // Activation mode segmented control.
-		(AutomaticMode ? (3.0f + 20.0f + 3.0f + 20.0f) : 0.0f) + // VAD threshold + release delay rows.
-		5.0f + 20.0f + 2.0f + 24.0f + // Microphone.
-		5.0f + 20.0f + 2.0f + 24.0f + // Headphones.
-		6.0f + 16.0f + // Status.
-		4.0f + 22.0f + // Reload button.
-		5.0f + 16.0f + 2.0f + // Servers label.
-		ServerListHeight +
-		5.0f + 16.0f + 2.0f + 14.0f + 2.0f + 14.0f + 2.0f + 14.0f; // Command hints.
-}
+	float VoiceMenuExpandedHeightForServerCount(int ServerCount, bool RadiusFilterEnabled, bool AutomaticMode, float Team0GroupRevealPhase)
+	{
+		Team0GroupRevealPhase = std::clamp(Team0GroupRevealPhase, 0.0f, 1.0f);
+		const int VisibleRows = std::clamp(ServerCount > 0 ? ServerCount : 1, 1, 2);
+		const float ServerListHeight = 2.0f + VisibleRows * kVoiceMenuServerRowHeight + maximum(0, VisibleRows - 1) * kVoiceMenuServerRowGap;
+		return 4.0f + 20.0f + // In-Game only checkbox row.
+		       4.0f + 20.0f + // Use team0 checkbox row.
+		       (4.0f + 20.0f) * Team0GroupRevealPhase + // Enable your group row (animated reveal).
+		       4.0f + 20.0f + // Radius filter checkbox row.
+		       (RadiusFilterEnabled ? (3.0f + 20.0f) : 0.0f) + // Radius slider row.
+		       4.0f + 18.0f + // Activation mode label.
+		       3.0f + 22.0f + // Activation mode segmented control.
+		       (AutomaticMode ? (3.0f + 20.0f + 3.0f + 20.0f) : 0.0f) + // VAD threshold + release delay rows.
+		       5.0f + 20.0f + 2.0f + 24.0f + // Microphone.
+		       5.0f + 20.0f + 2.0f + 24.0f + // Headphones.
+		       6.0f + 16.0f + // Status.
+		       4.0f + 22.0f + // Reload button.
+		       5.0f + 16.0f + 2.0f + // Servers label.
+		       ServerListHeight +
+		       5.0f + 16.0f + 2.0f + 14.0f + 2.0f + 14.0f + 2.0f + 14.0f; // Command hints.
+	}
 }
 
 float CVoiceChat::GetMenuSettingsBlockHeight(float RevealPhase) const
@@ -1055,7 +1054,7 @@ void CVoiceChat::RenderMenuSettingsBlock(const CUIRect &View, float RevealPhase)
 	};
 
 	const bool NeedAutoReload = g_Config.m_BcVoiceChatEnable && Client()->State() == IClient::STATE_ONLINE && m_vServerEntries.empty() &&
-		(!m_pServerListTask || m_pServerListTask->Done() || m_pServerListTask->State() == EHttpState::ERROR || m_pServerListTask->State() == EHttpState::ABORTED);
+				    (!m_pServerListTask || m_pServerListTask->Done() || m_pServerListTask->State() == EHttpState::ERROR || m_pServerListTask->State() == EHttpState::ABORTED);
 	if(NeedAutoReload)
 		ReloadServerList();
 
@@ -1691,8 +1690,8 @@ void CVoiceChat::RenderHudMuteStatusIndicator(float HudWidth, float HudHeight, b
 		bool m_Muted;
 	};
 	const SVoiceStatusIcon aIcons[2] = {
-			{FontIcon::MICROPHONE, ShowMicMuted},
-			{FontIcon::HEADPHONES, ShowHeadphonesMuted},
+		{FontIcon::MICROPHONE, ShowMicMuted},
+		{FontIcon::HEADPHONES, ShowHeadphonesMuted},
 	};
 
 	const float TextSize = 5.8f * Scale;
@@ -2926,7 +2925,7 @@ void CVoiceChat::ProcessNetwork()
 			continue;
 		}
 
-		#if 0
+#if 0
 		if(Type == BestClientVoice::PACKET_GROUP_LIST)
 		{
 			if(!m_ServerSupportsGroups)
@@ -3169,7 +3168,7 @@ void CVoiceChat::ProcessNetwork()
 			continue;
 		}
 
-		#endif
+#endif
 		if(Type != BestClientVoice::PACKET_VOICE_RELAY)
 			continue;
 
@@ -3358,7 +3357,7 @@ void CVoiceChat::ProcessCapture()
 	{
 		const int64_t Now = time_get();
 		const bool ExpectingCaptureData = m_Registered && !g_Config.m_BcVoiceChatMicMuted &&
-			(g_Config.m_BcVoiceChatMicCheck || g_Config.m_BcVoiceChatActivationMode == 0 || m_PushToTalkPressed);
+						  (g_Config.m_BcVoiceChatMicCheck || g_Config.m_BcVoiceChatActivationMode == 0 || m_PushToTalkPressed);
 		if(ExpectingCaptureData)
 		{
 			if(m_LastProcessCaptureTick == 0)
@@ -4500,9 +4499,9 @@ void CVoiceChat::RenderSettingsSection(CUIRect View)
 	CUIRect Line;
 	StatusInner.HSplitTop(20.0f, &Line, &StatusInner);
 	Ui()->DoLabel(&Line, aLine, 11.0f, TEXTALIGN_ML);
-		str_format(aLine, sizeof(aLine), "%s: %s", BCLocalize("Mode"), g_Config.m_BcVoiceChatActivationMode == 1 ? BCLocalize("Push-to-talk") : BCLocalize("Automatic activation"));
-		StatusInner.HSplitTop(20.0f, &Line, &StatusInner);
-		Ui()->DoLabel(&Line, aLine, 11.0f, TEXTALIGN_ML);
+	str_format(aLine, sizeof(aLine), "%s: %s", BCLocalize("Mode"), g_Config.m_BcVoiceChatActivationMode == 1 ? BCLocalize("Push-to-talk") : BCLocalize("Automatic activation"));
+	StatusInner.HSplitTop(20.0f, &Line, &StatusInner);
+	Ui()->DoLabel(&Line, aLine, 11.0f, TEXTALIGN_ML);
 	int ParticipantCount = (m_Registered && LocalGameClientId() >= 0 && LocalGameClientId() < MAX_CLIENTS ? 1 : 0) + (int)m_vVisibleMemberPeerIds.size();
 	str_format(aLine, sizeof(aLine), "%s: %d", BCLocalize("Участники"), ParticipantCount);
 	StatusInner.HSplitTop(20.0f, &Line, &StatusInner);

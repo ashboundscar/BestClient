@@ -21,6 +21,7 @@ namespace
 {
 	constexpr int MENU_MEDIA_MAX_VIDEO_FRAME_MS = 250;
 	constexpr int MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS = 33;
+	constexpr int64_t MENU_MEDIA_PTS_UNSET = std::numeric_limits<int64_t>::min();
 
 #if defined(CONF_VIDEORECORDER)
 	bool DecodeFirstFrameFromFile(const char *pAbsolutePath, CImageInfo &ImageOut)
@@ -228,7 +229,7 @@ void CMenuMediaBackground::ClearVideoState()
 	m_pPacket = nullptr;
 	m_pSwsCtx = nullptr;
 	m_VideoStream = -1;
-	m_LastVideoPts = AV_NOPTS_VALUE;
+	m_LastVideoPts = MENU_MEDIA_PTS_UNSET;
 	m_NextFrameTime = std::chrono::nanoseconds::zero();
 	m_vVideoUploadBuffer.clear();
 #else
@@ -241,7 +242,7 @@ void CMenuMediaBackground::ClearVideoState()
 	m_pPacket = nullptr;
 	m_pSwsCtx = nullptr;
 	m_VideoStream = -1;
-	m_LastVideoPts = AV_NOPTS_VALUE;
+	m_LastVideoPts = MENU_MEDIA_PTS_UNSET;
 	m_NextFrameTime = std::chrono::nanoseconds::zero();
 	m_vVideoUploadBuffer.clear();
 #endif
@@ -450,7 +451,7 @@ bool CMenuMediaBackground::DecodeNextVideoFrame(bool LoopOnEof)
 		{
 			int DurationMs = MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS;
 			int64_t DurationTs = 0;
-			if(m_LastVideoPts != AV_NOPTS_VALUE && m_pFrame->best_effort_timestamp != AV_NOPTS_VALUE)
+			if(m_LastVideoPts != MENU_MEDIA_PTS_UNSET && m_pFrame->best_effort_timestamp != AV_NOPTS_VALUE)
 				DurationTs = m_pFrame->best_effort_timestamp - m_LastVideoPts;
 			if(DurationTs > 0)
 			{
@@ -469,7 +470,7 @@ bool CMenuMediaBackground::DecodeNextVideoFrame(bool LoopOnEof)
 
 			av_seek_frame(m_pFormatCtx, m_VideoStream, 0, AVSEEK_FLAG_BACKWARD);
 			avcodec_flush_buffers(m_pCodecCtx);
-			m_LastVideoPts = AV_NOPTS_VALUE;
+			m_LastVideoPts = MENU_MEDIA_PTS_UNSET;
 			continue;
 		}
 

@@ -451,7 +451,6 @@ namespace MediaDecoder
 		bool DecodeFailed = false;
 		bool DecodeAllFrames = Limits.m_DecodeAllFrames;
 		int FallbackFrameDurationMs = MEDIA_DEFAULT_FRAME_MS;
-		int PreferredFrameDurationMsFromRate = 0;
 		int64_t PacketDurationTsForNextFrame = 0;
 		size_t FrameBytes = 0;
 		size_t TotalDecodedBytes = 0;
@@ -667,7 +666,6 @@ namespace MediaDecoder
 					if(Ms > 0 && Ms <= MaxReasonableFallbackMs)
 					{
 						const int CandidateMs = ClampFrameDurationMs((int)Ms);
-						PreferredFrameDurationMsFromRate = CandidateMs;
 						FallbackFrameDurationMs = minimum(FallbackFrameDurationMs, CandidateMs);
 					}
 				}

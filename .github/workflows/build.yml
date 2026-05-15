@@ -109,6 +109,13 @@ jobs:
         echo /Library/Frameworks/Python.framework/Versions/3.12/bin >> $GITHUB_PATH
         sudo rm -rf /Library/Developer/CommandLineTools
 
+    - name: Add rust macOS
+      if: contains(matrix.os, 'macOS')
+      run: |
+        rustup default stable
+        rustup update
+        rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
     - name: Prepare Windows MinGW
       if: contains(matrix.os, 'windows') && contains(matrix.name, 'mingw')
       run: |
