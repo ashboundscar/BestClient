@@ -91,6 +91,7 @@ namespace
 		return g_Config.m_DbgMusicPlayer >= Level;
 	}
 
+	[[gnu::format(printf, 3, 4)]]
 	static void MusicPlayerDebugLog(int Level, const char *pSubsystem, const char *pFmt, ...)
 	{
 		if(!MusicPlayerDebugEnabled(Level))
@@ -99,7 +100,7 @@ namespace
 		char aMsg[1024];
 		va_list Args;
 		va_start(Args, pFmt);
-		vsnprintf(aMsg, sizeof(aMsg), pFmt, Args);
+		str_format_v(aMsg, sizeof(aMsg), pFmt, Args);
 		va_end(Args);
 		dbg_msg("music_player", "[%s] %s", pSubsystem, aMsg);
 	}
