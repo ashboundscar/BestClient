@@ -2,11 +2,13 @@
 extend-exclude = [
 	"build-*/",
 	"build/",
+	"data/BestClient/languages",
 	"data/countryflags",
 	"data/languages",
 	"data/tclient/languages",
 	"data/skins",
 	"ddnet-libs",
+	"noxy-libs",
 	"other/icons/*.icns",
 	"memcheck.supp",
 	"scripts/android/files/res",
@@ -34,4 +36,7 @@ extend-ignore-re = [
 	'0x510E527FUL',
 	'I\*\*nteger',
 	's\*\*tring',
+	'Weeknd',
+	'WRITEABLE',
+	'secur32\.lib',
 ]
