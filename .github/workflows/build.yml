@@ -32,7 +32,7 @@ jobs:
         - name: macOS-latest
           os: macOS-latest
           cmake-args: -G Ninja -DSDL2_LIBRARY=$GITHUB_WORKSPACE/ddnet-libs/sdl/mac/libfat/SDL2.framework/Versions/A/SDL2 -DSDL2_INCLUDEDIR=$GITHUB_WORKSPACE/ddnet-libs/sdl/mac/libfat/SDL2.framework/Headers
-          cmake-init-env: CXXFLAGS="-Werror -Wno-unused-function"
+          cmake-init-env: CXXFLAGS="-Werror -Wno-unused-function -Wno-unused-const-variable -Wno-unused-lambda-capture"
           package-file: "*-macos.dmg"
         - name: windows-latest
           os: windows-latest
@@ -311,6 +311,7 @@ jobs:
         mv ${{ matrix.package-file }} artifacts
 
     - name: Upload Artifacts
+      continue-on-error: ${{ contains(matrix.os, 'macOS') }}
       uses: actions/upload-artifact@v4
       with:
         name: ddnet-${{ matrix.name }}

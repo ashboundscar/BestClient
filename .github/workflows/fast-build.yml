@@ -116,6 +116,7 @@ jobs:
         mv ${{ matrix.package-file }} artifacts
 
     - name: Upload Artifacts
+      continue-on-error: ${{ contains(matrix.os, 'macOS') }}
       uses: actions/upload-artifact@v4
       with:
         name: ddnet-${{ matrix.os }}

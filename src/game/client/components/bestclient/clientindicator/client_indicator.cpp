@@ -716,7 +716,7 @@ void CClientIndicator::ProcessIncomingPackets(bool Force)
 		if(BestClientIndicator::ReadPeerListPacket(pRawData, DataSize, PeerList) &&
 			PeerList.m_ServerAddress == m_PresenceCache.ServerAddress())
 		{
-			DebugLogF("received peer_list server=%s count=%zu", PeerList.m_ServerAddress.c_str(), PeerList.m_vClientIds.size());
+			DebugLogF("received peer_list server=%s count=%llu", PeerList.m_ServerAddress.c_str(), (unsigned long long)PeerList.m_vClientIds.size());
 			m_PresenceCache.Replace(PeerList.m_vClientIds);
 			continue;
 		}
@@ -737,7 +737,7 @@ void CClientIndicator::ProcessIncomingPackets(bool Force)
 		if(BestClientIndicator::ReadPeerDevListPacket(pRawData, DataSize, PeerList) &&
 			PeerList.m_ServerAddress == m_PresenceCache.ServerAddress())
 		{
-			DebugLogF("received peer_dev_list server=%s count=%zu", PeerList.m_ServerAddress.c_str(), PeerList.m_vClientIds.size());
+			DebugLogF("received peer_dev_list server=%s count=%llu", PeerList.m_ServerAddress.c_str(), (unsigned long long)PeerList.m_vClientIds.size());
 			m_DeveloperClientIds.clear();
 			for(const int ClientId : PeerList.m_vClientIds)
 				m_DeveloperClientIds.insert(ClientId);
@@ -884,7 +884,7 @@ void CClientIndicator::UpdatePresence()
 				SendDevAuthPacket(ClientId);
 		}
 		m_LastHeartbeatTick = Now;
-		DebugLogF("heartbeat tick sent for %zu local clients", m_RegisteredClientIds.size());
+		DebugLogF("heartbeat tick sent for %llu local clients", (unsigned long long)m_RegisteredClientIds.size());
 	}
 
 	m_WasPresenceEnabled = PresenceEnabled;
@@ -902,7 +902,7 @@ void CClientIndicator::FinishBrowserCacheRefresh()
 	}
 	m_BrowserCache.Load(*pJson);
 	json_value_free(pJson);
-	DebugLogF("browser cache loaded %zu entries", m_BrowserCache.Players().size());
+	DebugLogF("browser cache loaded %llu entries", (unsigned long long)m_BrowserCache.Players().size());
 	ApplyBrowserSnapshot();
 }
 
