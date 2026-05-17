@@ -1,7 +1,7 @@
 #include "updater.h"
 
-#include <base/system.h>
 #include <base/process.h>
+#include <base/system.h>
 
 #include <engine/client.h>
 #include <engine/external/json-parser/json.h>
@@ -9,8 +9,8 @@
 #include <engine/shared/json.h>
 #include <engine/storage.h>
 
-#include <game/version.h>
 #include <game/client/components/bestclient/version.h>
+#include <game/version.h>
 
 #include <algorithm>
 #include <cctype>
@@ -238,14 +238,14 @@ static bool ParseLatestRelease(json_value *pJson, char *pVersion, int VersionSiz
 		for(int i = 0; i < json_array_length(pJson); ++i)
 		{
 			const json_value *pRelease = json_array_get(pJson, i);
-			const char *pVersion = GetReleaseVersionString(pRelease);
-			if(!pVersion)
+			const char *pReleaseVersion = GetReleaseVersionString(pRelease);
+			if(!pReleaseVersion)
 				continue;
 
-			if(!pBestRelease || CompareVersionStrings(pVersion, aBestVersion) > 0)
+			if(!pBestRelease || CompareVersionStrings(pReleaseVersion, aBestVersion) > 0)
 			{
 				pBestRelease = pRelease;
-				str_copy(aBestVersion, pVersion, sizeof(aBestVersion));
+				str_copy(aBestVersion, pReleaseVersion, sizeof(aBestVersion));
 			}
 		}
 

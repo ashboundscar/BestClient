@@ -1,5 +1,6 @@
 /* Copyright © 2026 BestProject Team */
 #include "bestclient.h"
+
 #include "version.h"
 
 #include <base/color.h>
