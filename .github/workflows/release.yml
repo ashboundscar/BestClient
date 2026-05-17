@@ -1,155 +1,185 @@
-# .github/workflows/release.yml
-name: Create Release
+name: Release Assets
 
 on:
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag for the release (e.g., v1.0.0). Did you remember to bump the version.h?'
+        description: "Existing tag to publish assets for (for example, v1.0.0)"
         required: true
       release_name:
-        description: 'Name of the release'
+        description: "Release name used when creating or updating a release manually"
         required: true
       body:
-        description: 'Release description'
+        description: "Optional release notes for manual publishing"
         required: false
-      run_id:
-        description: 'Run ID of the build workflow to download artifacts from'
-        required: true
+
+permissions:
+  contents: write
+
+env:
+  CLIENT_NAME: TClient
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-
+  build-cmake:
+    name: Build Release (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
     env:
-      BUILD_PREFIX: ddnet
-      CLIENT_NAME: TClient
-      TARGET_REPOSITORY: ${{ github.repository }} 
+      CARGO_HTTP_MULTIPLEXING: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: linux
+          os: ubuntu-24.04
+          cmake-args: -G Ninja
+          cmake-init-env: CXXFLAGS="-Werror -Wno-unused-function"
+          package-file: "*-linux_x86_64.tar.xz"
+          artifact-name: release-linux
+          asset-name: TClient-linux.tar.xz
+        - name: windows
+          os: windows-latest
+          cmake-args: -A x64 -DEXCEPTION_HANDLING=ON -DVULKAN=ON
+          cmake-init-env: CXXFLAGS=/WX LDFLAGS="/WX /IGNORE:4098"
+          package-file: "*-win64.zip"
+          artifact-name: release-windows
+          asset-name: TClient-windows.zip
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Download Ubuntu artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.BUILD_PREFIX }}-ubuntu-22.04
-          path: ./artifacts/ubuntu
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ env.TARGET_REPOSITORY }}
-          run-id: ${{ github.event.inputs.run_id }}
+    - name: Prepare Linux
+      if: contains(matrix.os, 'ubuntu')
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install pkg-config ninja-build libcurl4-openssl-dev libfreetype6-dev libnotify-dev libogg-dev libopus-dev libopusfile-dev libsdl2-dev libsqlite3-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libpng-dev libvulkan-dev libglew-dev -y
 
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.BUILD_PREFIX }}-windows-latest
-          path: ./artifacts/windows
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ env.TARGET_REPOSITORY }}
-          run-id: ${{ github.event.inputs.run_id }}
+    - name: Install Vulkan SDK
+      uses: humbletim/install-vulkan-sdk@v1.2
+      with:
+        version: 1.3.296.0
+        cache: true
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.BUILD_PREFIX }}-macOS-latest
-          path: ./artifacts/macOS
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ env.TARGET_REPOSITORY }}
-          run-id: ${{ github.event.inputs.run_id }}
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: |
+          ./
 
-      - name: Download Android artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.BUILD_PREFIX }}-android
-          path: ./artifacts/android
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ env.TARGET_REPOSITORY }}
-          run-id: ${{ github.event.inputs.run_id }}
+    - name: Package release build
+      run: |
+        mkdir release
+        cd release
+        cmake -E env ${{ matrix.cmake-init-env }} cmake ${{ matrix.cmake-args }} -DCMAKE_BUILD_TYPE=Release -Werror=dev ..
+        cmake --build . --config Release --target package_default
+        mkdir artifacts
+        mv ${{ matrix.package-file }} artifacts/${{ matrix.asset-name }}
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.event.inputs.tag_name }}
-          release_name: ${{ github.event.inputs.release_name }}
-          body: ${{ github.event.inputs.body }}
-          draft: false
-          prerelease: false
+    - name: Upload release package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact-name }}
+        path: release/artifacts/${{ matrix.asset-name }}
 
-      - name: Rename and Move Artifacts
-        run: |
-          declare -a multi_ext=("tar.gz" "tar.bz2" "tar.xz" "tar.Z")
+  build-android:
+    name: Build Release (android)
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_HTTP_MULTIPLEXING: false
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-          for dir in ./artifacts/*/ ; do
-            os=$(basename "$dir")
-            # Find the single file in the OS directory
-            file=$(find "$dir" -type f | head -n 1)
+    - name: Validate Gradle Wrapper
+      uses: gradle/actions/wrapper-validation@v4
 
-            if [ -z "$file" ]; then
-              echo "No artifact found in directory $dir. Skipping."
-              continue
-            fi
-            filename=$(basename "$file")
-            extension=""
-            for ext in "${multi_ext[@]}"; do
-              if [[ "$filename" == *.$ext ]]; then
-                extension="$ext"
-                break
-              fi
-            done
-            if [ -z "$extension" ]; then
-              extension="${filename##*.}"
-            fi
-            new_name="${CLIENT_NAME}-${os}.${extension}"
-            echo "Renaming $file to $new_name"
-            mv "$file" "./artifacts/$new_name"
-            echo "Moved $new_name to ./artifacts/"
-          done
+    - name: Prepare Linux
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install ninja-build openjdk-21-jdk openssl
+        curl -LO https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-Linux-x86_64.tar.gz
+        mkdir -p /home/runner/cmake
+        tar --strip-components 1 -C /home/runner/cmake -xf cmake-3.22.1-Linux-x86_64.tar.gz
+        rustup default 1.92.0
+        cargo install cargo-ndk
+        rustup target add armv7-linux-androideabi
+        rustup target add i686-linux-android
+        rustup target add aarch64-linux-android
+        rustup target add x86_64-linux-android
+        scripts/android/download_android_sdk.sh /home/runner
 
-      - name: List artifacts directory
-        run: |
-          echo "Listing ./artifacts directory:"
-          ls -R ./artifacts
+    - name: Install Vulkan SDK
+      uses: humbletim/install-vulkan-sdk@v1.2
+      with:
+        version: 1.3.296.0
+        cache: true
 
-      - name: Upload Ubuntu
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/${{ env.CLIENT_NAME }}-ubuntu.tar.xz
-          asset_name: ${{ env.CLIENT_NAME }}-ubuntu.tar.xz
-          asset_content_type: application/tar.xz
-          
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: |
+          ./
 
-      - name: Upload Windows
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/${{ env.CLIENT_NAME }}-windows.zip
-          asset_name: ${{ env.CLIENT_NAME }}-windows.zip
-          asset_content_type: application/zip
+    - name: Build Android app
+      env:
+        TW_KEY_NAME: /home/runner/DDNet.jks
+        TW_KEY_ALIAS: DDNet-Key
+      run: |
+        export TW_KEY_PW="$(openssl rand -base64 32)"
+        keytool -genkey -v -keystore "$TW_KEY_NAME" -keyalg RSA -keysize 2048 -validity 10000 -alias "$TW_KEY_ALIAS" -storepass "$TW_KEY_PW" -dname "CN=DDNet CI, OU=DDNet, O=DDNet"
+        export ANDROID_HOME="/home/runner/Android/Sdk"
+        unset ANDROID_SDK_ROOT
+        export PATH=/home/runner/cmake/bin:$PATH
+        scripts/android/cmake_android.sh all DDNet org.ddnet.client Release build-android
+        mkdir artifacts
+        mv build-android/DDNet.apk artifacts/${{ env.CLIENT_NAME }}-android.apk
 
-      - name: Upload macOS
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/${{ env.CLIENT_NAME }}-macOS.dmg
-          asset_name: ${{ env.CLIENT_NAME }}-macOS.dmg
-          asset_content_type: application/dmg
+    - name: Upload Android package
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-android
+        path: artifacts/${{ env.CLIENT_NAME }}-android.apk
 
-      - name: Upload Android
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/${{ env.CLIENT_NAME }}-android.apk
-          asset_name: ${{ env.CLIENT_NAME }}-android.apk
-          asset_content_type: application/apk
+  publish:
+    name: Publish Release Assets
+    needs:
+      - build-cmake
+      - build-android
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download release packages
+      uses: actions/download-artifact@v4
+      with:
+        pattern: release-*
+        path: artifacts
+        merge-multiple: true
+
+    - name: List downloaded release packages
+      run: ls -R artifacts
+
+    - name: Attach assets to published GitHub release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.release.tag_name }}
+        files: |
+          artifacts/${{ env.CLIENT_NAME }}-linux.tar.xz
+          artifacts/${{ env.CLIENT_NAME }}-windows.zip
+          artifacts/${{ env.CLIENT_NAME }}-android.apk
+
+    - name: Create or update release manually
+      if: github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.tag_name }}
+        name: ${{ github.event.inputs.release_name }}
+        body: ${{ github.event.inputs.body }}
+        files: |
+          artifacts/${{ env.CLIENT_NAME }}-linux.tar.xz
+          artifacts/${{ env.CLIENT_NAME }}-windows.zip
+          artifacts/${{ env.CLIENT_NAME }}-android.apk
