@@ -617,16 +617,25 @@ void CScoreboard::RenderTitleScore(CUIRect ScoreLabel, int Team, float TitleFont
 	}
 }
 
-void CScoreboard::RenderTitleBar(CUIRect TitleBar, int Team, const char *pTitle)
+void CScoreboard::RenderTitleBar(CUIRect TitleBar, int Team, const char *pTitle, const char *pExtraLabel)
 {
 	dbg_assert(Team == TEAM_RED || Team == TEAM_BLUE, "Team invalid");
 
 	const float TitleFontSize = 20.0f;
+	const float ExtraLabelFontSize = 12.0f;
 	const float ScoreTextWidth = TextRender()->TextWidth(TitleFontSize, "00:00:00");
 	const float TitleTextWidth = TextRender()->TextWidth(TitleFontSize, pTitle);
+	const bool HasExtraLabel = pExtraLabel != nullptr && pExtraLabel[0] != '\0';
+	const float ExtraLabelWidth = HasExtraLabel ? TextRender()->TextWidth(ExtraLabelFontSize, pExtraLabel) : 0.0f;
 
-	TitleBar.VMargin(10.0f, &TitleBar);
-	CUIRect TitleLabel, ScoreLabel;
+	TitleBar.VSplitLeft(10.0f, nullptr, &TitleBar);
+	TitleBar.VSplitRight(4.0f, &TitleBar, nullptr);
+	CUIRect TitleLabel, ScoreLabel, ExtraLabel;
+	if(HasExtraLabel)
+	{
+		TitleBar.VSplitRight(ExtraLabelWidth, &TitleBar, &ExtraLabel);
+		TitleBar.VSplitRight(3.0f, &TitleBar, nullptr);
+	}
 	if(Team == TEAM_RED)
 	{
 		TitleBar.VSplitRight(ScoreTextWidth, &TitleLabel, &ScoreLabel);
@@ -642,6 +651,10 @@ void CScoreboard::RenderTitleBar(CUIRect TitleBar, int Team, const char *pTitle)
 
 	RenderTitle(TitleLabel, Team, pTitle, TitleFontSize);
 	RenderTitleScore(ScoreLabel, Team, TitleFontSize);
+	if(HasExtraLabel)
+	{
+		Ui()->DoLabel(&ExtraLabel, pExtraLabel, ExtraLabelFontSize, TEXTALIGN_MR);
+	}
 }
 
 void CScoreboard::RenderGoals(CUIRect Goals)
@@ -1348,6 +1361,13 @@ void CScoreboard::OnRender()
 	const bool Teams = GameClient()->IsTeamPlay();
 	const auto &aTeamSize = GameClient()->m_Snap.m_aTeamSize;
 	const int NumPlayers = Teams ? maximum(aTeamSize[TEAM_RED], aTeamSize[TEAM_BLUE]) : aTeamSize[TEAM_RED];
+	CServerInfo CurrentServerInfo;
+	Client()->GetServerInfo(&CurrentServerInfo);
+	char aPlayerCount[32];
+	if(CurrentServerInfo.m_MaxClients > 0)
+		str_format(aPlayerCount, sizeof(aPlayerCount), "%d/%d", GameClient()->m_Snap.m_NumPlayers, CurrentServerInfo.m_MaxClients);
+	else
+		str_format(aPlayerCount, sizeof(aPlayerCount), "%d", GameClient()->m_Snap.m_NumPlayers);
 
 	const float ScoreboardSmallWidth = 375.0f + 10.0f;
 	const float ScoreboardWidth = !Teams && NumPlayers <= 16 ? ScoreboardSmallWidth : 750.0f;
@@ -1425,7 +1445,7 @@ void CScoreboard::OnRender()
 		BlueScoreboard.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f), IGraphics::CORNER_B, 7.5f);
 
 		RenderTitleBar(RedTitle, TEAM_RED, pRedTeamName == nullptr ? Localize("Red team") : pRedTeamName);
-		RenderTitleBar(BlueTitle, TEAM_BLUE, pBlueTeamName == nullptr ? Localize("Blue team") : pBlueTeamName);
+		RenderTitleBar(BlueTitle, TEAM_BLUE, pBlueTeamName == nullptr ? Localize("Blue team") : pBlueTeamName, aPlayerCount);
 		RenderScoreboard(RedScoreboard, TEAM_RED, 0, NumPlayers, RenderState);
 		RenderScoreboard(BlueScoreboard, TEAM_BLUE, 0, NumPlayers, RenderState);
 	}
@@ -1445,7 +1465,7 @@ void CScoreboard::OnRender()
 
 		CUIRect Title;
 		Scoreboard.HSplitTop(TitleHeight, &Title, &Scoreboard);
-		RenderTitleBar(Title, TEAM_GAME, pTitle);
+		RenderTitleBar(Title, TEAM_GAME, pTitle, aPlayerCount);
 
 		if(NumPlayers <= 16)
 		{
