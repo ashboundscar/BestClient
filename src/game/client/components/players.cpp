@@ -1812,12 +1812,14 @@ void CPlayers::OnRender()
 		if(RenderGhost && g_Config.m_TcShowOthersGhosts && !Spec && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 			RenderPlayerGhost(&GameClient()->m_aClients[ClientId].m_RenderPrev, &GameClient()->m_aClients[ClientId].m_RenderCur, &aRenderInfo[ClientId], ClientId);
 
+		GameClient()->m_NamePlates.RenderFlyingNamePlateRopeGame(GameClient()->m_aClients[ClientId].m_RenderPos, GameClient()->m_Snap.m_apPlayerInfos[ClientId], 1.0f);
 		RenderPlayer(&GameClient()->m_aClients[ClientId].m_RenderPrev, &GameClient()->m_aClients[ClientId].m_RenderCur, &aRenderInfo[ClientId], ClientId);
 	}
 	if(RenderLastId != -1 && IsPlayerInfoAvailable(RenderLastId))
 	{
 		const CGameClient::CClientData *pClientData = &GameClient()->m_aClients[RenderLastId];
 		RenderHookCollLine(&pClientData->m_RenderPrev, &pClientData->m_RenderCur, RenderLastId);
+		GameClient()->m_NamePlates.RenderFlyingNamePlateRopeGame(pClientData->m_RenderPos, GameClient()->m_Snap.m_apPlayerInfos[RenderLastId], 1.0f);
 		RenderPlayer(&pClientData->m_RenderPrev, &pClientData->m_RenderCur, &aRenderInfo[RenderLastId], RenderLastId);
 	}
 }

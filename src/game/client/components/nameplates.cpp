@@ -878,8 +878,139 @@ public:
 class CNamePlates::CNamePlatesData
 {
 public:
+	struct CFlyingNamePlateState
+	{
+		bool m_Initialized = false;
+		vec2 m_CurrentPos = vec2(0.0f, 0.0f);
+		vec2 m_PrevPlayerPos = vec2(0.0f, 0.0f);
+		float m_LastUpdateTime = -1.0f;
+	};
+
 	CNamePlate m_aNamePlates[MAX_CLIENTS];
+	CFlyingNamePlateState m_aFlyingNamePlateStates[MAX_CLIENTS];
 };
+
+static void RenderFlyingNamePlateLine(CGameClient &This, vec2 AnchorPos, vec2 NamePlatePos, ColorRGBA Color)
+{
+	if(distance(AnchorPos, NamePlatePos) < 4.0f)
+		return;
+
+	This.Graphics()->TextureClear();
+	This.Graphics()->LinesBegin();
+	This.Graphics()->SetColor(ColorRGBA(Color.r, Color.g, Color.b, std::clamp(Color.a * 0.75f, 0.0f, 0.85f)));
+	const IGraphics::CLineItem Line(AnchorPos, NamePlatePos);
+	This.Graphics()->LinesDraw(&Line, 1);
+	This.Graphics()->LinesEnd();
+	This.Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+static vec2 FlyingNamePlateAnchorPos(vec2 TeePos)
+{
+	return TeePos + vec2(0.0f, 18.0f);
+}
+
+ColorRGBA CNamePlates::FlyingNamePlateColorForPlayer(vec2 Position, const CNetObj_PlayerInfo *pPlayerInfo, float Alpha) const
+{
+	const auto &ClientData = GameClient()->m_aClients[pPlayerInfo->m_ClientId];
+	const bool OtherTeam = GameClient()->IsOtherTeam(pPlayerInfo->m_ClientId);
+
+	if(g_Config.m_ClNamePlatesAlways == 0)
+		Alpha *= std::clamp(1.0f - std::pow(distance(GameClient()->m_Controls.m_aTargetPos[g_Config.m_ClDummy], Position) / 200.0f, 16.0f), 0.0f, 1.0f);
+	if(OtherTeam)
+		Alpha *= (float)g_Config.m_ClShowOthersAlpha / 100.0f;
+	if(GameClient()->m_FastPractice.Enabled() && !GameClient()->m_Snap.m_SpecInfo.m_Active && !GameClient()->m_FastPractice.IsPracticeParticipant(pPlayerInfo->m_ClientId))
+		Alpha = std::min(Alpha, 0.5f);
+
+	ColorRGBA Color = ColorRGBA(1.0f, 1.0f, 1.0f);
+	if(g_Config.m_ClNamePlatesTeamcolors)
+	{
+		if(GameClient()->IsTeamPlay())
+		{
+			if(ClientData.m_Team == TEAM_RED)
+				Color = ColorRGBA(1.0f, 0.5f, 0.5f);
+			else if(ClientData.m_Team == TEAM_BLUE)
+				Color = ColorRGBA(0.7f, 0.7f, 1.0f);
+		}
+		else
+		{
+			const int Team = GameClient()->m_Teams.Team(pPlayerInfo->m_ClientId);
+			if(Team)
+				Color = GameClient()->GetDDTeamColor(Team, 0.75f);
+		}
+	}
+	Color.a = Alpha;
+	return Color;
+}
+
+void CNamePlates::UpdateFlyingNamePlateState(int ClientId, vec2 Position)
+{
+	auto &FlyingState = m_pData->m_aFlyingNamePlateStates[ClientId];
+	const float Now = Client()->GlobalTime();
+	if(FlyingState.m_LastUpdateTime == Now)
+		return;
+
+	const vec2 DefaultRenderPos = Position - vec2(0.0f, (float)g_Config.m_ClNamePlatesOffset);
+	if(!g_Config.m_BcFlyingNamePlates)
+	{
+		FlyingState.m_CurrentPos = DefaultRenderPos;
+		FlyingState.m_PrevPlayerPos = Position;
+		FlyingState.m_Initialized = false;
+		FlyingState.m_LastUpdateTime = Now;
+		return;
+	}
+
+	const float Delta = std::clamp(Client()->RenderFrameTime(), 0.0f, 0.1f);
+	const vec2 PlayerDelta = Position - FlyingState.m_PrevPlayerPos;
+	const bool ResetState = !FlyingState.m_Initialized || distance(Position, FlyingState.m_PrevPlayerPos) > 256.0f;
+
+	vec2 DragOffset = vec2(0.0f, 0.0f);
+	if(!ResetState && Delta > 0.0001f)
+	{
+		const vec2 PlayerVelocity = PlayerDelta / Delta;
+		const float Speed = length(PlayerVelocity);
+		if(Speed > 0.001f)
+		{
+			const float DragScale = std::clamp(Speed / 1200.0f, 0.0f, 1.0f);
+			DragOffset = normalize(PlayerVelocity) * ((float)g_Config.m_BcFlyingNamePlatesDrag * DragScale);
+		}
+	}
+
+	const vec2 TargetPos = DefaultRenderPos - vec2(0.0f, (float)g_Config.m_BcFlyingNamePlatesLift) - DragOffset;
+	if(ResetState)
+	{
+		FlyingState.m_CurrentPos = TargetPos;
+	}
+	else
+	{
+		const float FollowSpeed = 2.5f + (float)g_Config.m_BcFlyingNamePlatesFollow * 0.25f;
+		FlyingState.m_CurrentPos += (TargetPos - FlyingState.m_CurrentPos) * minimum(Delta * FollowSpeed, 1.0f);
+
+		const vec2 AnchorPos = FlyingNamePlateAnchorPos(Position);
+		const vec2 RopeDelta = FlyingState.m_CurrentPos - AnchorPos;
+		const float RopeLen = length(RopeDelta);
+		const float MaxRopeLen = maximum(24.0f, (float)g_Config.m_ClNamePlatesOffset + (float)g_Config.m_BcFlyingNamePlatesLift + (float)g_Config.m_BcFlyingNamePlatesDrag * 1.2f);
+		if(RopeLen > MaxRopeLen && RopeLen > 0.001f)
+			FlyingState.m_CurrentPos = AnchorPos + RopeDelta * (MaxRopeLen / RopeLen);
+	}
+
+	FlyingState.m_PrevPlayerPos = Position;
+	FlyingState.m_Initialized = true;
+	FlyingState.m_LastUpdateTime = Now;
+}
+
+void CNamePlates::RenderFlyingNamePlateRopeGame(vec2 Position, const CNetObj_PlayerInfo *pPlayerInfo, float Alpha)
+{
+	if(!g_Config.m_BcFlyingNamePlates)
+		return;
+	if(g_Config.m_ClFocusMode && g_Config.m_ClFocusModeHideNames)
+		return;
+	if(!(pPlayerInfo->m_Local ? g_Config.m_ClNamePlatesOwn : g_Config.m_ClNamePlates))
+		return;
+
+	UpdateFlyingNamePlateState(pPlayerInfo->m_ClientId, Position);
+	const ColorRGBA Color = FlyingNamePlateColorForPlayer(Position, pPlayerInfo, Alpha);
+	RenderFlyingNamePlateLine(*GameClient(), FlyingNamePlateAnchorPos(Position), m_pData->m_aFlyingNamePlateStates[pPlayerInfo->m_ClientId].m_CurrentPos, Color);
+}
 
 void CNamePlates::RenderNamePlateGame(vec2 Position, const CNetObj_PlayerInfo *pPlayerInfo, float Alpha)
 {
@@ -1033,10 +1164,23 @@ void CNamePlates::RenderNamePlateGame(vec2 Position, const CNetObj_PlayerInfo *p
 		Data.m_ShowClan = true;
 	Data.m_Local = pPlayerInfo->m_Local;
 
-	// Check if the nameplate is actually on screen
 	CNamePlate &NamePlate = m_pData->m_aNamePlates[pPlayerInfo->m_ClientId];
 	NamePlate.Update(*GameClient(), Data);
-	NamePlate.Render(*GameClient(), Position - vec2(0.0f, (float)g_Config.m_ClNamePlatesOffset));
+
+	const vec2 DefaultRenderPos = Position - vec2(0.0f, (float)g_Config.m_ClNamePlatesOffset);
+	vec2 RenderPos = DefaultRenderPos;
+
+	if(g_Config.m_BcFlyingNamePlates)
+	{
+		UpdateFlyingNamePlateState(pPlayerInfo->m_ClientId, Position);
+		RenderPos = m_pData->m_aFlyingNamePlateStates[pPlayerInfo->m_ClientId].m_CurrentPos;
+	}
+	else
+	{
+		UpdateFlyingNamePlateState(pPlayerInfo->m_ClientId, Position);
+	}
+
+	NamePlate.Render(*GameClient(), RenderPos);
 }
 
 void CNamePlates::RenderNamePlatePreview(vec2 Position, int Dummy)
@@ -1127,9 +1271,21 @@ void CNamePlates::RenderNamePlatePreview(vec2 Position, int Dummy)
 	const float InteractionDistance = 20.0f;
 	const vec2 TeeDirection = Distance < InteractionDistance ? normalize(vec2(DeltaPosition.x, maximum(DeltaPosition.y, 0.5f))) : normalize(DeltaPosition);
 	const int TeeEmote = Distance < InteractionDistance ? EMOTE_HAPPY : (Dummy ? g_Config.m_ClDummyDefaultEyes : g_Config.m_ClPlayerDefaultEyes);
+	const vec2 TeePos = Position;
 	RenderTools()->RenderTee(CAnimState::GetIdle(), &TeeRenderInfo, TeeEmote, TeeDirection, Position);
 	Position.y -= (float)g_Config.m_ClNamePlatesOffset;
-	NamePlate.Render(*GameClient(), Position);
+
+	if(g_Config.m_BcFlyingNamePlates)
+	{
+		const vec2 FlyingPos = Position - vec2(0.0f, (float)g_Config.m_BcFlyingNamePlatesLift) - TeeDirection * ((float)g_Config.m_BcFlyingNamePlatesDrag * 0.35f);
+		RenderFlyingNamePlateLine(*GameClient(), FlyingNamePlateAnchorPos(TeePos), FlyingPos, Data.m_Color);
+		NamePlate.Render(*GameClient(), FlyingPos);
+	}
+	else
+	{
+		NamePlate.Render(*GameClient(), Position);
+	}
+
 	NamePlate.Reset(*GameClient());
 }
 
@@ -1137,6 +1293,8 @@ void CNamePlates::ResetNamePlates()
 {
 	for(CNamePlate &NamePlate : m_pData->m_aNamePlates)
 		NamePlate.Reset(*GameClient());
+	for(auto &FlyingState : m_pData->m_aFlyingNamePlateStates)
+		FlyingState = CNamePlatesData::CFlyingNamePlateState();
 }
 
 void CNamePlates::OnRender()

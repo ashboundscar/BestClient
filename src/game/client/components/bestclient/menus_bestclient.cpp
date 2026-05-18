@@ -931,6 +931,63 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 
+		{
+			static CButtonContainer s_FlyingNamePlatesResetButton;
+			const bool ShowFlyingNamePlateSettings = g_Config.m_BcFlyingNamePlates != 0;
+			const float FlyingNamePlateSettingsHeight = ShowFlyingNamePlateSettings ? 3.0f * LineSize : 0.0f;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + FlyingNamePlateSettingsHeight;
+
+			CUIRect Content, Label, Row;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			const float ResetButtonWidth = LineSize + 8.0f;
+			const float BadgeWidth = 56.0f;
+			const float HeaderSpacing = 4.0f;
+			CUIRect TitleLabel, HeaderRight, BadgeSlot, ResetButton, ResetHitbox, Badge;
+			Label.VSplitRight(BadgeWidth + HeaderSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
+			HeaderRight.VSplitLeft(BadgeWidth, &BadgeSlot, &HeaderRight);
+			HeaderRight.VSplitLeft(HeaderSpacing, nullptr, &HeaderRight);
+			ResetButton = HeaderRight;
+			ResetHitbox = ResetButton;
+			const bool FlyingNamePlatesResetClicked = Ui()->DoButton_FontIcon(&s_FlyingNamePlatesResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
+			GameClient()->m_Tooltips.DoToolTip(&s_FlyingNamePlatesResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
+			if(FlyingNamePlatesResetClicked)
+			{
+				g_Config.m_BcFlyingNamePlatesLift = DefaultConfig::BcFlyingNamePlatesLift;
+				g_Config.m_BcFlyingNamePlatesDrag = DefaultConfig::BcFlyingNamePlatesDrag;
+				g_Config.m_BcFlyingNamePlatesFollow = DefaultConfig::BcFlyingNamePlatesFollow;
+			}
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Flying Name Plates"), HeadlineFontSize, TEXTALIGN_ML);
+			BadgeSlot.HMargin(1.5f, &Badge);
+			Badge.x += 4.0f;
+			Badge.w -= 4.0f;
+			Graphics()->DrawRect4(
+				Badge.x, Badge.y, Badge.w, Badge.h,
+				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				IGraphics::CORNER_ALL, 5.0f);
+			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcFlyingNamePlates, BCLocalize("Enable flying name plates"), &g_Config.m_BcFlyingNamePlates, &Content, LineSize);
+
+			if(!FlyingNamePlatesResetClicked && g_Config.m_BcFlyingNamePlates)
+			{
+				Content.HSplitTop(LineSize, &Row, &Content);
+				Ui()->DoScrollbarOption(&g_Config.m_BcFlyingNamePlatesLift, &g_Config.m_BcFlyingNamePlatesLift, &Row, BCLocalize("Lift above player"), 0, 120);
+
+				Content.HSplitTop(LineSize, &Row, &Content);
+				Ui()->DoScrollbarOption(&g_Config.m_BcFlyingNamePlatesDrag, &g_Config.m_BcFlyingNamePlatesDrag, &Row, BCLocalize("Movement drag"), 0, 200);
+
+				Content.HSplitTop(LineSize, &Row, &Content);
+				Ui()->DoScrollbarOption(&g_Config.m_BcFlyingNamePlatesFollow, &g_Config.m_BcFlyingNamePlatesFollow, &Row, BCLocalize("Follow speed"), 1, 100);
+			}
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
 		const float LeftColumnEndY = Column.y;
 		Column = RightView;
 		Column.HSplitTop(10.0f, nullptr, &Column);
@@ -3061,7 +3118,10 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				Content.HSplitTop(LineSize, &Row, &Content);
 				Ui()->DoScrollbarOption(&g_Config.m_BcClientIndicatorInSoreboardSize, &g_Config.m_BcClientIndicatorInSoreboardSize, &Row, BCLocalize("Scoreboard indicator size"), -50, 100);
 			}
+
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
+
 		const float RightColumnEndY = Column.y;
 		CUIRect ScrollRegion;
 		ScrollRegion.x = MainView.x;
