@@ -2790,7 +2790,42 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			g_Config.m_BcSettingsLayout = UseNewMenuLayout ? 0 : 1;
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcHideHudInSettings, BCLocalize("Hide hud in settings"), &g_Config.m_BcHideHudInSettings, &Content, LineSize);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcEscPlayerList, BCLocalize("Show ESC players list"), &g_Config.m_BcEscPlayerList, &Content, LineSize);
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcShowPointsInTab, BCLocalize("Show points in tab"), &g_Config.m_BcShowPointsInTab, &Content, LineSize);
+			Content.HSplitTop(LineSize, &Row, &Content);
+			{
+				CUIRect CheckBox, LabelRow, LabelText, BadgeSlot, Badge;
+				Row.VSplitLeft(Row.h, &CheckBox, &LabelRow);
+				LabelRow.VSplitLeft(5.0f, nullptr, &LabelRow);
+
+				CheckBox.Margin(2.0f, &CheckBox);
+				CheckBox.Draw(ColorRGBA(1, 1, 1, 0.25f * Ui()->ButtonColorMul(&g_Config.m_BcShowPointsInTab)), IGraphics::CORNER_ALL, 3.0f);
+
+				if(g_Config.m_BcShowPointsInTab)
+				{
+					TextRender()->SetRenderFlags(ETextRenderFlags::TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH | ETextRenderFlags::TEXT_RENDER_FLAG_NO_X_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_Y_BEARING | ETextRenderFlags::TEXT_RENDER_FLAG_NO_OVERSIZE | ETextRenderFlags::TEXT_RENDER_FLAG_NO_PIXEL_ALIGNMENT);
+					TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
+					Ui()->DoLabel(&CheckBox, FontIcon::XMARK, CheckBox.h * CUi::ms_FontmodHeight, TEXTALIGN_MC);
+					TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
+				}
+
+				TextRender()->SetRenderFlags(0);
+				LabelRow.VSplitRight(40.0f, &LabelText, &BadgeSlot);
+				Ui()->DoLabel(&LabelText, BCLocalize("Show points in tab"), CheckBox.h * CUi::ms_FontmodHeight, TEXTALIGN_ML);
+
+				BadgeSlot.HMargin(3.0f, &Badge);
+				Badge.x += 4.0f;
+				Badge.w -= 4.0f;
+				Graphics()->DrawRect4(
+					Badge.x, Badge.y, Badge.w, Badge.h,
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+					ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+					ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					IGraphics::CORNER_ALL, 4.0f);
+				Ui()->DoLabel(&Badge, "NEW", 9.5f, TEXTALIGN_MC);
+
+				if(Ui()->DoButtonLogic(&g_Config.m_BcShowPointsInTab, g_Config.m_BcShowPointsInTab != 0 ? 1 : 0, &Row, BUTTONFLAG_LEFT, CUi::EButtonSoundType::CHECKBOX))
+					g_Config.m_BcShowPointsInTab ^= 1;
+			}
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcEmoticonShadow, BCLocalize("Shadow of Emotions"), &g_Config.m_BcEmoticonShadow, &Content, LineSize);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcChatSaveDraft, BCLocalize("Save unsent messages"), &g_Config.m_BcChatSaveDraft, &Content, LineSize);
