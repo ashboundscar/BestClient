@@ -8,6 +8,7 @@
 #include <base/system.h>
 
 #include <engine/client.h>
+#include <engine/demo.h>
 #include <engine/client/enums.h>
 #include <engine/shared/config.h>
 #include <engine/shared/json.h>
@@ -863,6 +864,47 @@ bool CBestClient::HasHookComboWork() const
 	return g_Config.m_BcHookCombo != 0 || !m_vHookComboPopups.empty();
 }
 
+void CBestClient::SaveRollback()
+{
+	if(Client()->State() != IClient::STATE_ONLINE)
+	{
+		GameClient()->m_Broadcast.DoBroadcast(BCLocalize("Rollback is only available while online"));
+		return;
+	}
+
+	if(!g_Config.m_ClReplays)
+	{
+		GameClient()->m_Broadcast.DoBroadcast(BCLocalize("Enable rollback demo recording first"));
+		return;
+	}
+
+	IDemoRecorder *pReplayRecorder = DemoRecorder(RECORDER_REPLAYS);
+	if(!pReplayRecorder->IsRecording())
+	{
+		GameClient()->m_Broadcast.DoBroadcast(BCLocalize("Rollback recorder is not ready yet"));
+		return;
+	}
+
+	if(pReplayRecorder->Length() < 1)
+	{
+		GameClient()->m_Broadcast.DoBroadcast(BCLocalize("Wait at least 1 second before rollback"));
+		return;
+	}
+
+	Storage()->CreateFolder("demos/replays/rollback", IStorage::TYPE_SAVE);
+
+	const int Length = std::clamp(g_Config.m_ClReplayLength, 10, 60);
+	char aTimestamp[20];
+	str_timestamp(aTimestamp, sizeof(aTimestamp));
+
+	char aFilename[IO_MAX_PATH_LENGTH];
+	str_format(aFilename, sizeof(aFilename), "rollback/%s_%s_(rollback)", GameClient()->Map()->BaseName(), aTimestamp);
+
+	char aCommand[IO_MAX_PATH_LENGTH + 64];
+	str_format(aCommand, sizeof(aCommand), "save_replay %d \"%s\"", Length, aFilename);
+	Console()->ExecuteLine(aCommand, IConsole::CLIENT_ID_UNSPECIFIED);
+}
+
 void CBestClient::RenderHookCombo(bool ForcePreview)
 {
 	if(!ForcePreview && IsComponentDisabled(COMPONENT_GAMEPLAY_HOOK_COMBO))
@@ -1092,6 +1134,12 @@ void CBestClient::ConToggleCinematicCamera(IConsole::IResult *pResult, void *pUs
 	pSelf->GameClient()->Echo(g_Config.m_BcCinematicCamera ? "[[green]] Cinematic camera on" : "[[red]] Cinematic camera off");
 }
 
+void CBestClient::ConSaveRollback(IConsole::IResult *pResult, void *pUserData)
+{
+	(void)pResult;
+	static_cast<CBestClient *>(pUserData)->SaveRollback();
+}
+
 bool CBestClient::NeedUpdate()
 {
 	return str_comp(m_aVersionStr, "0") != 0;
@@ -1153,4 +1201,5 @@ void CBestClient::OnConsoleInit()
 	Console()->Register("BC_small_sens", "", CFGFLAG_CLIENT, ConToggleSmallSens, this, "Small sens bind (toggle)");
 	Console()->Register("BC_deepfly_toggle", "", CFGFLAG_CLIENT, ConToggleDeepfly, this, "Deep fly toggle");
 	Console()->Register("BC_cinematic_camera_toggle", "", CFGFLAG_CLIENT, ConToggleCinematicCamera, this, "Toggle cinematic spectator camera");
+	Console()->Register("BC_save_rollback", "", CFGFLAG_CLIENT, ConSaveRollback, this, "Save the last configured seconds as a rollback demo");
 }

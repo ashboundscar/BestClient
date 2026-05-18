@@ -2825,6 +2825,51 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 
+		{
+			static float s_RollbackDemoPhase = 0.0f;
+			const float KeyReaderLineSize = LineSize + MarginExtraSmall;
+			const float ExpandedTargetHeight = LineSize + KeyReaderLineSize;
+			const bool RollbackDemoExpanded = g_Config.m_ClReplays != 0;
+			UpdateRevealPhase(s_RollbackDemoPhase, RollbackDemoExpanded);
+			const float ExpandedHeight = ExpandedTargetHeight * s_RollbackDemoPhase;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + ExpandedHeight;
+			CUIRect Content, Label, Row, Visible;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			Ui()->DoLabel(&Label, BCLocalize("Rollback Demo"), HeadlineFontSize, TEXTALIGN_ML);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			if(DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_ClReplays, BCLocalize("Enable rollback demo recording"), &g_Config.m_ClReplays, &Content, LineSize))
+			{
+				if(Client()->State() == IClient::STATE_ONLINE)
+					Client()->DemoRecorder_UpdateReplayRecorder();
+			}
+
+			if(ExpandedHeight > 0.0f)
+			{
+				Content.HSplitTop(ExpandedHeight, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClip
+				{
+					CUi *m_pUi;
+					~SScopedClip() { m_pUi->ClipDisable(); }
+				} ClipGuard{Ui()};
+
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExpandedTargetHeight};
+
+				g_Config.m_ClReplayLength = std::clamp(g_Config.m_ClReplayLength, 10, 60);
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_ClReplayLength, &g_Config.m_ClReplayLength, &Row, BCLocalize("Rollback length"), 10, 60, &CUi::ms_LinearScrollbarScale, 0, " s");
+
+				static CButtonContainer s_RollbackBindReader;
+				static CButtonContainer s_RollbackBindClear;
+				DoLine_KeyReader(Expand, s_RollbackBindReader, s_RollbackBindClear, BCLocalize("Rollback bind"), "BC_save_rollback");
+			}
+
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_OTHERS_CHAT_MEDIA))
 		{
 			static float s_ChatMediaPhase = 0.0f;

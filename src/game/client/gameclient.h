@@ -831,6 +831,7 @@ public:
 
 	void DummyResetInput() override;
 	void Echo(const char *pString) override;
+	void Broadcast(const char *pString) override;
 	bool IsOtherTeam(int ClientId) const;
 	int SwitchStateTeam() const;
 	bool IsLocalCharSuper() const;

@@ -36,11 +36,13 @@ class CBestClient : public CComponent
 	void UpdateHookCombo();
 	void TriggerHookComboStep();
 	bool HasHookComboWork() const;
+	void SaveRollback();
 
 	static void ConToggle45Degrees(IConsole::IResult *pResult, void *pUserData);
 	static void ConToggleSmallSens(IConsole::IResult *pResult, void *pUserData);
 	static void ConToggleDeepfly(IConsole::IResult *pResult, void *pUserData);
 	static void ConToggleCinematicCamera(IConsole::IResult *pResult, void *pUserData);
+	static void ConSaveRollback(IConsole::IResult *pResult, void *pUserData);
 
 	int m_45degreestoggle = 0;
 	int m_45degreestogglelastinput = 0;

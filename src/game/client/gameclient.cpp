@@ -5128,6 +5128,11 @@ void CGameClient::Echo(const char *pString)
 	m_Chat.Echo(pString);
 }
 
+void CGameClient::Broadcast(const char *pString)
+{
+	m_Broadcast.DoBroadcast(pString);
+}
+
 bool CGameClient::IsOtherTeam(int ClientId) const
 {
 	bool Local = m_Snap.m_LocalClientId == ClientId;

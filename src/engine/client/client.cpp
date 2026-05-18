@@ -3074,19 +3074,26 @@ void CClient::Update()
 			if(pJob->State() == IJob::STATE_DONE)
 			{
 				char aBuf[IO_MAX_PATH_LENGTH + 64];
+				const bool IsRollbackReplay = str_startswith(pJob->Destination(), "demos/replays/rollback/") != nullptr;
 				if(pJob->Success())
 				{
 					str_format(aBuf, sizeof(aBuf), "Successfully saved the replay to '%s'!", pJob->Destination());
 					m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "replay", aBuf);
 
-					GameClient()->Echo(Localize("Successfully saved the replay!"));
+					if(IsRollbackReplay)
+						GameClient()->Broadcast(Localize("Rollback saved!"));
+					else
+						GameClient()->Echo(Localize("Successfully saved the replay!"));
 				}
 				else
 				{
 					str_format(aBuf, sizeof(aBuf), "Failed saving the replay to '%s'...", pJob->Destination());
 					m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "replay", aBuf);
 
-					GameClient()->Echo(Localize("Failed saving the replay!"));
+					if(IsRollbackReplay)
+						GameClient()->Broadcast(Localize("Rollback save failed!"));
+					else
+						GameClient()->Echo(Localize("Failed saving the replay!"));
 				}
 				m_EditJobs.pop_front();
 			}
@@ -4232,6 +4239,13 @@ void CClient::DemoRecorder_UpdateReplayRecorder()
 	if(!g_Config.m_ClReplays && DemoRecorder(RECORDER_REPLAYS)->IsRecording())
 	{
 		DemoRecorder(RECORDER_REPLAYS)->Stop(IDemoRecorder::EStopMode::REMOVE_FILE);
+	}
+
+	if(State() != IClient::STATE_ONLINE)
+	{
+		if(DemoRecorder(RECORDER_REPLAYS)->IsRecording())
+			DemoRecorder(RECORDER_REPLAYS)->Stop(IDemoRecorder::EStopMode::REMOVE_FILE);
+		return;
 	}
 
 	if(g_Config.m_ClReplays && !DemoRecorder(RECORDER_REPLAYS)->IsRecording())
