@@ -2,12 +2,14 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "scoreboard.h"
 
+#include <base/system.h>
 #include <base/time.h>
 
 #include <engine/console.h>
 #include <engine/demo.h>
 #include <engine/font_icons.h>
 #include <engine/graphics.h>
+#include <engine/shared/json.h>
 #include <engine/shared/config.h>
 #include <engine/shared/http.h>
 #include <engine/serverbrowser.h>
@@ -17,6 +19,7 @@
 #include <generated/client_data.h>
 #include <generated/protocol.h>
 
+#include <game/version.h>
 #include <game/client/animstate.h>
 #include <game/client/components/countryflags.h>
 #include <game/client/components/motd.h>
@@ -32,6 +35,17 @@
 
 namespace
 {
+constexpr int MAX_TAB_PLAYER_POINTS_REQUESTS = 4;
+constexpr int64_t TAB_PLAYER_POINTS_RETRY_SECONDS = 30;
+constexpr const char *TAB_PLAYER_POINTS_URL = "https://ddnet.org/players/?json2=";
+
+bool IsDdnetCommunityServer(IClient *pClient)
+{
+	CServerInfo ServerInfo;
+	pClient->GetServerInfo(&ServerInfo);
+	return str_comp(ServerInfo.m_aCommunityId, IServerBrowser::COMMUNITY_DDNET) == 0;
+}
+
 void RenderBestClientIcon(IGraphics *pGraphics, const CUIRect &Rect, bool Developer = false)
 {
 	pGraphics->TextureSet(g_pData->m_aImages[Developer ? IMAGE_BCDEVICON : IMAGE_BCICON].m_Id);
@@ -184,6 +198,147 @@ int GetVoiceNameVolumePercentByConfig(const char *pName)
 CScoreboard::CScoreboard()
 {
 	OnReset();
+}
+
+void CScoreboard::ResetTabPlayerPoints()
+{
+	for(STabPlayerPointsEntry &Entry : m_aTabPlayerPoints)
+	{
+		if(Entry.m_pTask)
+		{
+			Entry.m_pTask->Abort();
+			Entry.m_pTask = nullptr;
+		}
+		Entry.m_aName[0] = '\0';
+		Entry.m_Points = 0;
+		Entry.m_NextRetryTick = 0;
+		Entry.m_HasResult = false;
+		Entry.m_HasPoints = false;
+	}
+}
+
+void CScoreboard::StartTabPlayerPointsRequest(int ClientId, const char *pName)
+{
+	if(ClientId < 0 || ClientId >= MAX_CLIENTS || !pName || pName[0] == '\0')
+		return;
+
+	STabPlayerPointsEntry &Entry = m_aTabPlayerPoints[ClientId];
+
+	char aEscapedName[256];
+	EscapeUrl(aEscapedName, sizeof(aEscapedName), pName);
+	if(aEscapedName[0] == '\0')
+		return;
+
+	char aUrl[512];
+	str_format(aUrl, sizeof(aUrl), "%s%s", TAB_PLAYER_POINTS_URL, aEscapedName);
+
+	Entry.m_pTask = HttpGet(aUrl);
+	Entry.m_pTask->HeaderString("Accept", "application/json");
+	Entry.m_pTask->HeaderString("User-Agent", CLIENT_NAME);
+	Entry.m_pTask->Timeout(CTimeout{5000, 0, 500, 10});
+	Entry.m_pTask->IpResolve(IPRESOLVE::V4);
+	Http()->Run(Entry.m_pTask);
+}
+
+void CScoreboard::UpdateTabPlayerPoints()
+{
+	const int64_t Now = time_get();
+	const int64_t RetryDelay = time_freq() * TAB_PLAYER_POINTS_RETRY_SECONDS;
+	int ActiveRequests = 0;
+
+	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
+	{
+		STabPlayerPointsEntry &Entry = m_aTabPlayerPoints[ClientId];
+		if(Entry.m_pTask)
+		{
+			if(Entry.m_pTask->State() == EHttpState::DONE)
+			{
+				Entry.m_HasResult = true;
+				Entry.m_HasPoints = false;
+				json_value *pJson = Entry.m_pTask->ResultJson();
+				if(pJson)
+				{
+					const json_value *pPointsObject = json_object_get(pJson, "points");
+					const json_value *pPointsValue = json_object_get(pPointsObject, "points");
+					if(pPointsValue != nullptr)
+					{
+						Entry.m_Points = json_int_get(pPointsValue);
+						Entry.m_HasPoints = true;
+					}
+					json_value_free(pJson);
+				}
+				Entry.m_pTask = nullptr;
+			}
+			else if(Entry.m_pTask->State() == EHttpState::ERROR || Entry.m_pTask->State() == EHttpState::ABORTED)
+			{
+				Entry.m_pTask = nullptr;
+				Entry.m_HasResult = false;
+				Entry.m_HasPoints = false;
+				Entry.m_NextRetryTick = Now + RetryDelay;
+			}
+			else
+			{
+				++ActiveRequests;
+			}
+		}
+
+		const bool ActiveClient = GameClient()->m_aClients[ClientId].m_Active;
+		if(!ActiveClient)
+		{
+			if(Entry.m_aName[0] != '\0' || Entry.m_HasResult || Entry.m_HasPoints)
+			{
+				if(Entry.m_pTask)
+				{
+					Entry.m_pTask->Abort();
+					Entry.m_pTask = nullptr;
+				}
+				Entry.m_aName[0] = '\0';
+				Entry.m_Points = 0;
+				Entry.m_NextRetryTick = 0;
+				Entry.m_HasResult = false;
+				Entry.m_HasPoints = false;
+			}
+			continue;
+		}
+
+		const char *pName = GameClient()->m_aClients[ClientId].m_aName;
+		if(str_comp(Entry.m_aName, pName) != 0)
+		{
+			if(Entry.m_pTask)
+			{
+				Entry.m_pTask->Abort();
+				Entry.m_pTask = nullptr;
+				if(ActiveRequests > 0)
+					--ActiveRequests;
+			}
+			str_copy(Entry.m_aName, pName, sizeof(Entry.m_aName));
+			Entry.m_Points = 0;
+			Entry.m_NextRetryTick = 0;
+			Entry.m_HasResult = false;
+			Entry.m_HasPoints = false;
+		}
+
+		if(Entry.m_aName[0] == '\0' || Entry.m_HasResult || Entry.m_pTask || Entry.m_NextRetryTick > Now || ActiveRequests >= MAX_TAB_PLAYER_POINTS_REQUESTS)
+			continue;
+
+		StartTabPlayerPointsRequest(ClientId, Entry.m_aName);
+		if(Entry.m_pTask)
+			++ActiveRequests;
+	}
+}
+
+bool CScoreboard::TryGetTabPlayerPointsText(int ClientId, const char *pName, char *pBuf, int BufSize)
+{
+	if(!g_Config.m_BcShowPointsInTab || !IsDdnetCommunityServer(Client()) || ClientId < 0 || ClientId >= MAX_CLIENTS || !pBuf || BufSize <= 0)
+		return false;
+
+	pBuf[0] = '\0';
+	STabPlayerPointsEntry &Entry = m_aTabPlayerPoints[ClientId];
+	if(str_comp(Entry.m_aName, pName) != 0 || !Entry.m_HasPoints)
+		return false;
+
+	str_format(pBuf, BufSize, "[%d]", Entry.m_Points);
+	return true;
 }
 
 float CScoreboard::GetPopupHeight(int ClientId, bool IsLocal, bool IsSpectating) const
@@ -342,6 +497,7 @@ void CScoreboard::OnReset()
 	m_Active = false;
 	m_MouseUnlocked = false;
 	m_LastMousePos = std::nullopt;
+	ResetTabPlayerPoints();
 }
 
 void CScoreboard::OnRelease()
@@ -352,6 +508,8 @@ void CScoreboard::OnRelease()
 	{
 		LockMouse();
 	}
+
+	ResetTabPlayerPoints();
 }
 
 bool CScoreboard::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
@@ -1012,12 +1170,16 @@ void CScoreboard::RenderScoreboard(CUIRect Scoreboard, int Team, int CountStart,
 			// name
 			{
 				char aSanitizedName[MAX_NAME_LENGTH];
+				char aPointsBuf[32];
 				GameClient()->m_BestClient.SanitizePlayerName(ClientData.m_aName, aSanitizedName, sizeof(aSanitizedName), pInfo->m_ClientId, true);
+				const bool ShowPoints = TryGetTabPlayerPointsText(pInfo->m_ClientId, ClientData.m_aName, aPointsBuf, sizeof(aPointsBuf));
+				const float PointsWidth = ShowPoints ? TextRender()->TextWidth(FontSize, aPointsBuf) : 0.0f;
+				const float NameLineWidth = ShowPoints ? maximum(0.0f, NameLength - PointsWidth - 3.0f) : NameLength;
 				CTextCursor Cursor;
 				Cursor.SetPosition(vec2(NameOffset, Row.y + (Row.h - FontSize) / 2.0f));
 				Cursor.m_FontSize = FontSize;
 				Cursor.m_Flags |= TEXTFLAG_ELLIPSIS_AT_END;
-				Cursor.m_LineWidth = NameLength;
+				Cursor.m_LineWidth = NameLineWidth;
 				if(ClientData.m_AuthLevel)
 				{
 					TextRender()->TextColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_ClAuthedPlayerColor)));
@@ -1047,6 +1209,11 @@ void CScoreboard::RenderScoreboard(CUIRect Scoreboard, int Team, int CountStart,
 				{
 					TextRender()->TextColor(0.1f, 1.0f, 0.1f, TextColor.a);
 					TextRender()->TextEx(&Cursor, "✓");
+				}
+				if(ShowPoints)
+				{
+					TextRender()->TextColor(TextColor);
+					TextRender()->Text(NameOffset + NameLength - PointsWidth, Row.y + (Row.h - FontSize) / 2.0f, FontSize, aPointsBuf);
 				}
 			}
 
@@ -1164,6 +1331,11 @@ void CScoreboard::OnRender()
 		Ui()->StartCheck();
 		Ui()->Update();
 	}
+
+	if(g_Config.m_BcShowPointsInTab && IsDdnetCommunityServer(Client()))
+		UpdateTabPlayerPoints();
+	else
+		ResetTabPlayerPoints();
 
 	// if the score board is active, then we should clear the motd message as well
 	if(GameClient()->m_Motd.IsActive())

@@ -3,12 +3,16 @@
 #ifndef GAME_CLIENT_COMPONENTS_SCOREBOARD_H
 #define GAME_CLIENT_COMPONENTS_SCOREBOARD_H
 
+#include <engine/shared/http.h>
 #include <engine/console.h>
 #include <engine/graphics.h>
 
 #include <game/client/component.h>
 #include <game/client/ui.h>
 #include <game/client/ui_rect.h>
+
+#include <array>
+#include <memory>
 
 class CScoreboard : public CComponent
 {
@@ -29,6 +33,10 @@ class CScoreboard : public CComponent
 	void RenderSpectators(CUIRect Spectators);
 	void RenderScoreboard(CUIRect Scoreboard, int Team, int CountStart, int CountEnd, CScoreboardRenderState &State);
 	void RenderRecordingNotification(float x);
+	void ResetTabPlayerPoints();
+	void UpdateTabPlayerPoints();
+	void StartTabPlayerPointsRequest(int ClientId, const char *pName);
+	bool TryGetTabPlayerPointsText(int ClientId, const char *pName, char *pBuf, int BufSize);
 
 	static void ConKeyScoreboard(IConsole::IResult *pResult, void *pUserData);
 	static void ConToggleScoreboardCursor(IConsole::IResult *pResult, void *pUserData);
@@ -41,6 +49,17 @@ class CScoreboard : public CComponent
 
 	std::optional<vec2> m_LastMousePos;
 	bool m_MouseUnlocked = false;
+
+	struct STabPlayerPointsEntry
+	{
+		std::shared_ptr<CHttpRequest> m_pTask;
+		char m_aName[MAX_NAME_LENGTH] = "";
+		int m_Points = 0;
+		int64_t m_NextRetryTick = 0;
+		bool m_HasResult = false;
+		bool m_HasPoints = false;
+	};
+	std::array<STabPlayerPointsEntry, MAX_CLIENTS> m_aTabPlayerPoints;
 
 	void SetUiMousePos(vec2 Pos);
 	void LockMouse();
