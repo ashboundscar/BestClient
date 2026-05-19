@@ -3990,7 +3990,10 @@ set(CPACK_GEN_FILES
   ${VULKAN_SHADER_FILE_LIST}
 )
 if(TARGET_OS STREQUAL "windows")
-  list(APPEND CPACK_GEN_FILES bestclient_reshade_live.addon)
+  list(APPEND CPACK_GEN_FILES
+    bestclient_reshade_live.addon
+    bestclient_reshade_bridge.addon
+  )
 endif()
 
 if(TARGET_OS STREQUAL "windows")
@@ -4461,6 +4464,26 @@ if(TARGET_OS STREQUAL "windows")
       "$<TARGET_FILE_DIR:game-client>"
   )
 
+  add_library(bestclient-reshade-bridge MODULE
+    src/game/client/components/bestclient/reshade_bridge_addon.cpp
+  )
+  set_target_properties(bestclient-reshade-bridge PROPERTIES
+    PREFIX ""
+    SUFFIX ".addon"
+    OUTPUT_NAME "bestclient_reshade_bridge"
+  )
+  target_compile_features(bestclient-reshade-bridge PRIVATE cxx_std_20)
+  target_include_directories(bestclient-reshade-bridge SYSTEM PRIVATE
+    ${CMAKE_SOURCE_DIR}/other/reshade/include_api18
+  )
+  list(APPEND PACKAGE_EXTRA_DEPENDS bestclient-reshade-bridge)
+  add_custom_command(
+    TARGET bestclient-reshade-bridge POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:bestclient-reshade-bridge>"
+      "$<TARGET_FILE_DIR:game-client>"
+  )
+
   add_custom_target(bestclient-reshade-assets ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory
       "$<TARGET_FILE_DIR:game-client>/data/reshade"
@@ -4480,6 +4503,7 @@ if(TARGET_OS STREQUAL "windows")
     COMMAND ${CMAKE_COMMAND} -Dsrc=${CMAKE_SOURCE_DIR}/other/reshade/reshade-shaders -Ddst=$<TARGET_FILE_DIR:game-client>/data/reshade -P ${CMAKE_SOURCE_DIR}/cmake/RobocopyDirectory.cmake
   )
   add_dependencies(game-client bestclient-reshade-live)
+  add_dependencies(game-client bestclient-reshade-bridge)
   add_dependencies(game-client bestclient-reshade-assets)
 endif()
 

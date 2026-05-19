@@ -24,6 +24,8 @@ extern "C" __declspec(dllexport) const char *AUTHOR = "BestClient";
 
 namespace
 {
+constexpr const char *gs_pBridgeFilename = "BestClientReShadeBridge.ini";
+
 enum class EUniformValueType
 {
 	BOOL = 0,
@@ -96,6 +98,15 @@ bool QueryPresetFingerprint(const std::filesystem::path &Path, std::filesystem::
 	std::string Contents((std::istreambuf_iterator<char>(File)), std::istreambuf_iterator<char>());
 	Hash = std::hash<std::string>{}(Contents);
 	return true;
+}
+
+bool HasBridgeCompanionFile(const std::filesystem::path &PresetPath)
+{
+	if(PresetPath.empty())
+		return false;
+
+	const std::filesystem::path BridgePath = PresetPath.parent_path() / gs_pBridgeFilename;
+	return std::filesystem::exists(BridgePath);
 }
 
 std::string Trim(std::string Text)
@@ -675,6 +686,73 @@ bool ApplyPresetState(reshade::api::effect_runtime *pRuntime, const std::filesys
 			SectionsSummary.c_str(),
 			UniformSummary.c_str());
 		LogWarning(aDiagnostics);
+
+		if(PresetState.m_SectionValues.size() == 1)
+		{
+			const auto &OnlySection = *PresetState.m_SectionValues.begin();
+			const std::string SectionNormalized = NormalizeEffectIdentifier(OnlySection.first);
+			const std::string SectionStem = EffectIdentifierStem(SectionNormalized);
+
+			std::string MatchingEffectNames;
+			int NumMatchingEffects = 0;
+			pRuntime->enumerate_techniques(nullptr, [&](reshade::api::effect_runtime *pCurrentRuntime, reshade::api::effect_technique Technique) {
+				char aTechniqueName[512] = {0};
+				char aEffectName[512] = {0};
+				pCurrentRuntime->get_technique_name(Technique, aTechniqueName);
+				pCurrentRuntime->get_technique_effect_name(Technique, aEffectName);
+				const std::string RuntimeNormalized = NormalizeEffectIdentifier(aEffectName);
+				const std::string RuntimeStem = EffectIdentifierStem(RuntimeNormalized);
+				if(RuntimeNormalized != SectionNormalized && RuntimeStem != SectionStem)
+					return;
+
+				if(!MatchingEffectNames.empty())
+					MatchingEffectNames += ", ";
+				MatchingEffectNames += std::string(aEffectName) + "::" + aTechniqueName;
+				++NumMatchingEffects;
+			});
+
+			std::string MatchingUniformNames;
+			int NumMatchingUniforms = 0;
+			pRuntime->enumerate_uniform_variables(nullptr, [&](reshade::api::effect_runtime *pCurrentRuntime, reshade::api::effect_uniform_variable Variable) {
+				char aEffectName[512] = {0};
+				char aUniformName[512] = {0};
+				pCurrentRuntime->get_uniform_variable_effect_name(Variable, aEffectName);
+				pCurrentRuntime->get_uniform_variable_name(Variable, aUniformName);
+				const std::string RuntimeNormalized = NormalizeEffectIdentifier(aEffectName);
+				const std::string RuntimeStem = EffectIdentifierStem(RuntimeNormalized);
+				if(RuntimeNormalized != SectionNormalized && RuntimeStem != SectionStem)
+					return;
+
+				if(!MatchingUniformNames.empty())
+					MatchingUniformNames += ", ";
+				MatchingUniformNames += std::string(aEffectName) + "::" + aUniformName;
+				++NumMatchingUniforms;
+				if(NumMatchingUniforms >= 20)
+					return;
+			});
+
+			std::string PresetUniformNames;
+			for(const auto &[UniformName, UniformValue] : OnlySection.second)
+			{
+				(void)UniformValue;
+				if(!PresetUniformNames.empty())
+					PresetUniformNames += ", ";
+				PresetUniformNames += UniformName;
+			}
+
+			char aSectionDiagnostics[4608];
+			std::snprintf(
+				aSectionDiagnostics, sizeof(aSectionDiagnostics),
+				"[BestClient/ReShadeAddon] Section diagnostics: section=%s normalized=%s stem=%s preset_uniforms=[%s] runtime_matching_effects=[%s] runtime_matching_uniforms=[%s]",
+				OnlySection.first.c_str(),
+				SectionNormalized.c_str(),
+				SectionStem.c_str(),
+				PresetUniformNames.c_str(),
+				MatchingEffectNames.c_str(),
+				MatchingUniformNames.c_str());
+			LogWarning(aSectionDiagnostics);
+		}
+
 		RuntimeState.m_LastZeroUniformDiagnosticsHash = RuntimeState.m_LastPresetHash;
 		RuntimeState.m_HasZeroUniformDiagnosticsHash = true;
 	}
@@ -743,6 +821,8 @@ void OnPresent(reshade::api::effect_runtime *pRuntime)
 	}
 
 	if(State.m_PresetPath.empty())
+		return;
+	if(HasBridgeCompanionFile(State.m_PresetPath))
 		return;
 	if(!State.m_EffectsReady)
 	{

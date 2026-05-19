@@ -59,8 +59,11 @@ bool BestClientReadAbsoluteTextFile(IStorage *pStorage, const char *pAbsolutePat
 
 EBestClientReShadeAddonStatus BestClientParseReShadeAddonStatus(const std::string &LogText)
 {
-	if(str_find_nocase(LogText.c_str(), "[BestClient/ReShadeAddon] Add-on initialized.") != nullptr)
+	if(str_find_nocase(LogText.c_str(), "[BestClient/ReShadeAddon] Add-on initialized.") != nullptr ||
+		str_find_nocase(LogText.c_str(), "[BestClient/ReShadeBridge] Add-on initialized.") != nullptr)
+	{
 		return EBestClientReShadeAddonStatus::READY;
+	}
 
 	if(str_find_nocase(LogText.c_str(), "limited add-on functionality") != nullptr)
 		return EBestClientReShadeAddonStatus::LIMITED_SUPPORT;

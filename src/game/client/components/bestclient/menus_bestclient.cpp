@@ -66,6 +66,7 @@ static bool IsBestClientTabFlagSet(int32_t Flags, int Tab)
 #if defined(CONF_FAMILY_WINDOWS)
 static constexpr const char *gs_pBestClientReShadeFolderPath = "data/reshade";
 static constexpr const char *gs_pBestClientReShadePresetPath = "ReShadePreset.ini";
+static constexpr const char *gs_pBestClientReShadeBridgeStatePath = "BestClientReShadeBridge.ini";
 static constexpr const char *gs_pBestClientReShadeShadersPath = "data/reshade/Shaders";
 static constexpr const char *gs_pBestClientReShadeSettingsPath = "settings_reshade.cfg";
 static constexpr const char *gs_pBestClientReShadeRuntimeFilename = "vulkan-1.dll";
@@ -139,6 +140,9 @@ struct SBestClientReShadeUiCache
 	bool m_StatusIsError = false;
 };
 
+static const std::vector<SBestClientReShadeUniformMeta> &BestClientGetReShadeUniformMetadata(IStorage *pStorage, const std::string &EffectName);
+static std::unordered_set<std::string> BestClientBuildTrackedReShadeEffectSet(const SBestClientReShadePresetState &PresetState);
+
 static SBestClientReShadeUiCache gs_BestClientReShadeUiCache;
 
 static std::string BestClientTrimString(std::string Text)
@@ -161,7 +165,6 @@ static std::string BestClientStripQuotes(std::string Text)
 
 static std::vector<std::string> BestClientSplitCommaSeparated(const std::string &Text);
 static std::string BestClientFormatReShadeFloat(float Value);
-static std::unordered_set<std::string> BestClientBuildTrackedReShadeEffectSet(const SBestClientReShadePresetState &PresetState);
 
 static bool BestClientTryParseFloatText(const std::string &Text, float &Value)
 {
@@ -725,6 +728,170 @@ static bool BestClientSaveReShadePreset(IStorage *pStorage, const SBestClientReS
 	if(ErrorSize > 0)
 		pError[0] = '\0';
 	BestClientInvalidateReShadePresetCache();
+	return true;
+}
+
+static bool BestClientSaveReShadeBridgeState(IStorage *pStorage, const SBestClientReShadePresetState &PresetState, uint64_t Revision, char *pError, int ErrorSize)
+{
+	char aBridgeAbsolutePath[IO_MAX_PATH_LENGTH];
+	pStorage->GetBinaryPath(gs_pBestClientReShadeBridgeStatePath, aBridgeAbsolutePath, sizeof(aBridgeAbsolutePath));
+	if(aBridgeAbsolutePath[0] == '\0')
+	{
+		str_format(pError, ErrorSize, "Failed to resolve %s", gs_pBestClientReShadeBridgeStatePath);
+		return false;
+	}
+
+	std::string BridgeText;
+	BridgeText += "Revision=" + std::to_string(Revision) + "\n";
+	BridgeText += "Techniques=" + BestClientBuildEnabledTechniqueList(PresetState) + "\n";
+	BridgeText += "TechniqueSorting=" + BestClientBuildTechniqueSortingList(PresetState) + "\n";
+
+	const std::unordered_set<std::string> TrackedEffects = BestClientBuildTrackedReShadeEffectSet(PresetState);
+	std::vector<std::string> vSectionNames;
+	vSectionNames.reserve(TrackedEffects.size());
+	for(const std::string &EffectName : TrackedEffects)
+		vSectionNames.push_back(EffectName);
+	std::sort(vSectionNames.begin(), vSectionNames.end());
+
+	for(const std::string &EffectName : vSectionNames)
+	{
+		const auto SectionIt = PresetState.m_SectionValues.find(EffectName);
+		const auto &vUniforms = BestClientGetReShadeUniformMetadata(pStorage, EffectName);
+
+		std::vector<std::pair<std::string, std::string>> vBridgeValues;
+		vBridgeValues.reserve(vUniforms.size());
+
+		for(const SBestClientReShadeUniformMeta &UniformMeta : vUniforms)
+		{
+			std::string UniformValue = UniformMeta.m_DefaultValue;
+			if(SectionIt != PresetState.m_SectionValues.end())
+			{
+				const auto ValueIt = SectionIt->second.find(UniformMeta.m_Name);
+				if(ValueIt != SectionIt->second.end())
+					UniformValue = ValueIt->second;
+			}
+
+			std::string BridgeValue;
+			bool HasBridgeValue = false;
+			if(UniformMeta.m_Type == EBestClientReShadeUniformType::BOOL)
+			{
+				bool BoolValue = false;
+				if(!BestClientTryParseBoolText(UniformValue, BoolValue))
+					BestClientTryParseBoolText(UniformMeta.m_DefaultValue, BoolValue);
+				BridgeValue = BoolValue ? "true" : "false";
+				HasBridgeValue = true;
+			}
+			else if(UniformMeta.m_Type == EBestClientReShadeUniformType::INT)
+			{
+				int IntValue = 0;
+				unsigned int UintValue = 0;
+				if(BestClientTryParseIntText(UniformValue, IntValue))
+					HasBridgeValue = true;
+				else if(BestClientTryParseUintText(UniformValue, UintValue))
+				{
+					IntValue = (int)UintValue;
+					HasBridgeValue = true;
+				}
+				else if(BestClientTryParseIntText(UniformMeta.m_DefaultValue, IntValue))
+					HasBridgeValue = true;
+				if(HasBridgeValue)
+					BridgeValue = std::to_string(IntValue);
+			}
+			else if(UniformMeta.m_Type == EBestClientReShadeUniformType::UINT)
+			{
+				unsigned int UintValue = 0;
+				int IntValue = 0;
+				if(BestClientTryParseUintText(UniformValue, UintValue))
+					HasBridgeValue = true;
+				else if(BestClientTryParseIntText(UniformValue, IntValue) && IntValue >= 0)
+				{
+					UintValue = (unsigned int)IntValue;
+					HasBridgeValue = true;
+				}
+				else if(BestClientTryParseUintText(UniformMeta.m_DefaultValue, UintValue))
+					HasBridgeValue = true;
+				if(HasBridgeValue)
+					BridgeValue = std::to_string(UintValue);
+			}
+			else if(BestClientIsReShadeUniformFloatVectorType(UniformMeta.m_Type))
+			{
+				std::array<float, 4> aValues = {0.0f, 0.0f, 0.0f, 0.0f};
+				if(!BestClientTryParseFloatVectorText(UniformValue, aValues, UniformMeta.m_NumComponents))
+					BestClientTryParseFloatVectorText(UniformMeta.m_DefaultValue, aValues, UniformMeta.m_NumComponents);
+				BridgeValue = BestClientFormatReShadeFloatVector(aValues, UniformMeta.m_NumComponents);
+				HasBridgeValue = true;
+			}
+			else
+			{
+				float FloatValue = 0.0f;
+				if(!BestClientTryParseFloatText(UniformValue, FloatValue))
+					BestClientTryParseFloatText(UniformMeta.m_DefaultValue, FloatValue);
+				BridgeValue = BestClientFormatReShadeFloat(FloatValue);
+				HasBridgeValue = true;
+			}
+
+			if(HasBridgeValue)
+				vBridgeValues.emplace_back(UniformMeta.m_Name, std::move(BridgeValue));
+		}
+
+		if(vBridgeValues.empty() && SectionIt != PresetState.m_SectionValues.end())
+		{
+			for(const auto &[Key, Value] : SectionIt->second)
+			{
+				bool BoolValue = false;
+				int IntValue = 0;
+				unsigned int UintValue = 0;
+				float FloatValue = 0.0f;
+				std::array<float, 4> aValues = {0.0f, 0.0f, 0.0f, 0.0f};
+				if(BestClientTryParseBoolText(Value, BoolValue))
+					vBridgeValues.emplace_back(Key, BoolValue ? "true" : "false");
+				else if(BestClientTryParseIntText(Value, IntValue))
+					vBridgeValues.emplace_back(Key, std::to_string(IntValue));
+				else if(BestClientTryParseUintText(Value, UintValue))
+					vBridgeValues.emplace_back(Key, std::to_string(UintValue));
+				else if(BestClientTryParseFloatText(Value, FloatValue))
+					vBridgeValues.emplace_back(Key, BestClientFormatReShadeFloat(FloatValue));
+				else if(BestClientTryParseFloatVectorText(Value, aValues, 2))
+					vBridgeValues.emplace_back(Key, BestClientFormatReShadeFloatVector(aValues, 2));
+				else if(BestClientTryParseFloatVectorText(Value, aValues, 3))
+					vBridgeValues.emplace_back(Key, BestClientFormatReShadeFloatVector(aValues, 3));
+				else if(BestClientTryParseFloatVectorText(Value, aValues, 4))
+					vBridgeValues.emplace_back(Key, BestClientFormatReShadeFloatVector(aValues, 4));
+			}
+		}
+
+		if(vBridgeValues.empty())
+			continue;
+
+		BridgeText += "\n[" + EffectName + "]\n";
+		for(const auto &[Key, Value] : vBridgeValues)
+			BridgeText += Key + "=" + Value + "\n";
+	}
+
+	if(fs_makedir_rec_for(aBridgeAbsolutePath) != 0)
+	{
+		str_format(pError, ErrorSize, "Failed to create folder for %s", gs_pBestClientReShadeBridgeStatePath);
+		return false;
+	}
+
+	IOHANDLE File = pStorage->OpenFile(aBridgeAbsolutePath, IOFLAG_WRITE, IStorage::TYPE_ABSOLUTE);
+	if(!File)
+	{
+		str_format(pError, ErrorSize, "Failed to open %s for writing", gs_pBestClientReShadeBridgeStatePath);
+		return false;
+	}
+
+	const unsigned TextSize = (unsigned)BridgeText.size();
+	const bool WriteOk = io_write(File, BridgeText.c_str(), TextSize) == TextSize;
+	io_close(File);
+	if(!WriteOk)
+	{
+		str_format(pError, ErrorSize, "Failed to write %s", gs_pBestClientReShadeBridgeStatePath);
+		return false;
+	}
+
+	if(ErrorSize > 0)
+		pError[0] = '\0';
 	return true;
 }
 
@@ -1559,6 +1726,11 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	static SBestClientReShadePresetState s_PendingSavePresetState;
 	static bool s_HasPendingSavePreset = false;
 	static int64_t s_PendingSavePresetTick = 0;
+	static SBestClientReShadePresetState s_PendingLivePresetState;
+	static bool s_HasPendingLivePreset = false;
+	static int64_t s_PendingLivePresetTick = 0;
+	static uint64_t s_LiveRevision = 0;
+	static uint64_t s_PendingLiveRevision = 0;
 
 	const char *apSortModes[NUM_BESTCLIENT_RESHADE_SORTS] = {
 		BCLocalize("Name A-Z"),
@@ -2304,6 +2476,25 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		s_PendingSavePresetState = EditedPresetState;
 		s_HasPendingSavePreset = true;
 		s_PendingSavePresetTick = NowTick;
+		s_PendingLivePresetState = EditedPresetState;
+		s_HasPendingLivePreset = true;
+		s_PendingLivePresetTick = NowTick;
+		s_PendingLiveRevision = ++s_LiveRevision;
+	}
+
+	const int64_t LiveDelay = maximum<int64_t>(1, time_freq() / 25);
+	if(s_HasPendingLivePreset && NowTick - s_PendingLivePresetTick >= LiveDelay)
+	{
+		char aLiveError[192];
+		if(BestClientSaveReShadeBridgeState(pStorage, s_PendingLivePresetState, s_PendingLiveRevision, aLiveError, sizeof(aLiveError)))
+		{
+			s_HasPendingLivePreset = false;
+		}
+		else
+		{
+			s_PendingLivePresetTick = NowTick;
+			SetStatus(aLiveError, true);
+		}
 	}
 
 	const int64_t SaveDelay = maximum<int64_t>(1, time_freq() / 3);
