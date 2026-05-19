@@ -3083,7 +3083,7 @@ void CClient::Update()
 					if(IsRollbackReplay)
 					{
 						char aBroadcast[64];
-						str_format(aBroadcast, sizeof(aBroadcast), Localize("Rollback saved: %ds"), g_Config.m_ClReplayLength);
+						str_format(aBroadcast, sizeof(aBroadcast), Localize("Rollback saved: %ds"), pJob->LengthSeconds());
 						GameClient()->Broadcast(aBroadcast);
 					}
 					else
@@ -4043,6 +4043,8 @@ void CClient::SaveReplay(const int Length, const char *pFilename)
 		}
 
 		// Stop the recorder to correctly slice the demo after
+		const int AvailableLength = DemoRecorder(RECORDER_REPLAYS)->Length();
+		const int SavedLength = minimum(Length, AvailableLength);
 		DemoRecorder(RECORDER_REPLAYS)->Stop(IDemoRecorder::EStopMode::KEEP_FILE);
 
 		// Slice the demo to get only the last cl_replay_length seconds
@@ -4053,7 +4055,7 @@ void CClient::SaveReplay(const int Length, const char *pFilename)
 		m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "replay", "Saving replay...");
 
 		// Create a job to do this slicing in background because it can be a bit long depending on the file size
-		std::shared_ptr<CDemoEdit> pDemoEditTask = std::make_shared<CDemoEdit>(GameClient()->NetVersion(), &m_SnapshotDelta, m_pStorage, pSrc, aFilename, StartTick, EndTick);
+		std::shared_ptr<CDemoEdit> pDemoEditTask = std::make_shared<CDemoEdit>(GameClient()->NetVersion(), &m_SnapshotDelta, m_pStorage, pSrc, aFilename, StartTick, EndTick, SavedLength);
 		Engine()->AddJob(pDemoEditTask);
 		m_EditJobs.push_back(pDemoEditTask);
 

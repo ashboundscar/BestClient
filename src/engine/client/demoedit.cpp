@@ -5,9 +5,10 @@
 #include <engine/shared/demo.h>
 #include <engine/storage.h>
 
-CDemoEdit::CDemoEdit(const char *pNetVersion, class CSnapshotDelta *pSnapshotDelta, IStorage *pStorage, const char *pDemo, const char *pDst, int StartTick, int EndTick) :
+CDemoEdit::CDemoEdit(const char *pNetVersion, class CSnapshotDelta *pSnapshotDelta, IStorage *pStorage, const char *pDemo, const char *pDst, int StartTick, int EndTick, int LengthSeconds) :
 	m_SnapshotDelta(*pSnapshotDelta),
-	m_pStorage(pStorage)
+	m_pStorage(pStorage),
+	m_LengthSeconds(LengthSeconds)
 {
 	str_copy(m_aDemo, pDemo);
 	str_copy(m_aDst, pDst);
