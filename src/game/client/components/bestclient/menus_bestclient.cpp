@@ -988,9 +988,205 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 
+		// Afterimage (left column block)
+		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_AFTERIMAGE))
+		{
+			static float s_AfterimagePhase = 0.0f;
+			static CButtonContainer s_AfterimageResetButton;
+			const bool AfterimageEnabled = g_Config.m_BcAfterimage != 0;
+			UpdateRevealPhase(s_AfterimagePhase, AfterimageEnabled);
+			const float ExtraTargetHeight = 3.0f * LineSize;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_AfterimagePhase;
+			CUIRect Content, Label, Row, Visible;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			CUIRect TitleLabel, ResetButton, ResetHitbox;
+			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
+			ResetHitbox = ResetButton;
+			const bool AfterimageResetClicked = Ui()->DoButton_FontIcon(&s_AfterimageResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
+			GameClient()->m_Tooltips.DoToolTip(&s_AfterimageResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
+			if(AfterimageResetClicked)
+			{
+				g_Config.m_BcAfterimageFrames = DefaultConfig::BcAfterimageFrames;
+				g_Config.m_BcAfterimageAlpha = DefaultConfig::BcAfterimageAlpha;
+				g_Config.m_BcAfterimageSpacing = DefaultConfig::BcAfterimageSpacing;
+			}
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Afterimage"), HeadlineFontSize, TEXTALIGN_ML);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcAfterimage, BCLocalize("Enable Afterimage"), &g_Config.m_BcAfterimage, &Content, LineSize);
+
+			const float ExtraHeight = ExtraTargetHeight * s_AfterimagePhase;
+			if(!AfterimageResetClicked && ExtraHeight > 0.0f)
+			{
+				Content.HSplitTop(ExtraHeight, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClip
+				{
+					CUi *m_pUi;
+					~SScopedClip() { m_pUi->ClipDisable(); }
+				} ClipGuard{Ui()};
+
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExtraTargetHeight};
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageFrames, &g_Config.m_BcAfterimageFrames, &Row, BCLocalize("Afterimage frames"), 2, 20);
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageAlpha, &g_Config.m_BcAfterimageAlpha, &Row, BCLocalize("Afterimage alpha"), 1, 100);
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageSpacing, &g_Config.m_BcAfterimageSpacing, &Row, BCLocalize("Afterimage spacing"), 1, 64);
+			}
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
+		// Magic particles (left column block)
+		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_MAGIC_PARTICLES))
+		{
+			static float s_MagicParticlesPhase = 0.0f;
+			static CButtonContainer s_MagicParticlesResetButton;
+			const bool MagicParticlesEnabled = g_Config.m_BcMagicParticles != 0;
+			UpdateRevealPhase(s_MagicParticlesPhase, MagicParticlesEnabled);
+			const float ExpandedTargetHeight = 5.0f * LineSize;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + ExpandedTargetHeight * s_MagicParticlesPhase;
+			CUIRect Content, Label, Row, Visible;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			CUIRect TitleLabel, ResetButton, ResetHitbox;
+			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
+			ResetHitbox = ResetButton;
+			const bool MagicParticlesResetClicked = Ui()->DoButton_FontIcon(&s_MagicParticlesResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
+			GameClient()->m_Tooltips.DoToolTip(&s_MagicParticlesResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
+			if(MagicParticlesResetClicked)
+			{
+				g_Config.m_BcMagicParticlesCount = DefaultConfig::BcMagicParticlesCount;
+				g_Config.m_BcMagicParticlesRadius = DefaultConfig::BcMagicParticlesRadius;
+				g_Config.m_BcMagicParticlesSize = DefaultConfig::BcMagicParticlesSize;
+				g_Config.m_BcMagicParticlesAlphaDelay = DefaultConfig::BcMagicParticlesAlphaDelay;
+				g_Config.m_BcMagicParticlesType = DefaultConfig::BcMagicParticlesType;
+			}
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Magic Particles"), HeadlineFontSize, TEXTALIGN_ML);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMagicParticles, BCLocalize("Magic Particles"), &g_Config.m_BcMagicParticles, &Content, LineSize);
+
+			const float ExpandedHeight = ExpandedTargetHeight * s_MagicParticlesPhase;
+			if(!MagicParticlesResetClicked && ExpandedHeight > 0.0f)
+			{
+				Content.HSplitTop(ExpandedHeight, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClip
+				{
+					CUi *m_pUi;
+					~SScopedClip() { m_pUi->ClipDisable(); }
+				} ClipGuard{Ui()};
+
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExpandedTargetHeight};
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesCount, &g_Config.m_BcMagicParticlesCount, &Row, BCLocalize("Particles count"), 1, 100);
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesRadius, &g_Config.m_BcMagicParticlesRadius, &Row, BCLocalize("Radius"), 1, 1000);
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesSize, &g_Config.m_BcMagicParticlesSize, &Row, BCLocalize("Size"), 1, 50);
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesAlphaDelay, &g_Config.m_BcMagicParticlesAlphaDelay, &Row, BCLocalize("Alpha delay"), 1, 100);
+
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				CUIRect TypeLabel, TypeSelect;
+				Row.VSplitLeft(150.0f, &TypeLabel, &TypeSelect);
+				Ui()->DoLabel(&TypeLabel, BCLocalize("Particle type"), 14.0f, TEXTALIGN_ML);
+
+				static CUi::SDropDownState s_MagicParticlesTypeState;
+				static CScrollRegion s_MagicParticlesTypeScrollRegion;
+				s_MagicParticlesTypeState.m_SelectionPopupContext.m_pScrollRegion = &s_MagicParticlesTypeScrollRegion;
+				const char *apMagicParticleTypes[4] = {
+					BCLocalize("Slice"),
+					BCLocalize("Ball"),
+					BCLocalize("Smoke"),
+					BCLocalize("Shell"),
+				};
+				g_Config.m_BcMagicParticlesType = Ui()->DoDropDown(&TypeSelect, g_Config.m_BcMagicParticlesType - 1, apMagicParticleTypes, (int)std::size(apMagicParticleTypes), s_MagicParticlesTypeState) + 1;
+			}
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
 		const float LeftColumnEndY = Column.y;
 		Column = RightView;
 		Column.HSplitTop(10.0f, nullptr, &Column);
+
+		// Motion blur / frame blend (right column block)
+		{
+			static float s_MotionBlurPhase = 0.0f;
+			static CButtonContainer s_MotionBlurResetButton;
+			const bool MotionBlurEnabled = g_Config.m_BcMotionBlur != 0;
+			const bool IsVulkanBackend = str_find_nocase(Graphics()->GetVersionString(), "vulkan") != nullptr;
+			UpdateRevealPhase(s_MotionBlurPhase, MotionBlurEnabled);
+			const float BackendNoteHeight = IsVulkanBackend ? 0.0f : LineSize;
+			const float ExtraTargetHeight = LineSize;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + BackendNoteHeight + ExtraTargetHeight * s_MotionBlurPhase;
+			CUIRect Content, Label, Row, Visible;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			const float ResetButtonWidth = LineSize + 8.0f;
+			const float BadgeWidth = 56.0f;
+			const float HeaderSpacing = 4.0f;
+			CUIRect TitleLabel, HeaderRight, BadgeSlot, ResetButton, ResetHitbox, Badge;
+			Label.VSplitRight(BadgeWidth + HeaderSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
+			HeaderRight.VSplitLeft(BadgeWidth, &BadgeSlot, &HeaderRight);
+			HeaderRight.VSplitLeft(HeaderSpacing, nullptr, &HeaderRight);
+			ResetButton = HeaderRight;
+			ResetHitbox = ResetButton;
+			const bool MotionBlurResetClicked = Ui()->DoButton_FontIcon(&s_MotionBlurResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
+			GameClient()->m_Tooltips.DoToolTip(&s_MotionBlurResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
+			if(MotionBlurResetClicked)
+				g_Config.m_BcMotionBlurStrength = DefaultConfig::BcMotionBlurStrength;
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Motion Blur"), HeadlineFontSize, TEXTALIGN_ML);
+			BadgeSlot.HMargin(1.5f, &Badge);
+			Badge.x += 4.0f;
+			Badge.w -= 4.0f;
+			Graphics()->DrawRect4(
+				Badge.x, Badge.y, Badge.w, Badge.h,
+				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				IGraphics::CORNER_ALL, 5.0f);
+			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMotionBlur, BCLocalize("Enable motion blur (frame blend)"), &g_Config.m_BcMotionBlur, &Content, LineSize);
+
+			if(!IsVulkanBackend)
+			{
+				Content.HSplitTop(LineSize, &Row, &Content);
+				Ui()->DoLabel(&Row, BCLocalize("Requires the Vulkan backend"), 12.0f, TEXTALIGN_ML);
+			}
+
+			const float ExtraHeight = ExtraTargetHeight * s_MotionBlurPhase;
+			if(!MotionBlurResetClicked && ExtraHeight > 0.0f)
+			{
+				Content.HSplitTop(ExtraHeight, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClip
+				{
+					CUi *m_pUi;
+					~SScopedClip() { m_pUi->ClipDisable(); }
+				} ClipGuard{Ui()};
+
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExtraTargetHeight};
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				DoSliderWithScaledValue(&g_Config.m_BcMotionBlurStrength, &g_Config.m_BcMotionBlurStrength, &Row, BCLocalize("Blend strength"), 1, 400, 1, &CUi::ms_LinearScrollbarScale, CUi::SCROLLBAR_OPTION_NOCLAMPVALUE, "%");
+			}
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
 
 		// Animations (right column block)
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_ANIMATIONS))
@@ -1434,135 +1630,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				TextRender()->TextColor(1.0f, 0.4f, 0.4f, 1.0f);
 				Ui()->DoLabel(&Label, BCLocalize("Looks like you're on a server where this feature is forbidden"), 14.0f, TEXTALIGN_ML);
 				TextRender()->TextColor(TextRender()->DefaultTextColor());
-			}
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
-		// Afterimage (right column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_AFTERIMAGE))
-		{
-			static float s_AfterimagePhase = 0.0f;
-			static CButtonContainer s_AfterimageResetButton;
-			const bool AfterimageEnabled = g_Config.m_BcAfterimage != 0;
-			UpdateRevealPhase(s_AfterimagePhase, AfterimageEnabled);
-			const float ExtraTargetHeight = 3.0f * LineSize;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_AfterimagePhase;
-			CUIRect Content, Label, Row, Visible;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
-			ResetHitbox = ResetButton;
-			const bool AfterimageResetClicked = Ui()->DoButton_FontIcon(&s_AfterimageResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(&s_AfterimageResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
-			if(AfterimageResetClicked)
-			{
-				g_Config.m_BcAfterimageFrames = DefaultConfig::BcAfterimageFrames;
-				g_Config.m_BcAfterimageAlpha = DefaultConfig::BcAfterimageAlpha;
-				g_Config.m_BcAfterimageSpacing = DefaultConfig::BcAfterimageSpacing;
-			}
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Afterimage"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcAfterimage, BCLocalize("Enable Afterimage"), &g_Config.m_BcAfterimage, &Content, LineSize);
-
-			const float ExtraHeight = ExtraTargetHeight * s_AfterimagePhase;
-			if(!AfterimageResetClicked && ExtraHeight > 0.0f)
-			{
-				Content.HSplitTop(ExtraHeight, &Visible, &Content);
-				Ui()->ClipEnable(&Visible);
-				struct SScopedClip
-				{
-					CUi *m_pUi;
-					~SScopedClip() { m_pUi->ClipDisable(); }
-				} ClipGuard{Ui()};
-
-				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExtraTargetHeight};
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageFrames, &g_Config.m_BcAfterimageFrames, &Row, BCLocalize("Afterimage frames"), 2, 20);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageAlpha, &g_Config.m_BcAfterimageAlpha, &Row, BCLocalize("Afterimage alpha"), 1, 100);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageSpacing, &g_Config.m_BcAfterimageSpacing, &Row, BCLocalize("Afterimage spacing"), 1, 64);
-			}
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
-		// Magic particles (right column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_MAGIC_PARTICLES))
-		{
-			static float s_MagicParticlesPhase = 0.0f;
-			static CButtonContainer s_MagicParticlesResetButton;
-			const bool MagicParticlesEnabled = g_Config.m_BcMagicParticles != 0;
-			UpdateRevealPhase(s_MagicParticlesPhase, MagicParticlesEnabled);
-			const float ExpandedTargetHeight = 5.0f * LineSize;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + ExpandedTargetHeight * s_MagicParticlesPhase;
-			CUIRect Content, Label, Row, Visible;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
-			ResetHitbox = ResetButton;
-			const bool MagicParticlesResetClicked = Ui()->DoButton_FontIcon(&s_MagicParticlesResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(&s_MagicParticlesResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
-			if(MagicParticlesResetClicked)
-			{
-				g_Config.m_BcMagicParticlesCount = DefaultConfig::BcMagicParticlesCount;
-				g_Config.m_BcMagicParticlesRadius = DefaultConfig::BcMagicParticlesRadius;
-				g_Config.m_BcMagicParticlesSize = DefaultConfig::BcMagicParticlesSize;
-				g_Config.m_BcMagicParticlesAlphaDelay = DefaultConfig::BcMagicParticlesAlphaDelay;
-				g_Config.m_BcMagicParticlesType = DefaultConfig::BcMagicParticlesType;
-			}
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Magic Particles"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMagicParticles, BCLocalize("Magic Particles"), &g_Config.m_BcMagicParticles, &Content, LineSize);
-
-			const float ExpandedHeight = ExpandedTargetHeight * s_MagicParticlesPhase;
-			if(!MagicParticlesResetClicked && ExpandedHeight > 0.0f)
-			{
-				Content.HSplitTop(ExpandedHeight, &Visible, &Content);
-				Ui()->ClipEnable(&Visible);
-				struct SScopedClip
-				{
-					CUi *m_pUi;
-					~SScopedClip() { m_pUi->ClipDisable(); }
-				} ClipGuard{Ui()};
-
-				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExpandedTargetHeight};
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesCount, &g_Config.m_BcMagicParticlesCount, &Row, BCLocalize("Particles count"), 1, 100);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesRadius, &g_Config.m_BcMagicParticlesRadius, &Row, BCLocalize("Radius"), 1, 1000);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesSize, &g_Config.m_BcMagicParticlesSize, &Row, BCLocalize("Size"), 1, 50);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesAlphaDelay, &g_Config.m_BcMagicParticlesAlphaDelay, &Row, BCLocalize("Alpha delay"), 1, 100);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				CUIRect TypeLabel, TypeSelect;
-				Row.VSplitLeft(150.0f, &TypeLabel, &TypeSelect);
-				Ui()->DoLabel(&TypeLabel, BCLocalize("Particle type"), 14.0f, TEXTALIGN_ML);
-
-				static CUi::SDropDownState s_MagicParticlesTypeState;
-				static CScrollRegion s_MagicParticlesTypeScrollRegion;
-				s_MagicParticlesTypeState.m_SelectionPopupContext.m_pScrollRegion = &s_MagicParticlesTypeScrollRegion;
-				const char *apMagicParticleTypes[4] = {
-					BCLocalize("Slice"),
-					BCLocalize("Ball"),
-					BCLocalize("Smoke"),
-					BCLocalize("Shell"),
-				};
-				g_Config.m_BcMagicParticlesType = Ui()->DoDropDown(&TypeSelect, g_Config.m_BcMagicParticlesType - 1, apMagicParticleTypes, (int)std::size(apMagicParticleTypes), s_MagicParticlesTypeState) + 1;
 			}
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
@@ -2902,23 +2969,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		}
 
 		{
-			const float ContentHeight = LineSize + MarginSmall + 3.0f * LineSize;
-			CUIRect Content, Label, Row;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			Ui()->DoLabel(&Label, BCLocalize("Browser Utils"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcAutoServerListRefresh, BCLocalize("Auto server list refresh"), &g_Config.m_BcAutoServerListRefresh, &Content, LineSize);
-			Content.HSplitTop(LineSize, &Row, &Content);
-			Ui()->DoScrollbarOption(&g_Config.m_BcAutoServerListRefreshSeconds, &g_Config.m_BcAutoServerListRefreshSeconds, &Row, BCLocalize("Seconds"), 1, 300, &CUi::ms_LinearScrollbarScale, CUi::SCROLLBAR_OPTION_DELAYUPDATE, " s");
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcUseShortKogServerName, BCLocalize("Use short KoG server name"), &g_Config.m_BcUseShortKogServerName, &Content, LineSize);
-
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
-		{
 			static float s_RollbackDemoPhase = 0.0f;
 			const float KeyReaderLineSize = LineSize + MarginExtraSmall;
 			const float ExpandedTargetHeight = LineSize + KeyReaderLineSize;
@@ -2972,6 +3022,23 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				static CButtonContainer s_RollbackBindClear;
 				DoLine_KeyReader(Expand, s_RollbackBindReader, s_RollbackBindClear, BCLocalize("Rollback bind"), "BC_save_rollback");
 			}
+
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
+		{
+			const float ContentHeight = LineSize + MarginSmall + 3.0f * LineSize;
+			CUIRect Content, Label, Row;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			Ui()->DoLabel(&Label, BCLocalize("Browser Utils"), HeadlineFontSize, TEXTALIGN_ML);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcAutoServerListRefresh, BCLocalize("Auto server list refresh"), &g_Config.m_BcAutoServerListRefresh, &Content, LineSize);
+			Content.HSplitTop(LineSize, &Row, &Content);
+			Ui()->DoScrollbarOption(&g_Config.m_BcAutoServerListRefreshSeconds, &g_Config.m_BcAutoServerListRefreshSeconds, &Row, BCLocalize("Seconds"), 1, 300, &CUi::ms_LinearScrollbarScale, CUi::SCROLLBAR_OPTION_DELAYUPDATE, " s");
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcUseShortKogServerName, BCLocalize("Use short KoG server name"), &g_Config.m_BcUseShortKogServerName, &Content, LineSize);
 
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
