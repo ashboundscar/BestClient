@@ -3978,10 +3978,20 @@ set(CPACK_FILES
 if(NOT TARGET_OS STREQUAL "emscripten")
   list(APPEND CPACK_FILES storage.cfg)
 endif()
+if(TARGET_OS STREQUAL "windows")
+  list(APPEND CPACK_FILES
+    other/reshade/ReShade.ini
+    other/reshade/ReShadePreset.ini
+    other/reshade/vulkan-1.dll
+  )
+endif()
 
 set(CPACK_GEN_FILES
   ${VULKAN_SHADER_FILE_LIST}
 )
+if(TARGET_OS STREQUAL "windows")
+  list(APPEND CPACK_GEN_FILES bestclient_reshade_live.addon)
+endif()
 
 if(TARGET_OS STREQUAL "windows")
   list(APPEND CPACK_FILES other/config_directory.bat)
@@ -4027,11 +4037,21 @@ else()
   set(EXTRA_ARGS DESTINATION ${CPACK_PACKAGE_FILE_NAME} COMPONENT portable EXCLUDE_FROM_ALL)
   install(TARGETS ${CPACK_TARGETS} ${EXTRA_ARGS})
   install(DIRECTORY ${CPACK_DIRS} ${EXTRA_ARGS})
+  if(TARGET_OS STREQUAL "windows")
+    install(DIRECTORY
+      ${PROJECT_SOURCE_DIR}/other/reshade/reshade-shaders/Shaders
+      ${PROJECT_SOURCE_DIR}/other/reshade/reshade-shaders/Textures
+      DESTINATION ${CPACK_PACKAGE_FILE_NAME}/data/reshade
+      COMPONENT portable
+      EXCLUDE_FROM_ALL
+    )
+  endif()
   set(CPACK_FILES_TMP ${CPACK_FILES} ${CPACK_GEN_FILES})
   install(FILES ${CPACK_FILES_TMP} ${EXTRA_ARGS})
 endif()
 
 set(PACKAGE_TARGETS)
+set(PACKAGE_EXTRA_DEPENDS)
 if(CLIENT AND DMGBUILD_FOUND)
   file(MAKE_DIRECTORY bundle/client/)
   file(MAKE_DIRECTORY bundle/server/)
@@ -4155,6 +4175,7 @@ foreach(ext zip tar.gz tar.xz)
   string(REPLACE . _ EXT_SLUG ${ext})
 
   set(TMPDIR pack_${CPACK_PACKAGE_FILE_NAME}_${EXT_SLUG}/${CPACK_PACKAGE_FILE_NAME})
+  set(PACKAGE_OUTPUT ${CPACK_PACKAGE_FILE_NAME}.${ext})
 
   set(COPY_FILE_COMMANDS)
   set(COPY_DIR_COMMANDS)
@@ -4169,6 +4190,12 @@ foreach(ext zip tar.gz tar.xz)
   foreach(dir ${CPACK_DIRS})
     list(APPEND COPY_DIR_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/${dir} ${TMPDIR}/${dir})
   endforeach()
+  if(TARGET_OS STREQUAL "windows")
+    list(APPEND COPY_DIR_COMMANDS
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${TMPDIR}/data/reshade
+      COMMAND ${CMAKE_COMMAND} -Dsrc=${PROJECT_SOURCE_DIR}/other/reshade/reshade-shaders -Ddst=${TMPDIR}/data/reshade -P ${PROJECT_SOURCE_DIR}/cmake/RobocopyDirectory.cmake
+    )
+  endif()
   foreach(target ${CPACK_TARGETS})
     if(TARGET_OS STREQUAL "emscripten")
       # The main target with Emscripten is the .html file, but we instead want the .data, .js and .wasm files and use our own index.html
@@ -4191,14 +4218,15 @@ foreach(ext zip tar.gz tar.xz)
     set(TAR_MODE cJ)
   endif()
   add_custom_command(OUTPUT ${CPACK_PACKAGE_FILE_NAME}.${ext}
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${TMPDIR}
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${PACKAGE_OUTPUT}
+    COMMAND ${CMAKE_COMMAND} -E chdir ${PROJECT_BINARY_DIR} powershell -NoProfile -ExecutionPolicy Bypass -Command "if(Test-Path -LiteralPath '${TMPDIR}') { Remove-Item -LiteralPath '${TMPDIR}' -Recurse -Force -ErrorAction Stop }"
     COMMAND ${CMAKE_COMMAND} -E make_directory ${TMPDIR}
     ${COPY_FILE_COMMANDS}
     ${COPY_DIR_COMMANDS}
     ${COPY_TARGET_COMMANDS}
     ${STRIP_TARGET_COMMANDS}
     COMMAND ${CMAKE_COMMAND} -E chdir pack_${CPACK_PACKAGE_FILE_NAME}_${EXT_SLUG} ${CMAKE_COMMAND} -E tar ${TAR_MODE} ../${CPACK_PACKAGE_FILE_NAME}.${ext} ${TAR_EXTRA_ARGS} -- ${CPACK_PACKAGE_FILE_NAME}/
-    DEPENDS ${CPACK_TARGETS}
+    DEPENDS ${CPACK_TARGETS} ${PACKAGE_EXTRA_DEPENDS}
   )
   add_custom_target(package_${EXT_SLUG} DEPENDS ${CPACK_PACKAGE_FILE_NAME}.${ext})
   list(APPEND PACKAGE_TARGETS package_${EXT_SLUG})
@@ -4425,6 +4453,7 @@ if(TARGET_OS STREQUAL "windows")
   target_include_directories(bestclient-reshade-live SYSTEM PRIVATE
     ${CMAKE_SOURCE_DIR}/other/reshade/include_api18
   )
+  list(APPEND PACKAGE_EXTRA_DEPENDS bestclient-reshade-live)
   add_custom_command(
     TARGET bestclient-reshade-live POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -4448,7 +4477,7 @@ if(TARGET_OS STREQUAL "windows")
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${CMAKE_SOURCE_DIR}/other/reshade/vulkan-1.dll"
       "$<TARGET_FILE_DIR:game-client>"
-    COMMAND cmd /C "robocopy \"${CMAKE_SOURCE_DIR}/other/reshade/reshade-shaders\" \"$<TARGET_FILE_DIR:game-client>/data/reshade\" /E /NFL /NDL /NJH /NJS /NC /NS /NP >NUL & if %ERRORLEVEL% LEQ 7 exit /B 0 else exit /B %ERRORLEVEL%"
+    COMMAND ${CMAKE_COMMAND} -Dsrc=${CMAKE_SOURCE_DIR}/other/reshade/reshade-shaders -Ddst=$<TARGET_FILE_DIR:game-client>/data/reshade -P ${CMAKE_SOURCE_DIR}/cmake/RobocopyDirectory.cmake
   )
   add_dependencies(game-client bestclient-reshade-live)
   add_dependencies(game-client bestclient-reshade-assets)
