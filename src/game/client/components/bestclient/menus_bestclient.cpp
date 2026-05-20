@@ -31,7 +31,9 @@
 #include <game/client/ui_scrollregion.h>
 #include <game/localization.h>
 
+#if defined(CONF_FAMILY_WINDOWS)
 #include "reshade_runtime.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -61,6 +63,23 @@ static void SetBestClientTabFlag(int32_t &Flags, int Tab, bool Hidden)
 static bool IsBestClientTabFlagSet(int32_t Flags, int Tab)
 {
 	return (Flags & (1 << Tab)) != 0;
+}
+
+static void RenderSettingsBestClientReShadeUnsupported(CUi *pUi, CUIRect MainView)
+{
+	CUIRect Content, Line;
+	MainView.Margin(32.0f, &Content);
+
+	const float MessageHeight = 58.0f;
+	const float TopPadding = maximum((Content.h - MessageHeight) * 0.5f, 0.0f);
+	Content.HSplitTop(TopPadding, nullptr, &Content);
+
+	Content.HSplitTop(24.0f, &Line, &Content);
+	pUi->DoLabel(&Line, "sorry", 24.0f, TEXTALIGN_MC);
+
+	Content.HSplitTop(10.0f, nullptr, &Content);
+	Content.HSplitTop(24.0f, &Line, &Content);
+	pUi->DoLabel(&Line, "your system doesn't have reshade support.", 14.0f, TEXTALIGN_MC);
 }
 
 #if defined(CONF_FAMILY_WINDOWS)
@@ -5441,12 +5460,10 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 	}
 	else if(s_CurTab == BESTCLIENT_TAB_RESHADE)
 	{
-#if defined(_WIN32)
+#if defined(CONF_FAMILY_WINDOWS)
 		RenderSettingsBestClientReShadeTab(this, Storage(), TextRender(), Ui(), Client(), Graphics(), MainView);
 #else
-		CUIRect Label;
-		MainView.HSplitTop(20.0f, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("ReShade is currently available only on Windows builds."), 14.0f, TEXTALIGN_ML);
+		RenderSettingsBestClientReShadeUnsupported(Ui(), MainView);
 #endif
 	}
 	else if(s_CurTab == BESTCLIENT_TAB_FUN)

@@ -3141,6 +3141,12 @@ if(CLIENT)
     src/generated/client_data7.h
   )
   list(REMOVE_ITEM GAME_CLIENT "${PROJECT_SOURCE_DIR}/src/game/client/components/bestclient/voice/server.cpp")
+  if(NOT TARGET_OS STREQUAL "windows")
+    list(REMOVE_ITEM GAME_CLIENT
+      "${PROJECT_SOURCE_DIR}/src/game/client/components/bestclient/reshade_runtime.cpp"
+      "${PROJECT_SOURCE_DIR}/src/game/client/components/bestclient/reshade_runtime.h"
+    )
+  endif()
   set(CLIENT_SRC ${ENGINE_CLIENT} ${PLATFORM_CLIENT} ${GAME_CLIENT} ${GAME_EDITOR} ${GAME_MAP} ${GAME_GENERATED_CLIENT})
 
   set(DEPS_CLIENT ${DEPS} ${GLEW_DEP} ${WAVPACK_DEP})
@@ -3246,8 +3252,10 @@ if(CLIENT)
   target_include_directories(game-client SYSTEM PRIVATE
     ${PROJECT_SOURCE_DIR}/src/engine/external/chaiscript)
 
-  target_include_directories(game-client PRIVATE
-    ${PROJECT_SOURCE_DIR}/other/reshade/include)
+  if(TARGET_OS STREQUAL "windows")
+    target_include_directories(game-client PRIVATE
+      ${PROJECT_SOURCE_DIR}/other/reshade/include)
+  endif()
 
   target_include_directories(game-client SYSTEM PRIVATE
     ${FREETYPE_INCLUDE_DIRS}
