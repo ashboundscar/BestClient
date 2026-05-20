@@ -103,7 +103,6 @@ static constexpr const char *gs_pPortableReShadeLayerDllFilename = "ReShade64.dl
 static constexpr const char *gs_pPortableReShadeLayerManifestFilename = "ReShade64.json";
 static constexpr const char *gs_pPortableReShadeLayerDisabledManifestFilename = "ReShade64.reshade-disabled.json";
 static constexpr const char *gs_pPortableReShadeLayerDisableEnv = "DISABLE_VK_LAYER_reshade_1";
-static constexpr const char *gs_pPortableReShadeAppsFilename = "ReShadeApps.ini";
 static constexpr const char *gs_pPortableReShadeConfigFilename = "settings_BestClient.cfg";
 static constexpr const char *gs_pPortableReShadeEnabledConfigName = "bc_reshade_enabled";
 
@@ -170,128 +169,26 @@ static void WindowsUseBackslashes(char *pPath)
 	}
 }
 
-static bool CopyFileUtf8(const char *pSource, const char *pDest)
+static void RemovePortableReShadeUserLayerRegistration()
 {
-	if(CopyFileW(windows_utf8_to_wide(pSource).c_str(), windows_utf8_to_wide(pDest).c_str(), FALSE) != 0)
-		return true;
-
-	const DWORD Error = GetLastError();
-	log_error("reshade", "Failed to copy '%s' to '%s' (%lu '%s')", pSource, pDest, Error, windows_format_system_message(Error).c_str());
-	return false;
-}
-
-static bool RegistryKeyHasReShadeImplicitLayer(HKEY RootKey)
-{
-	HKEY LayerKey;
-	const LRESULT OpenResult = RegOpenKeyExW(RootKey, L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers", 0, KEY_QUERY_VALUE, &LayerKey);
-	if(OpenResult != ERROR_SUCCESS)
-		return false;
-
-	bool Found = false;
-	for(DWORD Index = 0; !Found; ++Index)
-	{
-		wchar_t aValueName[IO_MAX_PATH_LENGTH];
-		DWORD ValueNameSize = std::size(aValueName);
-		const LRESULT EnumResult = RegEnumValueW(LayerKey, Index, aValueName, &ValueNameSize, nullptr, nullptr, nullptr, nullptr);
-		if(EnumResult == ERROR_NO_MORE_ITEMS)
-			break;
-		if(EnumResult != ERROR_SUCCESS)
-			continue;
-
-		std::wstring ValueName(aValueName, ValueNameSize);
-		std::transform(ValueName.begin(), ValueName.end(), ValueName.begin(), towlower);
-		if(ValueName.find(L"reshade64.json") != std::wstring::npos)
-			Found = true;
-	}
-
-	RegCloseKey(LayerKey);
-	return Found;
-}
-
-static void EnsurePortableReShadeUserLayerRegistration(const char *pBinaryDir, bool HasLayerDll, bool HasLayerManifest, bool HasDisabledLayerManifest)
-{
-	if(!HasLayerDll || (!HasLayerManifest && !HasDisabledLayerManifest))
-		return;
-
-	if(RegistryKeyHasReShadeImplicitLayer(HKEY_LOCAL_MACHINE))
-		return;
-
 	char aUserDir[IO_MAX_PATH_LENGTH];
 	if(fs_storage_path("BestClient", aUserDir, sizeof(aUserDir)) != 0)
 		return;
 
-	char aRuntimeDir[IO_MAX_PATH_LENGTH];
-	str_format(aRuntimeDir, sizeof(aRuntimeDir), "%s/reshade-runtime", aUserDir);
-	char aTargetDllPath[IO_MAX_PATH_LENGTH];
 	char aTargetManifestPath[IO_MAX_PATH_LENGTH];
-	char aTargetAppsPath[IO_MAX_PATH_LENGTH];
-	str_format(aTargetDllPath, sizeof(aTargetDllPath), "%s/%s", aRuntimeDir, gs_pPortableReShadeLayerDllFilename);
-	str_format(aTargetManifestPath, sizeof(aTargetManifestPath), "%s/%s", aRuntimeDir, gs_pPortableReShadeLayerManifestFilename);
-	str_format(aTargetAppsPath, sizeof(aTargetAppsPath), "%s/%s", aRuntimeDir, gs_pPortableReShadeAppsFilename);
-
-	if(fs_makedir_rec_for(aTargetDllPath) != 0)
-	{
-		log_error("reshade", "Failed to create parent directories for '%s'.", aTargetDllPath);
-		return;
-	}
-	if(fs_is_dir(aRuntimeDir) == 0 && fs_makedir(aRuntimeDir) != 0)
-	{
-		log_error("reshade", "Failed to create portable ReShade runtime directory '%s'.", aRuntimeDir);
-		return;
-	}
-
-	char aSourceDllPath[IO_MAX_PATH_LENGTH];
-	char aSourceManifestPath[IO_MAX_PATH_LENGTH];
-	str_format(aSourceDllPath, sizeof(aSourceDllPath), "%s/%s", pBinaryDir, gs_pPortableReShadeLayerDllFilename);
-	str_format(aSourceManifestPath, sizeof(aSourceManifestPath), "%s/%s", pBinaryDir, HasLayerManifest ? gs_pPortableReShadeLayerManifestFilename : gs_pPortableReShadeLayerDisabledManifestFilename);
-
-	if(!CopyFileUtf8(aSourceDllPath, aTargetDllPath) || !CopyFileUtf8(aSourceManifestPath, aTargetManifestPath))
-		return;
-
-	char aExecutablePath[IO_MAX_PATH_LENGTH];
-	if(fs_executable_path(aExecutablePath, sizeof(aExecutablePath)) != 0)
-	{
-		log_error("reshade", "Failed to determine executable path for ReShadeApps.ini registration.");
-		return;
-	}
-	WindowsUseBackslashes(aExecutablePath);
-
-	char aAppsFile[IO_MAX_PATH_LENGTH + 16];
-	str_format(aAppsFile, sizeof(aAppsFile), "Apps=%s\n", aExecutablePath);
-	IOHANDLE AppsFile = io_open(aTargetAppsPath, IOFLAG_WRITE);
-	if(!AppsFile)
-	{
-		log_error("reshade", "Failed to open '%s' for writing.", aTargetAppsPath);
-		return;
-	}
-	const bool WroteAppsFile = io_write(AppsFile, aAppsFile, str_length(aAppsFile)) == static_cast<unsigned>(str_length(aAppsFile));
-	io_close(AppsFile);
-	if(!WroteAppsFile)
-	{
-		log_error("reshade", "Failed to write '%s'.", aTargetAppsPath);
-		return;
-	}
+	str_format(aTargetManifestPath, sizeof(aTargetManifestPath), "%s/reshade-runtime/%s", aUserDir, gs_pPortableReShadeLayerManifestFilename);
 
 	WindowsUseBackslashes(aTargetManifestPath);
 	HKEY LayerKey;
-	const LRESULT OpenResult = RegCreateKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers", 0, nullptr, 0, KEY_ALL_ACCESS, nullptr, &LayerKey, nullptr);
+	const LRESULT OpenResult = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers", 0, KEY_SET_VALUE, &LayerKey);
 	if(OpenResult != ERROR_SUCCESS)
-	{
-		log_error("reshade", "Failed to open Vulkan implicit layers registry key (%ld '%s').", OpenResult, windows_format_system_message(OpenResult).c_str());
 		return;
-	}
 
-	const DWORD Enabled = 0;
 	const std::wstring WideManifestPath = windows_utf8_to_wide(aTargetManifestPath);
-	const LRESULT SetResult = RegSetValueExW(LayerKey, WideManifestPath.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE *>(&Enabled), sizeof(Enabled));
+	const LRESULT DeleteResult = RegDeleteValueW(LayerKey, WideManifestPath.c_str());
 	RegCloseKey(LayerKey);
-	if(SetResult != ERROR_SUCCESS)
-	{
-		log_error("reshade", "Failed to register portable ReShade Vulkan layer '%s' (%ld '%s').", aTargetManifestPath, SetResult, windows_format_system_message(SetResult).c_str());
-		return;
-	}
-
-	log_info("reshade", "Registered portable user-level ReShade Vulkan layer at '%s'.", aTargetManifestPath);
+	if(DeleteResult == ERROR_SUCCESS)
+		log_info("reshade", "Removed stale portable user-level ReShade Vulkan layer registration '%s'.", aTargetManifestPath);
 }
 
 static void ConfigurePortableReShadeLayerEnvironmentEarly()
@@ -316,7 +213,7 @@ static void ConfigurePortableReShadeLayerEnvironmentEarly()
 	bool ReShadeEnabled = false;
 	QueryPortableReShadeConfigEnabled(ReShadeEnabled);
 
-	EnsurePortableReShadeUserLayerRegistration(aBinaryDir, HasLayerDll, HasLayerManifest, HasDisabledLayerManifest);
+	RemovePortableReShadeUserLayerRegistration();
 	_putenv_s("VK_IMPLICIT_LAYER_PATH", aBinaryDir);
 	_putenv_s(gs_pPortableReShadeLayerDisableEnv, ReShadeEnabled ? "" : "1");
 }
