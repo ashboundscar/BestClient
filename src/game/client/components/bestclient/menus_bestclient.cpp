@@ -3777,16 +3777,10 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			static CButtonContainer s_MotionBlurResetButton;
 			const bool MotionBlurEnabled = g_Config.m_BcMotionBlur != 0;
 			const bool IsVulkanBackend = str_find_nocase(Graphics()->GetVersionString(), "vulkan") != nullptr;
-#if defined(CONF_PLATFORM_LINUX)
-			const bool IsLinuxFrameBlendUnsupported = true;
-#else
-			const bool IsLinuxFrameBlendUnsupported = false;
-#endif
 			UpdateRevealPhase(s_MotionBlurPhase, MotionBlurEnabled);
 			const float BackendNoteHeight = IsVulkanBackend ? 0.0f : LineSize;
-			const float LinuxNoteHeight = IsLinuxFrameBlendUnsupported ? LineSize : 0.0f;
 			const float ExtraTargetHeight = LineSize;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + BackendNoteHeight + LinuxNoteHeight + ExtraTargetHeight * s_MotionBlurPhase;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + BackendNoteHeight + ExtraTargetHeight * s_MotionBlurPhase;
 			CUIRect Content, Label, Row, Visible;
 			BeginBlock(Column, ContentHeight, Content);
 
@@ -3824,11 +3818,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			{
 				Content.HSplitTop(LineSize, &Row, &Content);
 				Ui()->DoLabel(&Row, BCLocalize("Requires the Vulkan backend"), 12.0f, TEXTALIGN_ML);
-			}
-			if(IsLinuxFrameBlendUnsupported)
-			{
-				Content.HSplitTop(LineSize, &Row, &Content);
-				Ui()->DoLabel(&Row, BCLocalize("Temporarily disabled on Linux"), 12.0f, TEXTALIGN_ML);
 			}
 
 			const float ExtraHeight = ExtraTargetHeight * s_MotionBlurPhase;
