@@ -1618,7 +1618,7 @@ static std::string BestClientFormatReShadeFloat(float Value)
 	return aBuf;
 }
 
-static bool BestClientToggleReShadeRuntimeAndRestart(IStorage *pStorage, IConfigManager *pConfigManager, IClient *pClient, bool EnableRuntime, char *pError, int ErrorSize)
+static bool BestClientSaveReShadeRuntimeSetting(IConfigManager *pConfigManager, bool EnableRuntime, char *pError, int ErrorSize)
 {
 	if(pError != nullptr && ErrorSize > 0)
 		pError[0] = '\0';
@@ -1626,14 +1626,6 @@ static bool BestClientToggleReShadeRuntimeAndRestart(IStorage *pStorage, IConfig
 	if(pConfigManager == nullptr)
 	{
 		str_copy(pError, "Failed to access config manager.", ErrorSize);
-		return false;
-	}
-
-	char aExePath[IO_MAX_PATH_LENGTH];
-	pStorage->GetBinaryPath(PLAT_CLIENT_EXEC, aExePath, sizeof(aExePath));
-	if(aExePath[0] == '\0')
-	{
-		str_copy(pError, "Failed to resolve client executable path.", ErrorSize);
 		return false;
 	}
 
@@ -1646,56 +1638,6 @@ static bool BestClientToggleReShadeRuntimeAndRestart(IStorage *pStorage, IConfig
 		return false;
 	}
 
-	char aScriptPath[IO_MAX_PATH_LENGTH];
-	pStorage->GetCompletePath(IStorage::TYPE_SAVE, "BestClient/reshade_runtime_toggle.bat", aScriptPath, sizeof(aScriptPath));
-	if(fs_makedir_rec_for(aScriptPath) != 0)
-	{
-		str_copy(pError, "Failed to prepare restart script folder.", ErrorSize);
-		return false;
-	}
-
-	const int CurrentPid = process_id();
-	std::string ScriptText;
-	ScriptText += "@echo off\n";
-	ScriptText += ":wait_exit\n";
-	{
-		char aLine[512];
-		str_format(aLine, sizeof(aLine), "tasklist /FI \"PID eq %d\" | find \"%d\" >nul\n", CurrentPid, CurrentPid);
-		ScriptText += aLine;
-	}
-	ScriptText += "if not errorlevel 1 (\n";
-	ScriptText += "\ttimeout /t 1 /nobreak >nul\n";
-	ScriptText += "\tgoto wait_exit\n";
-	ScriptText += ")\n";
-	{
-		char aLine[1024];
-		str_format(aLine, sizeof(aLine), "start \"\" \"%s\"\n", aExePath);
-		ScriptText += aLine;
-	}
-	ScriptText += "del \"%~f0\"\n";
-
-	IOHANDLE ScriptFile = pStorage->OpenFile(aScriptPath, IOFLAG_WRITE, IStorage::TYPE_ABSOLUTE);
-	if(!ScriptFile)
-	{
-		str_copy(pError, "Saved ReShade setting, but failed to create restart script.", ErrorSize);
-		return false;
-	}
-	const bool WriteOk = io_write(ScriptFile, ScriptText.c_str(), (unsigned)ScriptText.size()) == ScriptText.size();
-	io_close(ScriptFile);
-	if(!WriteOk)
-	{
-		str_copy(pError, "Saved ReShade setting, but failed to write restart script.", ErrorSize);
-		return false;
-	}
-
-	const char *apArguments[] = {"/c", aScriptPath};
-	if(process_execute("cmd.exe", EShellExecuteWindowState::BACKGROUND, apArguments, std::size(apArguments)) == INVALID_PROCESS)
-	{
-		str_copy(pError, "Saved ReShade setting, but failed to launch restart script.", ErrorSize);
-		return false;
-	}
-
-	pClient->Quit();
 	return true;
 }
 
@@ -1773,6 +1715,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	static CLineInputBuffered<128> s_SearchInput;
 	static int s_AvailableSort = BESTCLIENT_RESHADE_SORT_NAME_ASC;
 	static int s_RuntimeEnabledToggle = 0;
+	static bool s_HasReShadeSessionEnabled = false;
+	static bool s_ReShadeSessionEnabled = false;
 	static CScrollRegion s_AvailableScrollRegion;
 	static CScrollRegion s_AddedScrollRegion;
 	static CUi::SDropDownState s_AvailableSortState;
@@ -1809,7 +1753,16 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	const bool HasReShadeLayerDisabledManifest = BestClientFileExistsAbsolute(aDisabledLayerManifestPath);
 	const bool HasReShadeRuntimeFiles = HasReShadeLayerDll && (HasReShadeLayerManifest || HasReShadeLayerDisabledManifest);
 	const bool ReShadeConfiguredEnabled = g_Config.m_BcReshadeEnabled != 0;
-	const bool ReShadeRuntimeEnabled = HasReShadeRuntimeFiles && ReShadeConfiguredEnabled;
+	if(!s_HasReShadeSessionEnabled)
+	{
+		s_ReShadeSessionEnabled = HasReShadeRuntimeFiles && ReShadeConfiguredEnabled;
+		s_HasReShadeSessionEnabled = true;
+	}
+	const bool ReShadeRuntimeEnabled = HasReShadeRuntimeFiles && s_ReShadeSessionEnabled;
+	const bool NeedReShadeRestart = HasReShadeRuntimeFiles && ReShadeConfiguredEnabled != s_ReShadeSessionEnabled;
+	CUIRect RestartBar;
+	if(NeedReShadeRestart)
+		MainView.HSplitBottom(20.0f, &MainView, &RestartBar);
 
 	MainView.HSplitTop(MarginSmall, nullptr, &MainView);
 
@@ -1841,6 +1794,16 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		pTextRender->TextColor(pTextRender->DefaultTextColor());
 		pUi->DoLabel(&BodyRect, pBody, 14.0f, TEXTALIGN_ML);
 	};
+	auto RenderRestartWarning = [&](CUIRect RestartBarRect) {
+		CUIRect RestartWarning, RestartButton;
+		RestartBarRect.VSplitRight(125.0f, &RestartWarning, &RestartButton);
+		RestartWarning.VSplitRight(10.0f, &RestartWarning, nullptr);
+		pUi->DoLabel(&RestartWarning, Localize("You must restart the game for all settings to take effect."), 14.0f, TEXTALIGN_ML);
+
+		static CButtonContainer s_RestartButton;
+		if(pMenus->DoButton_Menu(&s_RestartButton, Localize("Restart"), 0, &RestartButton))
+			pClient->Restart();
+	};
 
 	{
 		DrawPanel(ControlsPanel);
@@ -1863,10 +1826,15 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		if(pMenus->DoButton_CheckBox(&s_RuntimeEnabledToggle, BCLocalize("Enable ReShade on startup (restart required)"), RuntimeValue, &RuntimeRow))
 		{
 			char aRestartError[256];
-			if(!BestClientToggleReShadeRuntimeAndRestart(pStorage, pMenus->MenuGameClient()->ConfigManager(), pClient, !ReShadeConfiguredEnabled, aRestartError, sizeof(aRestartError)))
+			if(!BestClientSaveReShadeRuntimeSetting(pMenus->MenuGameClient()->ConfigManager(), !ReShadeConfiguredEnabled, aRestartError, sizeof(aRestartError)))
 			{
 				gs_BestClientReShadeUiCache.m_StatusText = aRestartError;
 				gs_BestClientReShadeUiCache.m_StatusIsError = true;
+			}
+			else
+			{
+				gs_BestClientReShadeUiCache.m_StatusText = BCLocalize("Saved ReShade startup state. Restart the game to apply it.");
+				gs_BestClientReShadeUiCache.m_StatusIsError = false;
 			}
 		}
 
@@ -1878,6 +1846,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	{
 		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade runtime files are missing"), BCLocalize("This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json."), true);
 		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("The ReShade tab will stay unavailable until the portable ReShade runtime files are present next to the game executable."), false);
+		if(NeedReShadeRestart)
+			RenderRestartWarning(RestartBar);
 		return;
 	}
 
@@ -1885,6 +1855,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	{
 		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade is disabled"), BCLocalize("Enable ReShade with the checkbox above and restart the game. Until then this tab stays inactive."), false);
 		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("To manage shaders here, first enable ReShade above and restart the game."), false);
+		if(NeedReShadeRestart)
+			RenderRestartWarning(RestartBar);
 		return;
 	}
 
@@ -1892,6 +1864,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	{
 		DrawPanelMessage(AvailablePanel, BCLocalize("Vulkan is required"), BCLocalize("Switch the graphics backend to Vulkan in the client settings and restart the game to use the ReShade tab."), true);
 		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("Effect controls are available only when the client is running on the Vulkan renderer."), false);
+		if(NeedReShadeRestart)
+			RenderRestartWarning(RestartBar);
 		return;
 	}
 
@@ -1901,6 +1875,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	{
 		DrawPanelMessage(AvailablePanel, BCLocalize("Failed to load preset"), aPresetError, true);
 		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("The right panel will be available again once the preset can be read."), false);
+		if(NeedReShadeRestart)
+			RenderRestartWarning(RestartBar);
 		return;
 	}
 
@@ -2650,6 +2626,9 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 			SetStatus(aSaveError[0] != '\0' ? aSaveError : aSettingsError, true);
 		}
 	}
+
+	if(NeedReShadeRestart)
+		RenderRestartWarning(RestartBar);
 }
 
 #endif
