@@ -28,6 +28,7 @@ class CBestClient : public CComponent
 	float m_HookComboLastHookTime = -1.0f;
 	int m_HookComboTrackedClientId = -1;
 	int m_HookComboLastHookedPlayer = -1;
+	int m_HookComboLastProcessedGameTick = -1;
 	bool m_HookComboSoundErrorShown = false;
 
 	void LoadHookComboSounds(bool LogErrors = true);

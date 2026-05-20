@@ -67,6 +67,13 @@ bool CRJelly::IsEnabledFor(int ClientId) const
 		if(ClientId == LocalId)
 			return true;
 	}
+	if(m_pClient->Client()->State() == IClient::STATE_DEMOPLAYBACK)
+	{
+		if(!m_pClient->m_Snap.m_SpecInfo.m_Active && m_pClient->m_Snap.m_LocalClientId == ClientId)
+			return true;
+		if(m_pClient->m_Snap.m_SpecInfo.m_Active && m_pClient->m_Snap.m_SpecInfo.m_SpectatorId == ClientId)
+			return true;
+	}
 
 	return g_Config.m_BcJellyTeeOthers != 0;
 }

@@ -379,6 +379,60 @@ namespace
 		}
 	}
 
+	bool GetKeystrokesTrackedAim(const CGameClient *pGameClient, int TrackedClientId, float Intra, vec2 &OutAim)
+	{
+		if(pGameClient == nullptr || !in_range(TrackedClientId, 0, MAX_CLIENTS - 1))
+			return false;
+
+		const auto &Character = pGameClient->m_Snap.m_aCharacters[TrackedClientId];
+		if(!Character.m_Active)
+			return false;
+
+		if(Character.m_HasExtendedDisplayInfo)
+		{
+			const CNetObj_DDNetCharacter *pExtendedData = &Character.m_ExtendedData;
+			const CNetObj_DDNetCharacter *pPrevExtendedData = Character.m_pPrevExtendedData;
+			if(pPrevExtendedData != nullptr)
+			{
+				OutAim = vec2(
+					mix((float)pPrevExtendedData->m_TargetX, (float)pExtendedData->m_TargetX, Intra),
+					mix((float)pPrevExtendedData->m_TargetY, (float)pExtendedData->m_TargetY, Intra));
+			}
+			else
+			{
+				OutAim = vec2((float)pExtendedData->m_TargetX, (float)pExtendedData->m_TargetY);
+			}
+			return length(OutAim) > 0.001f;
+		}
+
+		float Angle = 0.0f;
+		if(Character.m_Cur.m_Angle > (256.0f * pi) && Character.m_Prev.m_Angle < 0)
+			Angle = mix((float)Character.m_Prev.m_Angle, (float)(Character.m_Cur.m_Angle - 256.0f * 2 * pi), Intra) / 256.0f;
+		else if(Character.m_Cur.m_Angle < 0 && Character.m_Prev.m_Angle > (256.0f * pi))
+			Angle = mix((float)Character.m_Prev.m_Angle, (float)(Character.m_Cur.m_Angle + 256.0f * 2 * pi), Intra) / 256.0f;
+		else
+			Angle = mix((float)Character.m_Prev.m_Angle, (float)Character.m_Cur.m_Angle, Intra) / 256.0f;
+
+		OutAim = direction(Angle) * 256.0f;
+		return true;
+	}
+
+	bool IsKeystrokesMouseButtonPressedFromCharacter(const CNetObj_Character *pPrevCharacter, const CNetObj_Character *pCharacter, int MouseButton, int64_t Now, int64_t Mouse1EndTime)
+	{
+		if(pCharacter == nullptr || MouseButton <= 0)
+			return false;
+
+		switch(MouseButton)
+		{
+		case 1:
+			return Mouse1EndTime > Now || (pPrevCharacter != nullptr && pPrevCharacter->m_AttackTick != pCharacter->m_AttackTick);
+		case 2:
+			return pCharacter->m_HookState != HOOK_IDLE;
+		default:
+			return false;
+		}
+	}
+
 	float GetKeystrokesScale(const HudLayout::SModuleLayout &Layout)
 	{
 		return std::clamp(Layout.m_Scale / 100.0f, 0.25f, 3.0f) * KEYSTROKES_ATLAS_SCALE;
@@ -584,6 +638,7 @@ void CHud::OnReset()
 	m_FinishPredictionSmoothedFinishTimeMs = -1;
 	m_FinishPredictionLastPredictTick = -1;
 	m_FinishPredictionFinishedRaceTick = -1;
+	m_KeystrokesMouse1EndTime = 0;
 	m_KeystrokesWheelUpEndTime = 0;
 	m_KeystrokesWheelDownEndTime = 0;
 
@@ -3383,6 +3438,10 @@ int CHud::GetKeystrokesTrackedClientId() const
 {
 	if(Client()->State() == IClient::STATE_DEMOPLAYBACK)
 	{
+		if(!GameClient()->m_Snap.m_SpecInfo.m_Active &&
+			in_range(GameClient()->m_Snap.m_LocalClientId, 0, MAX_CLIENTS - 1) &&
+			GameClient()->m_Snap.m_aCharacters[GameClient()->m_Snap.m_LocalClientId].m_Active)
+			return GameClient()->m_Snap.m_LocalClientId;
 		if(GameClient()->m_DemoSpecId > SPEC_FREEVIEW && GameClient()->m_DemoSpecId < MAX_CLIENTS)
 			return GameClient()->m_DemoSpecId;
 	}
@@ -3508,12 +3567,23 @@ void CHud::RenderKeystrokesMouseInternal(bool ForcePreview, bool IgnoreModuleEna
 	const int TrackedClientId = ForcePreview ? -1 : GetKeystrokesTrackedClientId();
 	const bool HasTrackedPlayer = TrackedClientId >= 0;
 	const CNetObj_PlayerInput *pTrackedInput = ForcePreview ? nullptr : GetKeystrokesTrackedInput();
+	const CNetObj_Character *pTrackedCharacter = HasTrackedPlayer && GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Active ?
+		&GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Cur :
+		nullptr;
+	const CNetObj_Character *pPrevTrackedCharacter = HasTrackedPlayer && GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Active ?
+		&GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Prev :
+		nullptr;
 	if(!ForcePreview)
 	{
 		if(!HasTrackedPlayer && pTrackedInput == nullptr && Input()->KeyPress(KEY_MOUSE_WHEEL_UP))
 			m_KeystrokesWheelUpEndTime = Now + time_freq() * KEYSTROKES_WHEEL_HIGHLIGHT_MS / 1000;
 		if(!HasTrackedPlayer && pTrackedInput == nullptr && Input()->KeyPress(KEY_MOUSE_WHEEL_DOWN))
 			m_KeystrokesWheelDownEndTime = Now + time_freq() * KEYSTROKES_WHEEL_HIGHLIGHT_MS / 1000;
+		if(HasTrackedPlayer && pTrackedInput == nullptr && pTrackedCharacter != nullptr && pPrevTrackedCharacter != nullptr &&
+			pPrevTrackedCharacter->m_AttackTick != pTrackedCharacter->m_AttackTick)
+		{
+			m_KeystrokesMouse1EndTime = Now + time_freq() * KEYSTROKES_WHEEL_HIGHLIGHT_MS / 1000;
+		}
 	}
 
 	vec2 AimOffset(0.0f, 0.0f);
@@ -3521,9 +3591,13 @@ void CHud::RenderKeystrokesMouseInternal(bool ForcePreview, bool IgnoreModuleEna
 	bool MouseMoved = false;
 	if(!ForcePreview)
 	{
-		vec2 Aim = pTrackedInput != nullptr ?
-			vec2((float)pTrackedInput->m_TargetX, (float)pTrackedInput->m_TargetY) :
-			(HasTrackedPlayer ? vec2(0.0f, 0.0f) : GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy]);
+		vec2 Aim(0.0f, 0.0f);
+		if(pTrackedInput != nullptr)
+			Aim = vec2((float)pTrackedInput->m_TargetX, (float)pTrackedInput->m_TargetY);
+		else if(HasTrackedPlayer)
+			GetKeystrokesTrackedAim(GameClient(), TrackedClientId, Client()->IntraGameTick(g_Config.m_ClDummy), Aim);
+		else
+			Aim = GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy];
 		const float MaxDistance = maximum(GameClient()->m_Controls.GetMaxMouseDistance(), 0.001f);
 		float Length = length(Aim);
 		if(Length > 0.001f)
@@ -3557,8 +3631,8 @@ void CHud::RenderKeystrokesMouseInternal(bool ForcePreview, bool IgnoreModuleEna
 		case EKeystrokesInputKind::MOUSE_BUTTON:
 			Active = !ForcePreview && (HasTrackedPlayer ?
 				(pTrackedInput != nullptr ?
-				IsKeystrokesMouseButtonPressed(pTrackedInput, Element.m_MouseButton) :
-				false) :
+					IsKeystrokesMouseButtonPressed(pTrackedInput, Element.m_MouseButton) :
+					IsKeystrokesMouseButtonPressedFromCharacter(pPrevTrackedCharacter, pTrackedCharacter, Element.m_MouseButton, Now, m_KeystrokesMouse1EndTime)) :
 				IsKeystrokesMouseButtonPressed(Input(), Element.m_MouseButton));
 			break;
 		case EKeystrokesInputKind::WHEEL:

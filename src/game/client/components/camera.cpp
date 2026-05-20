@@ -306,6 +306,28 @@ void CCamera::UpdateCamera()
 	const bool IsBlockedCameraServer = IsFngServer || Is0xFServer;
 
 	const bool IsDemoPlayback = Client()->State() == IClient::STATE_DEMOPLAYBACK;
+	const CNetObj_Character *pDemoTrackedCharacter = nullptr;
+	const CNetObj_Character *pDemoTrackedPrevCharacter = nullptr;
+	if(IsDemoPlayback)
+	{
+		int TrackedClientId = -1;
+		if(GameClient()->m_Snap.m_SpecInfo.m_Active)
+		{
+			const int SpectatorId = GameClient()->m_Snap.m_SpecInfo.m_SpectatorId;
+			if(in_range(SpectatorId, 0, MAX_CLIENTS - 1) && GameClient()->m_Snap.m_aCharacters[SpectatorId].m_Active)
+				TrackedClientId = SpectatorId;
+		}
+		else if(in_range(GameClient()->m_Snap.m_LocalClientId, 0, MAX_CLIENTS - 1) && GameClient()->m_Snap.m_aCharacters[GameClient()->m_Snap.m_LocalClientId].m_Active)
+		{
+			TrackedClientId = GameClient()->m_Snap.m_LocalClientId;
+		}
+
+		if(TrackedClientId >= 0)
+		{
+			pDemoTrackedCharacter = &GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Cur;
+			pDemoTrackedPrevCharacter = &GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Prev;
+		}
+	}
 	if(g_Config.m_BcCameraDrift &&
 		!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_CAMERA_DRIFT) &&
 		!IsBlockedCameraServer &&
@@ -316,27 +338,10 @@ void CCamera::UpdateCamera()
 
 		if(IsDemoPlayback)
 		{
-			const CNetObj_Character *pDriftCharacter = nullptr;
-			const CNetObj_Character *pPrevDriftCharacter = nullptr;
-			if(GameClient()->m_Snap.m_SpecInfo.m_Active)
+			if(pDemoTrackedCharacter)
 			{
-				const int SpectatorId = GameClient()->m_Snap.m_SpecInfo.m_SpectatorId;
-				if(SpectatorId >= 0 && SpectatorId < MAX_CLIENTS && GameClient()->m_Snap.m_aCharacters[SpectatorId].m_Active)
-				{
-					pDriftCharacter = &GameClient()->m_Snap.m_aCharacters[SpectatorId].m_Cur;
-					pPrevDriftCharacter = &GameClient()->m_Snap.m_aCharacters[SpectatorId].m_Prev;
-				}
-			}
-			else
-			{
-				pDriftCharacter = GameClient()->m_Snap.m_pLocalCharacter;
-				pPrevDriftCharacter = GameClient()->m_Snap.m_pLocalPrevCharacter;
-			}
-
-			if(pDriftCharacter)
-			{
-				const vec2 CurVel = vec2(pDriftCharacter->m_VelX / 256.0f, 0.0f);
-				const vec2 PrevVel = pPrevDriftCharacter ? vec2(pPrevDriftCharacter->m_VelX / 256.0f, 0.0f) : CurVel;
+				const vec2 CurVel = vec2(pDemoTrackedCharacter->m_VelX / 256.0f, 0.0f);
+				const vec2 PrevVel = pDemoTrackedPrevCharacter ? vec2(pDemoTrackedPrevCharacter->m_VelX / 256.0f, 0.0f) : CurVel;
 				PlayerVel = mix(PrevVel, CurVel, Client()->IntraGameTick(g_Config.m_ClDummy));
 				HasDriftVelocity = true;
 			}
@@ -380,11 +385,21 @@ void CCamera::UpdateCamera()
 	const bool DynamicFovActive = g_Config.m_BcDynamicFov &&
 		!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_DYNAMIC_FOV) &&
 		!IsBlockedCameraServer &&
-		!GameClient()->m_Snap.m_SpecInfo.m_Active;
+		(!GameClient()->m_Snap.m_SpecInfo.m_Active || (IsDemoPlayback && pDemoTrackedCharacter != nullptr));
 	m_DynamicFovTarget = 1.0f;
 	if(DynamicFovActive)
 	{
-		vec2 PlayerVel = GameClient()->m_PredictedChar.m_Vel;
+		vec2 PlayerVel;
+		if(IsDemoPlayback && pDemoTrackedCharacter != nullptr)
+		{
+			const vec2 CurVel = vec2(pDemoTrackedCharacter->m_VelX / 256.0f, pDemoTrackedCharacter->m_VelY / 256.0f);
+			const vec2 PrevVel = pDemoTrackedPrevCharacter ? vec2(pDemoTrackedPrevCharacter->m_VelX / 256.0f, pDemoTrackedPrevCharacter->m_VelY / 256.0f) : CurVel;
+			PlayerVel = mix(PrevVel, CurVel, Client()->IntraGameTick(g_Config.m_ClDummy));
+		}
+		else
+		{
+			PlayerVel = GameClient()->m_PredictedChar.m_Vel;
+		}
 		float VelocityFactor = length(PlayerVel);
 		float DynamicFovMultiplier = 1.0f + (VelocityFactor / 10.0f);
 		float DynamicFovAmount = VelocityFactor * (g_Config.m_BcDynamicFovAmount / 50.0f) * DynamicFovMultiplier;

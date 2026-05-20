@@ -13,6 +13,37 @@
 
 #include <algorithm>
 
+namespace
+{
+	int GetAfterimageTrackedClientId(const CGameClient *pGameClient, IClient *pClient)
+	{
+		if(pGameClient == nullptr || pClient == nullptr)
+			return -1;
+
+		if(pClient->State() == IClient::STATE_DEMOPLAYBACK)
+		{
+			if(pGameClient->m_Snap.m_SpecInfo.m_Active)
+			{
+				const int SpectatorId = pGameClient->m_Snap.m_SpecInfo.m_SpectatorId;
+				if(in_range(SpectatorId, 0, MAX_CLIENTS - 1) && pGameClient->m_Snap.m_aCharacters[SpectatorId].m_Active)
+					return SpectatorId;
+				return -1;
+			}
+
+			const int LocalClientId = pGameClient->m_Snap.m_LocalClientId;
+			if(in_range(LocalClientId, 0, MAX_CLIENTS - 1) && pGameClient->m_Snap.m_aCharacters[LocalClientId].m_Active)
+				return LocalClientId;
+
+			return -1;
+		}
+
+		if(pGameClient->m_Snap.m_SpecInfo.m_Active)
+			return -1;
+
+		return pGameClient->m_Snap.m_LocalClientId;
+	}
+}
+
 void CAfterimage::ResetState()
 {
 	m_vGhostSamples.clear();
@@ -27,15 +58,14 @@ bool CAfterimage::CanSampleAfterimage(int &LocalClientId) const
 	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 		return false;
 
-	LocalClientId = GameClient()->m_Snap.m_LocalClientId;
+	LocalClientId = GetAfterimageTrackedClientId(GameClient(), Client());
 	if(!in_range(LocalClientId, 0, MAX_CLIENTS - 1))
 		return false;
 
 	const auto &LocalPlayer = GameClient()->m_aClients[LocalClientId];
 	return LocalPlayer.m_Active &&
 		GameClient()->m_Snap.m_aCharacters[LocalClientId].m_Active &&
-		LocalPlayer.m_Team != TEAM_SPECTATORS &&
-		!GameClient()->m_Snap.m_SpecInfo.m_Active;
+		LocalPlayer.m_Team != TEAM_SPECTATORS;
 }
 
 void CAfterimage::RenderAfterimageWeapon(const SGhostSample &Sample, float Alpha)

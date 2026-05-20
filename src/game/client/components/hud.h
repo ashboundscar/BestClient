@@ -242,6 +242,7 @@ private:
 	mutable int m_FinishPredictionFinishedRaceTick;
 	IGraphics::CTextureHandle m_KeystrokesKeyboardTexture;
 	IGraphics::CTextureHandle m_KeystrokesMouseTexture;
+	int64_t m_KeystrokesMouse1EndTime = 0;
 	int64_t m_KeystrokesWheelUpEndTime = 0;
 	int64_t m_KeystrokesWheelDownEndTime = 0;
 
