@@ -46,6 +46,49 @@
 
 using namespace std::chrono_literals;
 
+#if defined(CONF_FAMILY_WINDOWS)
+static constexpr const char *gs_pPortableReShadeLayerName = "VK_LAYER_reshade";
+static constexpr const char *gs_pPortableReShadeLayerDllFilename = "ReShade64.dll";
+static constexpr const char *gs_pPortableReShadeLayerManifestFilename = "ReShade64.json";
+static constexpr const char *gs_pPortableReShadeLayerDisabledManifestFilename = "ReShade64.reshade-disabled.json";
+static constexpr const char *gs_pPortableReShadeLayerDisableEnv = "DISABLE_VK_LAYER_reshade_1";
+
+static bool QueryPortableReShadeLayerFiles(char *pBinaryDir, int BinaryDirSize, bool &HasLayerDll, bool &HasLayerManifest, bool &HasDisabledLayerManifest)
+{
+	if(fs_executable_path(pBinaryDir, BinaryDirSize) != 0 || fs_parent_dir(pBinaryDir) != 0)
+		return false;
+
+	char aLayerDllPath[IO_MAX_PATH_LENGTH];
+	char aLayerManifestPath[IO_MAX_PATH_LENGTH];
+	char aDisabledLayerManifestPath[IO_MAX_PATH_LENGTH];
+	str_format(aLayerDllPath, sizeof(aLayerDllPath), "%s/%s", pBinaryDir, gs_pPortableReShadeLayerDllFilename);
+	str_format(aLayerManifestPath, sizeof(aLayerManifestPath), "%s/%s", pBinaryDir, gs_pPortableReShadeLayerManifestFilename);
+	str_format(aDisabledLayerManifestPath, sizeof(aDisabledLayerManifestPath), "%s/%s", pBinaryDir, gs_pPortableReShadeLayerDisabledManifestFilename);
+
+	HasLayerDll = fs_is_file(aLayerDllPath) != 0;
+	HasLayerManifest = fs_is_file(aLayerManifestPath) != 0;
+	HasDisabledLayerManifest = fs_is_file(aDisabledLayerManifestPath) != 0;
+	return true;
+}
+
+static void ConfigurePortableReShadeVulkanLayerEnvironment()
+{
+	char aBinaryDir[IO_MAX_PATH_LENGTH];
+	bool HasLayerDll = false;
+	bool HasLayerManifest = false;
+	bool HasDisabledLayerManifest = false;
+	if(!QueryPortableReShadeLayerFiles(aBinaryDir, sizeof(aBinaryDir), HasLayerDll, HasLayerManifest, HasDisabledLayerManifest))
+		return;
+
+	if(!HasLayerDll || (!HasLayerManifest && !HasDisabledLayerManifest))
+		return;
+
+	_putenv_s("VK_IMPLICIT_LAYER_PATH", aBinaryDir);
+	_putenv_s(gs_pPortableReShadeLayerDisableEnv, HasLayerManifest ? "" : "1");
+	log_info("gfx/vulkan", "Configured portable ReShade Vulkan layer from '%s' (%s).", aBinaryDir, HasLayerManifest ? "enabled" : "disabled");
+}
+#endif
+
 class CCommandProcessorFragment_Vulkan : public CCommandProcessorFragment_GLBase
 {
 	enum EMemoryBlockUsage
@@ -3588,13 +3631,31 @@ public:
 
 		std::set<std::string> ReqLayerNames = OurVKLayers();
 		vVKLayers.clear();
+		bool HasPortableReShadeLayer = false;
 		for(const auto &LayerName : vVKInstanceLayers)
 		{
+			if(str_comp(LayerName.layerName, gs_pPortableReShadeLayerName) == 0)
+				HasPortableReShadeLayer = true;
+
 			if(ReqLayerNames.contains(std::string(LayerName.layerName)))
 			{
 				vVKLayers.emplace_back(LayerName.layerName);
 			}
 		}
+
+#if defined(CONF_FAMILY_WINDOWS)
+		char aBinaryDir[IO_MAX_PATH_LENGTH];
+		bool HasLayerDll = false;
+		bool HasLayerManifest = false;
+		bool HasDisabledLayerManifest = false;
+		if(QueryPortableReShadeLayerFiles(aBinaryDir, sizeof(aBinaryDir), HasLayerDll, HasLayerManifest, HasDisabledLayerManifest) && HasLayerDll && HasLayerManifest)
+		{
+			if(HasPortableReShadeLayer)
+				log_info("gfx/vulkan", "Portable ReShade layer '%s' was discovered by the Vulkan loader.", gs_pPortableReShadeLayerName);
+			else
+				log_warn("gfx/vulkan", "Portable ReShade files were found in '%s', but '%s' was not enumerated by the Vulkan loader.", aBinaryDir, gs_pPortableReShadeLayerName);
+		}
+#endif
 
 		return true;
 	}
@@ -5788,6 +5849,10 @@ public:
 
 		m_CanvasWidth = CanvasWidth;
 		m_CanvasHeight = CanvasHeight;
+
+#if defined(CONF_FAMILY_WINDOWS)
+		ConfigurePortableReShadeVulkanLayerEnvironment();
+#endif
 
 		if(!GetVulkanExtensions(pWindow, vVKExtensions))
 			return -1;

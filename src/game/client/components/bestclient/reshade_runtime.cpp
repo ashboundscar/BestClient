@@ -129,10 +129,10 @@ bool BestClientReShadeRuntimeCommitPreset(IStorage *pStorage, char *pError, int 
 	case EBestClientReShadeAddonStatus::READY:
 		return true;
 	case EBestClientReShadeAddonStatus::LOG_MISSING:
-		str_copy(pError, "ReShade.log is not available yet.", ErrorSize);
+		str_copy(pError, "The bundled ReShade runtime did not start in this session yet. Make sure DDNet is running on Vulkan and that ReShade64.dll/ReShade64.json are present next to DDNet.exe.", ErrorSize);
 		return false;
 	case EBestClientReShadeAddonStatus::LIMITED_SUPPORT:
-		str_copy(pError, "The current session is still running with the old limited vulkan-1.dll. Close DDNet so the new ReShade runtime can be copied in.", ErrorSize);
+		str_copy(pError, "The current session is running without full bundled ReShade add-on support. Restart DDNet after updating the portable ReShade runtime files.", ErrorSize);
 		return false;
 	case EBestClientReShadeAddonStatus::FAILED_INITIALIZATION:
 		str_copy(pError, "ReShade found the add-on, but it failed to initialize.", ErrorSize);

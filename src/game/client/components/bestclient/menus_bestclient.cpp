@@ -69,8 +69,9 @@ static constexpr const char *gs_pBestClientReShadePresetPath = "ReShadePreset.in
 static constexpr const char *gs_pBestClientReShadeBridgeStatePath = "BestClientReShadeBridge.ini";
 static constexpr const char *gs_pBestClientReShadeShadersPath = "data/reshade/Shaders";
 static constexpr const char *gs_pBestClientReShadeSettingsPath = "settings_reshade.cfg";
-static constexpr const char *gs_pBestClientReShadeRuntimeFilename = "vulkan-1.dll";
-static constexpr const char *gs_pBestClientReShadeRuntimeDisabledFilename = "vulkan-1.reshade-disabled";
+static constexpr const char *gs_pBestClientReShadeLayerDllFilename = "ReShade64.dll";
+static constexpr const char *gs_pBestClientReShadeLayerManifestFilename = "ReShade64.json";
+static constexpr const char *gs_pBestClientReShadeLayerDisabledManifestFilename = "ReShade64.reshade-disabled.json";
 
 enum class EBestClientReShadeUniformType
 {
@@ -1611,10 +1612,22 @@ static bool BestClientToggleReShadeRuntimeAndRestart(IStorage *pStorage, IClient
 		return false;
 	}
 
-	char aRuntimePath[IO_MAX_PATH_LENGTH];
-	char aDisabledRuntimePath[IO_MAX_PATH_LENGTH];
-	pStorage->GetBinaryPath(gs_pBestClientReShadeRuntimeFilename, aRuntimePath, sizeof(aRuntimePath));
-	pStorage->GetBinaryPath(gs_pBestClientReShadeRuntimeDisabledFilename, aDisabledRuntimePath, sizeof(aDisabledRuntimePath));
+	char aLayerDllPath[IO_MAX_PATH_LENGTH];
+	char aLayerManifestPath[IO_MAX_PATH_LENGTH];
+	char aDisabledLayerManifestPath[IO_MAX_PATH_LENGTH];
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerDllFilename, aLayerDllPath, sizeof(aLayerDllPath));
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerManifestFilename, aLayerManifestPath, sizeof(aLayerManifestPath));
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerDisabledManifestFilename, aDisabledLayerManifestPath, sizeof(aDisabledLayerManifestPath));
+	if(!BestClientFileExistsAbsolute(aLayerDllPath))
+	{
+		str_copy(pError, "ReShade64.dll is missing from the game folder.", ErrorSize);
+		return false;
+	}
+	if(!BestClientFileExistsAbsolute(aLayerManifestPath) && !BestClientFileExistsAbsolute(aDisabledLayerManifestPath))
+	{
+		str_copy(pError, "ReShade64.json is missing from the game folder.", ErrorSize);
+		return false;
+	}
 
 	char aScriptPath[IO_MAX_PATH_LENGTH];
 	pStorage->GetCompletePath(IStorage::TYPE_SAVE, "BestClient/reshade_runtime_toggle.bat", aScriptPath, sizeof(aScriptPath));
@@ -1640,13 +1653,27 @@ static bool BestClientToggleReShadeRuntimeAndRestart(IStorage *pStorage, IClient
 	if(EnableRuntime)
 	{
 		char aLine[1024];
-		str_format(aLine, sizeof(aLine), "if exist \"%s\" if not exist \"%s\" move /Y \"%s\" \"%s\" >nul\n", aDisabledRuntimePath, aRuntimePath, aDisabledRuntimePath, aRuntimePath);
+		str_format(aLine, sizeof(aLine),
+			"if exist \"%s\" (\n"
+			"\tif exist \"%s\" del /F /Q \"%s\" >nul 2>nul\n"
+			"\tmove /Y \"%s\" \"%s\" >nul\n"
+			")\n",
+			aDisabledLayerManifestPath,
+			aLayerManifestPath, aLayerManifestPath,
+			aDisabledLayerManifestPath, aLayerManifestPath);
 		ScriptText += aLine;
 	}
 	else
 	{
 		char aLine[1024];
-		str_format(aLine, sizeof(aLine), "if exist \"%s\" if not exist \"%s\" move /Y \"%s\" \"%s\" >nul\n", aRuntimePath, aDisabledRuntimePath, aRuntimePath, aDisabledRuntimePath);
+		str_format(aLine, sizeof(aLine),
+			"if exist \"%s\" (\n"
+			"\tif exist \"%s\" del /F /Q \"%s\" >nul 2>nul\n"
+			"\tmove /Y \"%s\" \"%s\" >nul\n"
+			")\n",
+			aLayerManifestPath,
+			aDisabledLayerManifestPath, aDisabledLayerManifestPath,
+			aLayerManifestPath, aDisabledLayerManifestPath);
 		ScriptText += aLine;
 	}
 	{
@@ -1679,6 +1706,43 @@ static bool BestClientToggleReShadeRuntimeAndRestart(IStorage *pStorage, IClient
 
 	pClient->Quit();
 	return true;
+}
+
+static bool BestClientQueryReShadeLiveAvailability(IStorage *pStorage, IGraphics *pGraphics, char *pError, int ErrorSize)
+{
+	if(pError != nullptr && ErrorSize > 0)
+		pError[0] = '\0';
+
+	if(pGraphics == nullptr || str_find_nocase(pGraphics->GetVersionString(), "vulkan") == nullptr)
+	{
+		str_copy(pError, "DDNet is not running on the Vulkan renderer.", ErrorSize);
+		return false;
+	}
+
+	char aLayerDllPath[IO_MAX_PATH_LENGTH];
+	char aLayerManifestPath[IO_MAX_PATH_LENGTH];
+	char aDisabledLayerManifestPath[IO_MAX_PATH_LENGTH];
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerDllFilename, aLayerDllPath, sizeof(aLayerDllPath));
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerManifestFilename, aLayerManifestPath, sizeof(aLayerManifestPath));
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerDisabledManifestFilename, aDisabledLayerManifestPath, sizeof(aDisabledLayerManifestPath));
+
+	if(!BestClientFileExistsAbsolute(aLayerDllPath))
+	{
+		str_copy(pError, "ReShade64.dll is missing next to DDNet.exe.", ErrorSize);
+		return false;
+	}
+	if(!BestClientFileExistsAbsolute(aLayerManifestPath) && !BestClientFileExistsAbsolute(aDisabledLayerManifestPath))
+	{
+		str_copy(pError, "ReShade64.json is missing next to DDNet.exe.", ErrorSize);
+		return false;
+	}
+	if(!BestClientFileExistsAbsolute(aLayerManifestPath))
+	{
+		str_copy(pError, "The bundled ReShade runtime is currently disabled.", ErrorSize);
+		return false;
+	}
+
+	return BestClientReShadeRuntimeCommitPreset(pStorage, pError, ErrorSize);
 }
 
 static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorage, ITextRender *pTextRender, CUi *pUi, IClient *pClient, IGraphics *pGraphics, CUIRect MainView)
@@ -1742,11 +1806,16 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		BCLocalize("Effect file"),
 	};
 
-	char aRuntimePath[IO_MAX_PATH_LENGTH];
-	char aDisabledRuntimePath[IO_MAX_PATH_LENGTH];
-	pStorage->GetBinaryPath(gs_pBestClientReShadeRuntimeFilename, aRuntimePath, sizeof(aRuntimePath));
-	pStorage->GetBinaryPath(gs_pBestClientReShadeRuntimeDisabledFilename, aDisabledRuntimePath, sizeof(aDisabledRuntimePath));
-	const bool ReShadeRuntimeEnabled = BestClientFileExistsAbsolute(aRuntimePath) || !BestClientFileExistsAbsolute(aDisabledRuntimePath);
+	char aLayerDllPath[IO_MAX_PATH_LENGTH];
+	char aLayerManifestPath[IO_MAX_PATH_LENGTH];
+	char aDisabledLayerManifestPath[IO_MAX_PATH_LENGTH];
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerDllFilename, aLayerDllPath, sizeof(aLayerDllPath));
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerManifestFilename, aLayerManifestPath, sizeof(aLayerManifestPath));
+	pStorage->GetBinaryPath(gs_pBestClientReShadeLayerDisabledManifestFilename, aDisabledLayerManifestPath, sizeof(aDisabledLayerManifestPath));
+	const bool HasReShadeLayerDll = BestClientFileExistsAbsolute(aLayerDllPath);
+	const bool HasReShadeLayerManifest = BestClientFileExistsAbsolute(aLayerManifestPath);
+	const bool HasReShadeLayerDisabledManifest = BestClientFileExistsAbsolute(aDisabledLayerManifestPath);
+	const bool ReShadeRuntimeEnabled = HasReShadeLayerDll && HasReShadeLayerManifest;
 
 	MainView.HSplitTop(MarginSmall, nullptr, &MainView);
 
@@ -1812,10 +1881,17 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		pMenus->DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcReshadeShowOnlyEnabled, BCLocalize("Show only enabled on the right"), &g_Config.m_BcReshadeShowOnlyEnabled, &FilterRow, ControlsLineSize);
 	}
 
+	if(!HasReShadeLayerDll || (!HasReShadeLayerManifest && !HasReShadeLayerDisabledManifest))
+	{
+		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade runtime files are missing"), BCLocalize("This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json."), true);
+		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("The ReShade tab will stay unavailable until the portable ReShade runtime files are present next to the game executable."), false);
+		return;
+	}
+
 	if(!ReShadeRuntimeEnabled)
 	{
-		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade is globally disabled"), BCLocalize("Enable the ReShade runtime above first. Until then this tab stays inactive."), false);
-		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("ReShade is globally disabled. Enable it above to manage added shaders here."), false);
+		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade is disabled"), BCLocalize("Enable the bundled ReShade runtime above first. Until then this tab stays inactive."), false);
+		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("ReShade is disabled. Enable it above to manage added shaders here."), false);
 		return;
 	}
 
@@ -2530,7 +2606,7 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		{
 			s_HasPendingSavePreset = false;
 			char aRuntimeError[192];
-			if(BestClientReShadeRuntimeCommitPreset(pStorage, aRuntimeError, sizeof(aRuntimeError)))
+			if(BestClientQueryReShadeLiveAvailability(pStorage, pGraphics, aRuntimeError, sizeof(aRuntimeError)))
 			{
 				SetStatus(BCLocalize("Saved to ReShadePreset.ini and settings_reshade.cfg, then applied live."), false);
 			}

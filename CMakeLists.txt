@@ -3979,10 +3979,14 @@ if(NOT TARGET_OS STREQUAL "emscripten")
   list(APPEND CPACK_FILES storage.cfg)
 endif()
 if(TARGET_OS STREQUAL "windows")
+  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/other/reshade/ReShade64.dll" OR NOT EXISTS "${CMAKE_SOURCE_DIR}/other/reshade/ReShade64.json")
+    message(FATAL_ERROR "Bundled portable ReShade runtime files are missing. Expected 'other/reshade/ReShade64.dll' and 'other/reshade/ReShade64.json' for self-contained Windows builds.")
+  endif()
   list(APPEND CPACK_FILES
     other/reshade/ReShade.ini
     other/reshade/ReShadePreset.ini
-    other/reshade/vulkan-1.dll
+    other/reshade/ReShade64.dll
+    other/reshade/ReShade64.json
   )
 endif()
 
@@ -4488,6 +4492,8 @@ if(TARGET_OS STREQUAL "windows")
     COMMAND ${CMAKE_COMMAND} -E make_directory
       "$<TARGET_FILE_DIR:game-client>/data/reshade"
     COMMAND ${CMAKE_COMMAND} -E rm -f
+      "$<TARGET_FILE_DIR:game-client>/vulkan-1.dll"
+    COMMAND ${CMAKE_COMMAND} -E rm -f
       "$<TARGET_FILE_DIR:game-client>/data/reshade/ReShadePreset.ini"
     COMMAND ${CMAKE_COMMAND} -E remove_directory
       "$<TARGET_FILE_DIR:game-client>/reshade-shaders"
@@ -4498,7 +4504,10 @@ if(TARGET_OS STREQUAL "windows")
       "${CMAKE_SOURCE_DIR}/other/reshade/ReShadePreset.ini"
       "$<TARGET_FILE_DIR:game-client>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${CMAKE_SOURCE_DIR}/other/reshade/vulkan-1.dll"
+      "${CMAKE_SOURCE_DIR}/other/reshade/ReShade64.dll"
+      "$<TARGET_FILE_DIR:game-client>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_SOURCE_DIR}/other/reshade/ReShade64.json"
       "$<TARGET_FILE_DIR:game-client>"
     COMMAND ${CMAKE_COMMAND} -Dsrc=${CMAKE_SOURCE_DIR}/other/reshade/reshade-shaders -Ddst=$<TARGET_FILE_DIR:game-client>/data/reshade -P ${CMAKE_SOURCE_DIR}/cmake/RobocopyDirectory.cmake
     COMMENT "Syncing ReShade runtime assets"
