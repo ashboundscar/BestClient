@@ -19,105 +19,105 @@
 
 namespace
 {
-constexpr const char *LOG_SCOPE = "clientindicator-cl";
-constexpr const char *OLD_BC_BROWSER_URL = "http://150.241.70.188:8779/users.json";
-constexpr const char *OLD_BC_TOKEN_URL = "http://150.241.70.188:8779/token.json";
-constexpr const char *NEW_BC_BROWSER_URL = "https://150.241.70.188:8779/users.json";
-constexpr const char *NEW_BC_TOKEN_URL = "https://150.241.70.188:8779/token.json";
-constexpr int PACKET_DUMP_BYTES_PER_LINE = 64;
+	constexpr const char *LOG_SCOPE = "clientindicator-cl";
+	constexpr const char *OLD_BC_BROWSER_URL = "http://150.241.70.188:8779/users.json";
+	constexpr const char *OLD_BC_TOKEN_URL = "http://150.241.70.188:8779/token.json";
+	constexpr const char *NEW_BC_BROWSER_URL = "https://150.241.70.188:8779/users.json";
+	constexpr const char *NEW_BC_TOKEN_URL = "https://150.241.70.188:8779/token.json";
+	constexpr int PACKET_DUMP_BYTES_PER_LINE = 64;
 
-void TrimConfigString(char *pValue, int Size)
-{
-	if(!pValue || Size <= 0)
-		return;
-
-	const int Length = str_length(pValue);
-	int Start = 0;
-	while(Start < Length && str_isspace(pValue[Start]))
-		++Start;
-
-	int End = Length;
-	while(End > Start && str_isspace(pValue[End - 1]))
-		--End;
-
-	if(Start == 0 && End == Length)
-		return;
-
-	const std::string Trimmed(pValue + Start, End - Start);
-	str_copy(pValue, Trimmed.c_str(), Size);
-}
-
-int64_t SlowPacketProcessTicks()
-{
-	return time_freq() / 500; // ~2ms
-}
-
-void NormalizeBestClientIndicatorConfig()
-{
-	TrimConfigString(g_Config.m_BcClientIndicatorServerAddress, sizeof(g_Config.m_BcClientIndicatorServerAddress));
-	TrimConfigString(g_Config.m_BcClientIndicatorBrowserUrl, sizeof(g_Config.m_BcClientIndicatorBrowserUrl));
-	TrimConfigString(g_Config.m_BcClientIndicatorTokenUrl, sizeof(g_Config.m_BcClientIndicatorTokenUrl));
-	TrimConfigString(g_Config.m_BcClientIndicatorSharedToken, sizeof(g_Config.m_BcClientIndicatorSharedToken));
-	TrimConfigString(g_Config.m_BcClientIndicatorSecretKey, sizeof(g_Config.m_BcClientIndicatorSecretKey));
-
-	if(g_Config.m_BcClientIndicatorBrowserUrl[0] == '\0' || str_comp(g_Config.m_BcClientIndicatorBrowserUrl, OLD_BC_BROWSER_URL) == 0)
-		str_copy(g_Config.m_BcClientIndicatorBrowserUrl, NEW_BC_BROWSER_URL, sizeof(g_Config.m_BcClientIndicatorBrowserUrl));
-	if(g_Config.m_BcClientIndicatorTokenUrl[0] == '\0' || str_comp(g_Config.m_BcClientIndicatorTokenUrl, OLD_BC_TOKEN_URL) == 0)
-		str_copy(g_Config.m_BcClientIndicatorTokenUrl, NEW_BC_TOKEN_URL, sizeof(g_Config.m_BcClientIndicatorTokenUrl));
-}
-
-bool IsBlockedIndicatorAddress(const NETADDR &Addr)
-{
-	return net_addr_is_local(&Addr);
-}
-
-const char *PacketTypeName(int PacketType)
-{
-	switch(PacketType)
+	void TrimConfigString(char *pValue, int Size)
 	{
-	case BestClientIndicator::PACKET_JOIN:
-		return "join";
-	case BestClientIndicator::PACKET_HEARTBEAT:
-		return "heartbeat";
-	case BestClientIndicator::PACKET_LEAVE:
-		return "leave";
-	case BestClientIndicator::PACKET_PEER_STATE:
-		return "peer_state";
-	case BestClientIndicator::PACKET_PEER_REMOVE:
-		return "peer_remove";
-	case BestClientIndicator::PACKET_PEER_LIST:
-		return "peer_list";
-	case BestClientIndicator::PACKET_DEV_AUTH:
-		return "dev_auth";
-	case BestClientIndicator::PACKET_PEER_DEV_STATE:
-		return "peer_dev_state";
-	case BestClientIndicator::PACKET_PEER_DEV_LIST:
-		return "peer_dev_list";
-	case BestClientIndicator::PACKET_DEV_AUTH_RESULT:
-		return "dev_auth_result";
-	default:
-		return "unknown";
+		if(!pValue || Size <= 0)
+			return;
+
+		const int Length = str_length(pValue);
+		int Start = 0;
+		while(Start < Length && str_isspace(pValue[Start]))
+			++Start;
+
+		int End = Length;
+		while(End > Start && str_isspace(pValue[End - 1]))
+			--End;
+
+		if(Start == 0 && End == Length)
+			return;
+
+		const std::string Trimmed(pValue + Start, End - Start);
+		str_copy(pValue, Trimmed.c_str(), Size);
 	}
-}
 
-void DumpUdpPacketBytes(const char *pDirection, const NETADDR &Addr, const void *pData, int DataSize)
-{
-	if(!pDirection || !pData || DataSize <= 0)
-		return;
-
-	char aAddr[NETADDR_MAXSTRSIZE];
-	net_addr_str(&Addr, aAddr, sizeof(aAddr), true);
-	log_info(LOG_SCOPE, "%s udp packet bytes=%d addr=%s", pDirection, DataSize, aAddr);
-
-	const auto *pBytes = static_cast<const uint8_t *>(pData);
-	for(int Offset = 0; Offset < DataSize; Offset += PACKET_DUMP_BYTES_PER_LINE)
+	int64_t SlowPacketProcessTicks()
 	{
-		const int ChunkSize = minimum(PACKET_DUMP_BYTES_PER_LINE, DataSize - Offset);
-		char aHex[PACKET_DUMP_BYTES_PER_LINE * 2 + 1];
-		str_hex(aHex, sizeof(aHex), pBytes + Offset, ChunkSize);
-		log_info(LOG_SCOPE, "%s udp dump offset=%d size=%d hex=%s", pDirection, Offset, ChunkSize, aHex);
+		return time_freq() / 500; // ~2ms
 	}
-}
+
+	void NormalizeBestClientIndicatorConfig()
+	{
+		TrimConfigString(g_Config.m_BcClientIndicatorServerAddress, sizeof(g_Config.m_BcClientIndicatorServerAddress));
+		TrimConfigString(g_Config.m_BcClientIndicatorBrowserUrl, sizeof(g_Config.m_BcClientIndicatorBrowserUrl));
+		TrimConfigString(g_Config.m_BcClientIndicatorTokenUrl, sizeof(g_Config.m_BcClientIndicatorTokenUrl));
+		TrimConfigString(g_Config.m_BcClientIndicatorSharedToken, sizeof(g_Config.m_BcClientIndicatorSharedToken));
+		TrimConfigString(g_Config.m_BcClientIndicatorSecretKey, sizeof(g_Config.m_BcClientIndicatorSecretKey));
+
+		if(g_Config.m_BcClientIndicatorBrowserUrl[0] == '\0' || str_comp(g_Config.m_BcClientIndicatorBrowserUrl, OLD_BC_BROWSER_URL) == 0)
+			str_copy(g_Config.m_BcClientIndicatorBrowserUrl, NEW_BC_BROWSER_URL, sizeof(g_Config.m_BcClientIndicatorBrowserUrl));
+		if(g_Config.m_BcClientIndicatorTokenUrl[0] == '\0' || str_comp(g_Config.m_BcClientIndicatorTokenUrl, OLD_BC_TOKEN_URL) == 0)
+			str_copy(g_Config.m_BcClientIndicatorTokenUrl, NEW_BC_TOKEN_URL, sizeof(g_Config.m_BcClientIndicatorTokenUrl));
+	}
+
+	bool IsBlockedIndicatorAddress(const NETADDR &Addr)
+	{
+		return net_addr_is_local(&Addr);
+	}
+
+	const char *PacketTypeName(int PacketType)
+	{
+		switch(PacketType)
+		{
+		case BestClientIndicator::PACKET_JOIN:
+			return "join";
+		case BestClientIndicator::PACKET_HEARTBEAT:
+			return "heartbeat";
+		case BestClientIndicator::PACKET_LEAVE:
+			return "leave";
+		case BestClientIndicator::PACKET_PEER_STATE:
+			return "peer_state";
+		case BestClientIndicator::PACKET_PEER_REMOVE:
+			return "peer_remove";
+		case BestClientIndicator::PACKET_PEER_LIST:
+			return "peer_list";
+		case BestClientIndicator::PACKET_DEV_AUTH:
+			return "dev_auth";
+		case BestClientIndicator::PACKET_PEER_DEV_STATE:
+			return "peer_dev_state";
+		case BestClientIndicator::PACKET_PEER_DEV_LIST:
+			return "peer_dev_list";
+		case BestClientIndicator::PACKET_DEV_AUTH_RESULT:
+			return "dev_auth_result";
+		default:
+			return "unknown";
+		}
+	}
+
+	void DumpUdpPacketBytes(const char *pDirection, const NETADDR &Addr, const void *pData, int DataSize)
+	{
+		if(!pDirection || !pData || DataSize <= 0)
+			return;
+
+		char aAddr[NETADDR_MAXSTRSIZE];
+		net_addr_str(&Addr, aAddr, sizeof(aAddr), true);
+		log_info(LOG_SCOPE, "%s udp packet bytes=%d addr=%s", pDirection, DataSize, aAddr);
+
+		const auto *pBytes = static_cast<const uint8_t *>(pData);
+		for(int Offset = 0; Offset < DataSize; Offset += PACKET_DUMP_BYTES_PER_LINE)
+		{
+			const int ChunkSize = minimum(PACKET_DUMP_BYTES_PER_LINE, DataSize - Offset);
+			char aHex[PACKET_DUMP_BYTES_PER_LINE * 2 + 1];
+			str_hex(aHex, sizeof(aHex), pBytes + Offset, ChunkSize);
+			log_info(LOG_SCOPE, "%s udp dump offset=%d size=%d hex=%s", pDirection, Offset, ChunkSize, aHex);
+		}
+	}
 }
 
 CClientIndicator::CClientIndicator()
@@ -1028,15 +1028,15 @@ bool CClientIndicator::IsBrowserSnapshotEnabled() const
 {
 	const CGameClient *pGameClient = GameClient();
 	return g_Config.m_BcClientIndicator != 0 &&
-		(!pGameClient || !pGameClient->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_OTHERS_CLIENT_INDICATOR));
+	       (!pGameClient || !pGameClient->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_OTHERS_CLIENT_INDICATOR));
 }
 
 bool CClientIndicator::IsPresenceEnabled() const
 {
 	const CGameClient *pGameClient = GameClient();
 	return g_Config.m_BcClientIndicator != 0 &&
-		Client()->State() == IClient::STATE_ONLINE &&
-		(!pGameClient || !pGameClient->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_OTHERS_CLIENT_INDICATOR));
+	       Client()->State() == IClient::STATE_ONLINE &&
+	       (!pGameClient || !pGameClient->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_OTHERS_CLIENT_INDICATOR));
 }
 
 const char *CClientIndicator::EffectiveSharedToken() const
