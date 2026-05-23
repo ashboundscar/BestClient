@@ -4007,10 +4007,11 @@ endif()
 set(CPACK_GEN_FILES
   ${VULKAN_SHADER_FILE_LIST}
 )
+set(CPACK_GEN_TARGETS)
 if(TARGET_OS STREQUAL "windows" AND NOT MINGW)
-  list(APPEND CPACK_GEN_FILES
-    bestclient_reshade_live.addon
-    bestclient_reshade_bridge.addon
+  list(APPEND CPACK_GEN_TARGETS
+    bestclient-reshade-live
+    bestclient-reshade-bridge
   )
 endif()
 
@@ -4206,6 +4207,9 @@ foreach(ext zip tar.gz tar.xz)
   foreach(file ${CPACK_GEN_FILES})
     list(APPEND COPY_FILE_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/${file} ${TMPDIR}/${file})
   endforeach()
+  foreach(target ${CPACK_GEN_TARGETS})
+    list(APPEND COPY_TARGET_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${target}> ${TMPDIR}/)
+  endforeach()
   foreach(dir ${CPACK_DIRS})
     list(APPEND COPY_DIR_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/${dir} ${TMPDIR}/${dir})
   endforeach()
@@ -4311,6 +4315,7 @@ unset(CPACK_TARGETS)
 unset(CPACK_DIRS)
 unset(CPACK_FILES)
 unset(CPACK_GEN_FILES)
+unset(CPACK_GEN_TARGETS)
 
 include(CPack)
 
@@ -4570,6 +4575,14 @@ if(TARGET_OS STREQUAL "windows" AND NOT MINGW)
   add_dependencies(game-client bestclient-reshade-live)
   add_dependencies(game-client bestclient-reshade-bridge)
   add_dependencies(game-client bestclient-reshade-assets)
+
+  if(NOT DEV AND CPACK_GEN_TARGETS)
+    install(TARGETS ${CPACK_GEN_TARGETS}
+      DESTINATION ${CPACK_PACKAGE_FILE_NAME}
+      COMPONENT portable
+      EXCLUDE_FROM_ALL
+    )
+  endif()
 endif()
 
 if(TARGET_OS STREQUAL "windows" AND STEAM AND NOT CMAKE_BUILD_TYPE STREQUAL Debug)
