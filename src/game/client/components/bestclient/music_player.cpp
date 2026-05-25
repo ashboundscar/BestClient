@@ -1346,7 +1346,7 @@ namespace
 
 	static bool MusicPlayerCoverEnabled()
 	{
-		return true;
+		return g_Config.m_BcMusicPlayerShowCover != 0;
 	}
 
 	static float MusicPlayerTextScale()
@@ -1361,7 +1361,7 @@ namespace
 
 	static float MusicPlayerAnimationDurationSeconds()
 	{
-		return 0.18f;
+		return std::clamp(g_Config.m_BcMusicPlayerAnimationMs / 1000.0f, 0.05f, 1.0f);
 	}
 
 	static float MusicPlayerAnimationSpeed(float ReferenceSpeed)
@@ -1372,17 +1372,18 @@ namespace
 
 	static float MusicPlayerVisualizerColumnWidthScale()
 	{
-		return 1.0f;
+		return std::clamp(g_Config.m_BcMusicPlayerVisualizerColumnWidth / 100.0f, 0.5f, 2.5f);
 	}
 
 	static float MusicPlayerVisualizerGapScale()
 	{
-		return 1.0f;
+		return std::clamp(g_Config.m_BcMusicPlayerVisualizerGap / 100.0f, 0.0f, 2.5f);
 	}
 
-	static int MusicPlayerVisualizerColumns()
+	static int MusicPlayerVisualizerColumns(bool MiniMode)
 	{
-		return std::clamp(g_Config.m_BcMusicPlayerVisualizerColumns, 5, 10);
+		const int Columns = std::clamp(g_Config.m_BcMusicPlayerVisualizerColumns, 2, MUSIC_PLAYER_MAX_VISUALIZER_BARS);
+		return MiniMode ? minimum(Columns, 6) : Columns;
 	}
 
 	static float MusicPlayerVisualizerInnerPadX(bool MiniMode, float Scale, float WidthScale)
@@ -1402,7 +1403,7 @@ namespace
 
 	static float MusicPlayerVisualizerWidth(bool MiniMode, float Scale, float WidthScale, float ExpandT)
 	{
-		const int NumBars = MusicPlayerVisualizerColumns();
+		const int NumBars = MusicPlayerVisualizerColumns(MiniMode);
 		const float InnerPadX = MusicPlayerVisualizerInnerPadX(MiniMode, Scale, WidthScale);
 		const float Gap = MusicPlayerVisualizerGap(MiniMode, Scale, WidthScale);
 		const float BarW = MusicPlayerVisualizerBarWidth(MiniMode, Scale, WidthScale);
@@ -1849,10 +1850,18 @@ namespace
 			const float CoverGap = ShowCover ? 1.35f * Metrics.m_Scale * Metrics.m_WidthScale : 0.0f;
 			const float VisualGap = 1.25f * Metrics.m_Scale * Metrics.m_WidthScale;
 			const float VisualW = MusicPlayerVisualizerWidth(true, Metrics.m_Scale, Metrics.m_WidthScale, 0.0f);
+			const float AnchorBaseW = 104.0f * Metrics.m_Scale * Metrics.m_WidthScale;
 			Metrics.m_CompactH = maximum(10.8f * Metrics.m_Scale, TitleFont + PadY * 2.0f);
+			Metrics.m_ExpandedH = Metrics.m_CompactH;
 			const float ArtSize = ShowCover ? maximum(0.0f, Metrics.m_CompactH - PadY * 2.0f) : 0.0f;
 			const float DesiredWidth = PadX * 2.0f + DisplayedTextSlotWidth + VisualGap + VisualW + ArtSize + CoverGap;
 			Metrics.m_CompactW = minimum(Width, maximum(18.0f * Metrics.m_Scale * Metrics.m_WidthScale, DesiredWidth));
+			Metrics.m_ExpandedW = minimum(Width, maximum(AnchorBaseW, Metrics.m_CompactW));
+			Metrics.m_CompactRect = MakeMusicPlayerRect(Layout.m_X, Layout.m_Y, Metrics.m_ExpandedW, Width, Height, Metrics.m_CompactW, Metrics.m_CompactH);
+			Metrics.m_ExpandedRect = Metrics.m_CompactRect;
+			Metrics.m_ViewRect = Metrics.m_CompactRect;
+			Metrics.m_Rounding = minimum(6.0f * Metrics.m_Scale, Metrics.m_ViewRect.h * 0.34f);
+			return Metrics;
 		}
 		else
 		{
@@ -2671,12 +2680,20 @@ public:
 		return m_VisualPositionMs;
 	}
 
-	void UpdateVisualizerLevels(CMusicPlayer *pOwner, const SNowPlayingSnapshot &Snapshot, int64_t PositionMs, int RequestedBars, float Delta)
-	{
-		(void)pOwner;
-		RequestedBars = std::clamp(RequestedBars, 2, VISUALIZER_BARS);
+		void UpdateVisualizerLevels(CMusicPlayer *pOwner, const SNowPlayingSnapshot &Snapshot, int64_t PositionMs, int RequestedBars, float Delta)
+		{
+			(void)pOwner;
+			RequestedBars = std::clamp(RequestedBars, 2, VISUALIZER_BARS);
 
-		const float Smoothing = std::clamp(g_Config.m_BcMusicPlayerVisualizerSmoothing / 100.0f, 0.0f, 1.0f);
+			if(g_Config.m_BcMusicPlayerVisualizer == 0)
+			{
+				DebugLogRenderDecision("visualizer_disabled", Snapshot);
+				for(float &Level : m_aVisualizerLevels)
+					Level = ApproachAnim(Level, 0.0f, Delta, 12.0f);
+				return;
+			}
+
+			const float Smoothing = std::clamp(g_Config.m_BcMusicPlayerVisualizerSmoothing / 100.0f, 0.0f, 1.0f);
 		const float AttackSpeed = mix(34.0f, 16.0f, Smoothing);
 		const float ReleaseSpeed = mix(18.0f, 7.5f, Smoothing);
 		const bool UseRealtimeVisualizer =
@@ -2799,7 +2816,7 @@ public:
 		const bool FreezeNonChatLayout = !ChatActive && !HudEditorActive &&
 						 (pOwner->GameClient()->m_GameConsole.IsActive() || pOwner->GameClient()->m_Menus.IsActive());
 
-		const float ProbeT = EaseInOutCubic(m_ExpandAnim);
+			const float ProbeT = MiniMode ? 0.0f : EaseInOutCubic(m_ExpandAnim);
 		const float ProbeTextSlotWidth = m_CompactTextSlotWidthAnim > 0.0f ? m_CompactTextSlotWidthAnim : (MiniMode ? MiniTextSlotWidth : CompactTextSlotWidth);
 		const SMusicPlayerMetrics ProbeMetrics = ComputeMusicPlayerMetrics(Layout, Width, Height, ProbeT, CompactTextSlotWidth, ProbeTextSlotWidth, MiniMode, ShowCover, TextScale);
 		const CUIRect UiView = HudToUiRect(ProbeMetrics.m_ViewRect, UiScreen, Width, Height);
@@ -2825,12 +2842,15 @@ public:
 		if(!FreezeNonChatLayout)
 		{
 			const float TargetExpand = HoverCandidate ? 1.0f : 0.0f;
-			const float WidthTarget = MiniMode ? mix(MiniTextSlotWidth, CompactTextSlotWidth, TargetExpand) : CompactTextSlotWidth;
+				const float WidthTarget = MiniMode ? MiniTextSlotWidth : CompactTextSlotWidth;
 			const float WidthSpeed = WidthTarget > m_CompactTextSlotWidthAnim ? MusicPlayerAnimationSpeed(10.0f) : MusicPlayerAnimationSpeed(8.0f);
 			m_CompactTextSlotWidthAnim = ApproachAnim(m_CompactTextSlotWidthAnim, WidthTarget, Delta, WidthSpeed);
 			const float TargetGlow = HoverCandidate ? 1.0f : 0.0f;
 			m_HoverAnim = ApproachAnim(m_HoverAnim, TargetGlow, Delta, MusicPlayerAnimationSpeed(8.0f));
-			m_ExpandAnim = ApproachAnim(m_ExpandAnim, TargetExpand, Delta, TargetExpand > m_ExpandAnim ? MusicPlayerAnimationSpeed(8.5f) : MusicPlayerAnimationSpeed(6.0f));
+				if(MiniMode)
+					m_ExpandAnim = 0.0f;
+				else
+					m_ExpandAnim = ApproachAnim(m_ExpandAnim, TargetExpand, Delta, TargetExpand > m_ExpandAnim ? MusicPlayerAnimationSpeed(8.5f) : MusicPlayerAnimationSpeed(6.0f));
 		}
 		else
 		{
@@ -2838,7 +2858,7 @@ public:
 			m_HoverAnim = 0.0f;
 		}
 
-		const float SizeT = EaseInOutCubic(m_ExpandAnim);
+			const float SizeT = MiniMode ? 0.0f : EaseInOutCubic(m_ExpandAnim);
 		const SMusicPlayerMetrics Metrics = ComputeMusicPlayerMetrics(Layout, Width, Height, SizeT, CompactTextSlotWidth, m_CompactTextSlotWidthAnim, MiniMode, ShowCover, TextScale);
 		m_HudReservation.m_Rect = Metrics.m_ViewRect;
 		m_HudReservation.m_Visible = true;
@@ -3101,7 +3121,7 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 	const float MiniTitleFont = 5.8f * LayoutScale * TextScale;
 	const float CompactTextSlotWidth = ComputeCompactTextSlotWidth(TextRender(), GameTimer, CompactTitleFont, LayoutScale, LayoutWidthScale);
 	const float MiniTextSlotWidth = ComputeMiniTextSlotWidth(TextRender(), Snapshot, GameTimer, MiniTitleFont, LayoutScale, LayoutWidthScale);
-	const int NumBars = MusicPlayerVisualizerColumns();
+	const int NumBars = MusicPlayerVisualizerColumns(MiniMode);
 	Graphics()->MapScreen(0.0f, 0.0f, Width, Height);
 
 	const bool BackgroundEnabled = Layout.m_BackgroundEnabled;
@@ -3114,18 +3134,15 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 	const vec2 MousePos = UiMousePos * UiToHudScale;
 	const bool AllowInteraction = !ForcePreview && (GameClient()->m_Chat.IsActive() || GameClient()->m_Scoreboard.IsMouseUnlocked());
 
-	const float ExpandT = ForcePreview ? 0.0f : EaseInOutCubic(m_pImpl->m_ExpandAnim);
+	const float ExpandT = MiniMode ? 0.0f : (ForcePreview ? 0.0f : EaseInOutCubic(m_pImpl->m_ExpandAnim));
 	const float HoverT = ForcePreview ? 1.0f : EaseOutCubic(m_pImpl->m_HoverAnim);
 	const float Delta = std::clamp(Client()->RenderFrameTime(), 0.0f, 0.1f);
 	const float AnimatedTextSlotWidth = ForcePreview ?
 						(MiniMode ? MiniTextSlotWidth : CompactTextSlotWidth) :
 						(m_pImpl->m_CompactTextSlotWidthAnim > 0.0f ? m_pImpl->m_CompactTextSlotWidthAnim : (MiniMode ? MiniTextSlotWidth : CompactTextSlotWidth));
 	const SMusicPlayerMetrics Metrics = ComputeMusicPlayerMetrics(Layout, Width, Height, ExpandT, CompactTextSlotWidth, AnimatedTextSlotWidth, MiniMode, ShowCover, TextScale);
-	const bool CompactMiniLayout = MiniMode && ExpandT < 0.001f &&
-					       absolute(Metrics.m_ViewRect.w - Metrics.m_CompactRect.w) < 0.001f &&
-					       absolute(Metrics.m_ViewRect.h - Metrics.m_CompactRect.h) < 0.001f;
-	const float TextT = CompactMiniLayout ? 1.0f : EaseOutCubic(std::clamp((ExpandT - 0.04f) / 0.96f, 0.0f, 1.0f));
-	const float ControlsT = CompactMiniLayout ? 0.0f : EaseOutCubic(std::clamp((ExpandT - 0.16f) / 0.84f, 0.0f, 1.0f));
+	const float TextT = MiniMode ? 1.0f : EaseOutCubic(std::clamp((ExpandT - 0.04f) / 0.96f, 0.0f, 1.0f));
+	const float ControlsT = MiniMode ? 0.0f : EaseOutCubic(std::clamp((ExpandT - 0.16f) / 0.84f, 0.0f, 1.0f));
 	const float Scale = Metrics.m_Scale;
 	const float WidthScale = Metrics.m_WidthScale;
 	CUIRect View = ForcePreview ? Metrics.m_ViewRect : m_pImpl->m_HudReservation.m_Rect;
@@ -3163,7 +3180,7 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 	CUIRect Content = View;
 	Content.Margin(1.70f * Scale, &Content);
 
-	const bool RenderMiniLayout = CompactMiniLayout;
+	const bool RenderMiniLayout = MiniMode;
 	const bool RenderCover = ShowCover;
 	const bool RenderVisualizer = true;
 	const float VisualW = MusicPlayerVisualizerWidth(RenderMiniLayout, Scale, WidthScale, ExpandT);
