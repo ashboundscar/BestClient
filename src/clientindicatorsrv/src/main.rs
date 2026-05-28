@@ -1149,17 +1149,23 @@ fn sanitize_client_version(value: &str) -> Option<String> {
         return None;
     }
 
-    let mut sanitized = String::new();
-    for ch in trimmed.chars() {
-        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' ) {
-            sanitized.push(ch);
-        }
-        if sanitized.len() >= 31 {
-            break;
-        }
+    if trimmed.len() > 8 {
+        return None;
     }
 
-    (!sanitized.is_empty()).then_some(sanitized)
+    let mut has_digit = false;
+    for ch in trimmed.chars() {
+        if ch.is_ascii_digit() {
+            has_digit = true;
+            continue;
+        }
+        if ch == '.' {
+            continue;
+        }
+        return None;
+    }
+
+    has_digit.then(|| trimmed.to_string())
 }
 
 fn validate_proof(shared_token: &str, data: &[u8]) -> bool {
@@ -1371,5 +1377,17 @@ mod tests {
             client_id: 4,
         });
         assert_eq!(entry.and_then(|e| e.client_version.as_deref()), Some("1.7.1"));
+    }
+
+    #[test]
+    fn sanitize_client_version_accepts_only_digits_and_dots_up_to_eight_chars() {
+        assert_eq!(sanitize_client_version("1.1.1.1").as_deref(), Some("1.1.1.1"));
+        assert_eq!(sanitize_client_version("17.1").as_deref(), Some("17.1"));
+        assert_eq!(sanitize_client_version("1.2beta"), None);
+        assert_eq!(sanitize_client_version("ad"), None);
+        assert_eq!(sanitize_client_version("1.1.1.1a"), None);
+        assert_eq!(sanitize_client_version("12.34.56").as_deref(), Some("12.34.56"));
+        assert_eq!(sanitize_client_version("123456789"), None);
+        assert_eq!(sanitize_client_version("........"), None);
     }
 }
