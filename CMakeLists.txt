@@ -2809,8 +2809,6 @@ if(CLIENT)
     components/bestclient/fast_practice.h
     components/bestclient/hud_editor.cpp
     components/bestclient/hud_editor.h
-    components/bestclient/irc/irc.cpp
-    components/bestclient/irc/irc.h
     components/bestclient/magic_particles.cpp
     components/bestclient/magic_particles.h
     components/bestclient/menus_bestclient.cpp
@@ -3341,18 +3339,6 @@ if(CLIENT)
 
   list(APPEND TARGETS_OWN bestclient-voice-server)
   list(APPEND TARGETS_LINK bestclient-voice-server)
-
-  find_program(GO_EXECUTABLE go)
-  if(GO_EXECUTABLE)
-    add_custom_target(bestgram-server
-      COMMAND ${GO_EXECUTABLE} build -o "${PROJECT_BINARY_DIR}/bestgram-server" .
-      COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/bestgram-server" "${PROJECT_BINARY_DIR}/bestclient-irc-server"
-      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/src/irc"
-      COMMENT "Building BestGram server"
-      VERBATIM
-    )
-    add_custom_target(bestclient-irc-server DEPENDS bestgram-server)
-  endif()
 
   list(APPEND TARGETS_OWN game-client)
   list(APPEND TARGETS_LINK game-client)

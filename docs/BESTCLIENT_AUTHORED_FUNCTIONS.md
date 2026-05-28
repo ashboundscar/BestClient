@@ -166,13 +166,6 @@ bc_hud_votes_x
 bc_hud_votes_y
 bc_ingame_menu_animation
 bc_ingame_menu_animation_ms
-bc_irc_autoconnect
-bc_irc_autologin
-bc_irc_host
-bc_irc_media_preview
-bc_irc_port
-bc_irc_session_token
-bc_irc_tls_fingerprint
 bc_jelly_tee
 bc_jelly_tee_duration
 bc_jelly_tee_others

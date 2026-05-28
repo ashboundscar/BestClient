@@ -270,15 +270,6 @@ MACRO_CONFIG_STR(BcClientIndicatorSharedToken, bc_client_indicator_shared_token,
 MACRO_CONFIG_STR(BcClientIndicatorSecretKey, bc_client_indicator_secret_key, 256, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator developer secret key")
 MACRO_CONFIG_INT(BrFilterBestclient, br_filter_bestclient, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Filter out servers with no BestClient users")
 
-// BestGram
-MACRO_CONFIG_STR(BcIrcHost, bc_irc_host, 256, "150.241.70.188", CFGFLAG_CLIENT | CFGFLAG_SAVE, "BestGram server host")
-MACRO_CONFIG_INT(BcIrcPort, bc_irc_port, 6667, 1, 65535, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BestGram server port")
-MACRO_CONFIG_INT(BcIrcAutoconnect, bc_irc_autoconnect, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Automatically connect to BestGram")
-MACRO_CONFIG_INT(BcIrcAutologin, bc_irc_autologin, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Automatically login to BestGram with saved session token")
-MACRO_CONFIG_STR(BcIrcSessionToken, bc_irc_session_token, 256, "", CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_NONTEEHISTORIC, "BestGram session token")
-MACRO_CONFIG_STR(BcIrcTlsFingerprint, bc_irc_tls_fingerprint, 128, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Pinned BestGram TLS SHA256 fingerprint")
-MACRO_CONFIG_INT(BcIrcMediaPreview, bc_irc_media_preview, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show media previews in BestGram")
-
 // Magic particles
 MACRO_CONFIG_INT(BcMagicParticles, bc_magic_particles, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Toggle magic particles")
 MACRO_CONFIG_INT(BcMagicParticlesRadius, bc_magic_particles_radius, 10, 1, 1000, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Radius of magic particles")

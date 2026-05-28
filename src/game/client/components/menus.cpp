@@ -44,6 +44,14 @@
 
 using namespace std::chrono_literals;
 
+namespace
+{
+	int NormalizeMenuPage(int Page)
+	{
+		return Page == CMenus::PAGE_IRC ? CMenus::PAGE_DEMOS : Page;
+	}
+}
+
 ColorRGBA CMenus::ms_GuiColor;
 ColorRGBA CMenus::ms_ColorTabbarInactiveOutgame;
 ColorRGBA CMenus::ms_ColorTabbarActiveOutgame;
@@ -943,6 +951,8 @@ void CMenus::OnConsoleInit()
 
 void CMenus::OnInit()
 {
+	g_Config.m_UiPage = NormalizeMenuPage(g_Config.m_UiPage);
+
 	if(g_Config.m_ClShowWelcome)
 	{
 		m_Popup = POPUP_LANGUAGE;
@@ -1581,10 +1591,6 @@ void CMenus::Render()
 			{
 				RenderDemoBrowser(MainView);
 			}
-			else if(m_MenuPage == PAGE_IRC)
-			{
-				GameClient()->m_IrcChat.RenderPage(MainView);
-			}
 			else if(m_MenuPage == PAGE_SETTINGS)
 			{
 				RenderSettings(MainView);
@@ -1646,10 +1652,6 @@ void CMenus::Render()
 			else if(m_GamePage == PAGE_DEMOS)
 			{
 				RenderDemoBrowser(MainView);
-			}
-			else if(m_GamePage == PAGE_IRC)
-			{
-				GameClient()->m_IrcChat.RenderPage(MainView);
 			}
 			else if(m_GamePage == PAGE_SETTINGS)
 			{
@@ -3422,6 +3424,7 @@ const CMenus::CMenuImage *CMenus::FindMenuImage(const char *pName)
 
 void CMenus::SetMenuPage(int NewPage)
 {
+	NewPage = NormalizeMenuPage(NewPage);
 	const int OldPage = m_MenuPage;
 	m_MenuPage = NewPage;
 	if(NewPage >= PAGE_INTERNET && NewPage <= PAGE_FAVORITE_COMMUNITY_5)

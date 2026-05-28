@@ -12,7 +12,7 @@
 ## About
 
 BestClient is a customized DDNet client focused on comfort, utility and full control over gameplay and visuals.
-It extends the base client with native BestClient systems like Camera Drift, Dynamic FOV, Jelly Tee, Afterimage, Player Trail, 3D/Magic particles, Hook Combo, Fast/Best/Gamma Input, Snap Tap, Finish Prediction, Focus Mode, Voice Chat, Chat Media, BestGram, Client Indicator, plus built-in Editors, Shop and Fun tabs.
+It extends the base client with native BestClient systems like Camera Drift, Dynamic FOV, Jelly Tee, Afterimage, Player Trail, 3D/Magic particles, Hook Combo, Fast/Best/Gamma Input, Snap Tap, Finish Prediction, Focus Mode, Voice Chat, Chat Media, Client Indicator, plus built-in Editors, Shop and Fun tabs.
 
 ## Links
 
@@ -24,7 +24,7 @@ It extends the base client with native BestClient systems like Camera Drift, Dyn
 
 - BestClient focuses on its own visual stack: Camera Drift, Dynamic FOV, Jelly Tee, Player Trail, Magic/Orbit/3D particles, Afterimage, Crystal Laser, Aspect Ratio and Media Background.
 - BestClient gameplay tools include Fast/Best/Gamma Input, Snap Tap, Hook Combo, Gores Mode, Auto Team Lock, Speedrun Timer, Finish Prediction and Focus Mode.
-- BestClient utility features cover Chat Media, integrated Voice Chat, BestGram, Client Indicator, Admin Panel and browser helpers.
+- BestClient utility features cover Chat Media, integrated Voice Chat, Client Indicator, Admin Panel and browser helpers.
 - BestClient comes with native tooling and content flow: Assets Editor, Components Editor, HUD Editor, in-client Shop and Fun tab.
 
 ## Installation
@@ -75,7 +75,6 @@ It extends the base client with native BestClient systems like Camera Drift, Dyn
 - Misc
 - Browser Utils
 - Chat Media
-- BestGram
 - Voice Chat
 - Voice Binds
 - Client Indicator
@@ -272,13 +271,6 @@ bc_hud_votes_x
 bc_hud_votes_y
 bc_ingame_menu_animation
 bc_ingame_menu_animation_ms
-bc_irc_autoconnect
-bc_irc_autologin
-bc_irc_host
-bc_irc_media_preview
-bc_irc_port
-bc_irc_session_token
-bc_irc_tls_fingerprint
 bc_jelly_tee
 bc_jelly_tee_duration
 bc_jelly_tee_others

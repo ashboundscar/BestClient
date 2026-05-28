@@ -453,8 +453,6 @@ class Client(Runnable):
 				"bc_voice_chat_enable 0",
 				"tc_discord_rpc 0",
 				'tc_custom_communities_url ""',
-				"bc_irc_autoconnect 0",
-				"bc_irc_media_preview 0",
 				"bc_client_indicator_server_address 127.0.0.1:1",
 				"bc_client_indicator_browser_url https://127.0.0.1:1/users.json",
 				"bc_client_indicator_token_url https://127.0.0.1:1/token.json",
