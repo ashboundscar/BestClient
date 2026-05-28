@@ -371,6 +371,11 @@ private:
 	void CloseServerListPingSocket();
 	void LoadMutedNamesFromFile();
 	void SaveMutedNamesToFile();
+	std::string EffectiveServerAddress() const;
+	const char *EffectiveServerLabel() const;
+	bool IsManagedServerConfig() const;
+	uint64_t CurrentHelloAuthTimestamp() const;
+	void AppendHelloAuthProof(std::vector<uint8_t> &vPacket) const;
 
 	static void ConVoiceConnect(IConsole::IResult *pResult, void *pUserData);
 	static void ConVoiceDisconnect(IConsole::IResult *pResult, void *pUserData);

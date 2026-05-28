@@ -197,7 +197,7 @@ MACRO_CONFIG_INT(BcVoiceChatEnableYourGroup, bc_voice_chat_enable_your_group, 0,
 MACRO_CONFIG_INT(BcVoiceChatRadiusEnabled, bc_voice_chat_radius_enabled, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable local voice radius filter")
 MACRO_CONFIG_INT(BcVoiceChatRadiusTiles, bc_voice_chat_radius_tiles, 25, 1, 500, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Voice radius in tiles when local radius filter is enabled")
 MACRO_CONFIG_INT(BcVoiceChatNameplateIcon, bc_voice_chat_nameplate_icon, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show microphone icon in name plates for talking players")
-MACRO_CONFIG_STR(BcVoiceChatServerAddress, bc_voice_chat_server_address, 128, "150.241.70.188:8777", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Voice server address")
+MACRO_CONFIG_STR(BcVoiceChatServerAddress, bc_voice_chat_server_address, 128, "managed", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Voice server address")
 MACRO_CONFIG_STR(BcVoiceChatMutedNames, bc_voice_chat_muted_names, 512, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Comma-separated list of muted voice nicknames (case-insensitive)")
 MACRO_CONFIG_STR(BcVoiceChatNameVolumes, bc_voice_chat_name_volumes, 512, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Comma-separated list of voice nickname volumes in percent (name=value, case-insensitive)")
 

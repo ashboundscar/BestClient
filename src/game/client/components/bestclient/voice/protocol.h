@@ -11,7 +11,8 @@
 namespace BestClientVoice
 {
 constexpr uint32_t PROTOCOL_MAGIC = 0x42564331u; // BVC1
-constexpr uint8_t PROTOCOL_VERSION = 3;
+constexpr uint8_t PROTOCOL_VERSION = 4;
+constexpr uint16_t CLIENT_BUILD_MIN = 101;
 
 constexpr int SAMPLE_RATE = 48000;
 constexpr int CHANNELS = 1;
@@ -20,6 +21,7 @@ constexpr int MAX_OPUS_PACKET_SIZE = 400;
 constexpr int DEFAULT_PORT = 8777;
 constexpr int MAX_ROOM_KEY_LENGTH = 128;
 constexpr int INVALID_GAME_CLIENT_ID = -1;
+constexpr int HELLO_AUTH_PROOF_SIZE = 32;
 
 enum EPacketType : uint8_t
 {
@@ -56,6 +58,12 @@ inline void WriteU32(std::vector<uint8_t> &vOut, uint32_t Value)
 	vOut.push_back((uint8_t)((Value >> 16) & 0xff));
 	vOut.push_back((uint8_t)((Value >> 8) & 0xff));
 	vOut.push_back((uint8_t)(Value & 0xff));
+}
+
+inline void WriteU64(std::vector<uint8_t> &vOut, uint64_t Value)
+{
+	for(int Shift = 56; Shift >= 0; Shift -= 8)
+		vOut.push_back((uint8_t)((Value >> Shift) & 0xff));
 }
 
 inline void WriteS32(std::vector<uint8_t> &vOut, int32_t Value)
@@ -96,6 +104,17 @@ inline bool ReadU32(const uint8_t *pData, int DataSize, int &Offset, uint32_t &O
 		return false;
 	Out = ((uint32_t)pData[Offset] << 24) | ((uint32_t)pData[Offset + 1] << 16) | ((uint32_t)pData[Offset + 2] << 8) | (uint32_t)pData[Offset + 3];
 	Offset += 4;
+	return true;
+}
+
+inline bool ReadU64(const uint8_t *pData, int DataSize, int &Offset, uint64_t &Out)
+{
+	if(Offset + 8 > DataSize)
+		return false;
+	Out = 0;
+	for(int i = 0; i < 8; ++i)
+		Out = (Out << 8) | pData[Offset + i];
+	Offset += 8;
 	return true;
 }
 

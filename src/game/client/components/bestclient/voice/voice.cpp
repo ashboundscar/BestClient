@@ -2,15 +2,18 @@
 #include "voice.h"
 
 #include "protocol.h"
+#include "../version.h"
 
 #include <base/color.h>
 #include <base/log.h>
 #include <base/math.h>
 #include <base/str.h>
 #include <base/system.h>
+#include <base/time.h>
 
 #include <engine/client.h>
 #include <engine/font_icons.h>
+#include <engine/shared/bestclient_indicator_protocol.h>
 #include <engine/shared/config.h>
 #include <engine/shared/http.h>
 #include <engine/shared/json.h>
@@ -59,9 +62,16 @@ namespace
 	constexpr float PANEL_ROW_HEIGHT = 48.0f;
 	constexpr int SERVER_LIST_PING_TIMEOUT_SEC = 2;
 	constexpr int SERVER_LIST_PING_INTERVAL_SEC = 30;
-	constexpr const char *VOICE_MASTER_LIST_URL = "https://150.241.70.188:3000/voice/servers.json";
-	constexpr const char *DEFAULT_VOICE_SERVER_ADDRESS = "150.241.70.188:8777";
+	constexpr const char *MANAGED_VOICE_SERVER_CONFIG = "managed";
 	constexpr const char *VOICE_MUTED_CFG_PATH = "BestClient/voice_muted.cfg";
+	constexpr uint8_t OBFUSCATION_KEY = 0x5a;
+	constexpr std::array<uint8_t, 19> OBFUSCATED_DEFAULT_VOICE_SERVER_ADDRESS = {
+		107, 99, 105, 116, 104, 105, 116, 104, 106, 107, 116, 107, 104, 111, 96, 98, 109, 109, 109};
+	constexpr std::array<uint8_t, 23> OBFUSCATED_VOICE_AUTH_KEY = {
+		56, 57, 44, 110, 119, 40, 63, 54, 119, 107, 109, 107, 119, 44, 53, 51, 57, 63, 119, 54, 53, 57, 49};
+	constexpr std::array<uint8_t, 46> OBFUSCATED_VOICE_MASTER_LIST_URL = {
+		50, 46, 46, 42, 41, 96, 117, 117, 107, 111, 106, 116, 104, 110, 107, 116, 109, 106, 116, 107, 98, 98, 96, 105,
+		106, 106, 106, 117, 44, 53, 51, 57, 63, 117, 41, 63, 40, 44, 63, 40, 41, 116, 48, 41, 53, 52};
 
 	enum
 	{
@@ -69,6 +79,34 @@ namespace
 		VOICE_SECTION_MEMBERS,
 		VOICE_SECTION_SETTINGS,
 	};
+
+	template<size_t N>
+	std::string DecodeObfuscatedString(const std::array<uint8_t, N> &aData)
+	{
+		std::string Result;
+		Result.resize(N);
+		for(size_t i = 0; i < N; ++i)
+			Result[i] = (char)(aData[i] ^ OBFUSCATION_KEY);
+		return Result;
+	}
+
+	const std::string &DefaultVoiceServerAddress()
+	{
+		static const std::string s_Address = DecodeObfuscatedString(OBFUSCATED_DEFAULT_VOICE_SERVER_ADDRESS);
+		return s_Address;
+	}
+
+	const std::string &VoiceAuthKey()
+	{
+		static const std::string s_Key = DecodeObfuscatedString(OBFUSCATED_VOICE_AUTH_KEY);
+		return s_Key;
+	}
+
+	const std::string &VoiceMasterListUrl()
+	{
+		static const std::string s_Url = DecodeObfuscatedString(OBFUSCATED_VOICE_MASTER_LIST_URL);
+		return s_Url;
+	}
 
 	ColorRGBA VoiceSectionBgColor()
 	{
@@ -152,13 +190,14 @@ namespace
 
 	bool IsLegacyVoiceServerAddress(const char *pAddress)
 	{
-		return !pAddress || pAddress[0] == '\0' || str_comp(pAddress, "127.0.0.1:8777") == 0 || str_comp(pAddress, "localhost:8777") == 0;
+		return !pAddress || pAddress[0] == '\0' || str_comp(pAddress, MANAGED_VOICE_SERVER_CONFIG) == 0 ||
+			str_comp(pAddress, "127.0.0.1:8777") == 0 || str_comp(pAddress, "localhost:8777") == 0;
 	}
 
 	void EnsureDefaultVoiceServerAddress()
 	{
 		if(IsLegacyVoiceServerAddress(g_Config.m_BcVoiceChatServerAddress))
-			str_copy(g_Config.m_BcVoiceChatServerAddress, DEFAULT_VOICE_SERVER_ADDRESS, sizeof(g_Config.m_BcVoiceChatServerAddress));
+			str_copy(g_Config.m_BcVoiceChatServerAddress, MANAGED_VOICE_SERVER_CONFIG, sizeof(g_Config.m_BcVoiceChatServerAddress));
 	}
 
 	const char *GetAudioDeviceNameByIndex(int IsCapture, int Index)
@@ -727,7 +766,8 @@ void CVoiceChat::OnUpdate()
 		str_copy(m_aLastPersistedMutedNames, g_Config.m_BcVoiceChatMutedNames, sizeof(m_aLastPersistedMutedNames));
 	}
 
-	const bool ServerChanged = str_comp(m_aLastServerAddr, g_Config.m_BcVoiceChatServerAddress) != 0;
+	const std::string EffectiveServerAddr = EffectiveServerAddress();
+	const bool ServerChanged = str_comp(m_aLastServerAddr, EffectiveServerAddr.c_str()) != 0;
 	const bool DeviceChanged = m_LastInputDevice != g_Config.m_BcVoiceChatInputDevice || m_LastOutputDevice != g_Config.m_BcVoiceChatOutputDevice;
 
 	if(m_pServerListTask && m_pServerListTask->State() == EHttpState::DONE)
@@ -767,7 +807,7 @@ void CVoiceChat::OnUpdate()
 		StopVoice();
 		if(Online)
 			StartVoice();
-		str_copy(m_aLastServerAddr, g_Config.m_BcVoiceChatServerAddress, sizeof(m_aLastServerAddr));
+		str_copy(m_aLastServerAddr, EffectiveServerAddr.c_str(), sizeof(m_aLastServerAddr));
 		m_LastInputDevice = g_Config.m_BcVoiceChatInputDevice;
 		m_LastOutputDevice = g_Config.m_BcVoiceChatOutputDevice;
 	}
@@ -1064,7 +1104,7 @@ void CVoiceChat::RenderMenuSettingsBlock(const CUIRect &View, float RevealPhase)
 		if(str_comp(g_Config.m_BcVoiceChatServerAddress, pAddress) != 0)
 		{
 			str_copy(g_Config.m_BcVoiceChatServerAddress, pAddress, sizeof(g_Config.m_BcVoiceChatServerAddress));
-			str_copy(m_aLastServerAddr, g_Config.m_BcVoiceChatServerAddress, sizeof(m_aLastServerAddr));
+			str_copy(m_aLastServerAddr, pAddress, sizeof(m_aLastServerAddr));
 			if(Client()->State() == IClient::STATE_ONLINE && g_Config.m_BcVoiceChatEnable)
 			{
 				if(m_Socket)
@@ -1312,7 +1352,7 @@ void CVoiceChat::RenderMenuSettingsBlock(const CUIRect &View, float RevealPhase)
 					str_format(aServerLabel, sizeof(aServerLabel), "%s (%dms)", Entry.m_Name.c_str(), Entry.m_PingMs);
 				else
 					str_format(aServerLabel, sizeof(aServerLabel), "%s (--)", Entry.m_Name.c_str());
-				const bool Selected = str_comp(Entry.m_Address.c_str(), g_Config.m_BcVoiceChatServerAddress) == 0;
+				const bool Selected = str_comp(Entry.m_Address.c_str(), EffectiveServerAddress().c_str()) == 0;
 				if(GameClient()->m_Menus.DoButton_Menu(&m_ServerRowButtons[(size_t)i], aServerLabel, Selected, &ServerRow))
 					ConnectToServer(Entry.m_Address.c_str());
 				ServerListView.HSplitTop(kVoiceMenuServerRowGap, nullptr, &ServerListView);
@@ -2060,9 +2100,10 @@ void CVoiceChat::StopVoice()
 
 bool CVoiceChat::OpenNetworking()
 {
-	if(!BestClientVoice::ParseAddress(g_Config.m_BcVoiceChatServerAddress, BestClientVoice::DEFAULT_PORT, m_ServerAddr))
+	const std::string ServerAddress = EffectiveServerAddress();
+	if(!BestClientVoice::ParseAddress(ServerAddress.c_str(), BestClientVoice::DEFAULT_PORT, m_ServerAddr))
 	{
-		dbg_msg("voice", "invalid server address '%s'", g_Config.m_BcVoiceChatServerAddress);
+		dbg_msg("voice", "invalid server address '%s'", EffectiveServerLabel());
 		return false;
 	}
 
@@ -2497,15 +2538,18 @@ void CVoiceChat::SendHello()
 	const std::string RoomKey = CurrentRoomKey();
 	const int LocalClientId = LocalGameClientId();
 	const int VoiceTeam = LocalVoiceTeam();
+	const uint64_t AuthTimestamp = CurrentHelloAuthTimestamp();
 	std::vector<uint8_t> vPacket;
 	const uint16_t RoomKeySize = (uint16_t)minimum<size_t>(RoomKey.size(), BestClientVoice::MAX_ROOM_KEY_LENGTH);
-	vPacket.reserve(24 + RoomKeySize);
+	vPacket.reserve(40 + RoomKeySize + BestClientVoice::HELLO_AUTH_PROOF_SIZE);
 	BestClientVoice::WriteHeader(vPacket, BestClientVoice::PACKET_HELLO);
-	BestClientVoice::WriteU16(vPacket, 1);
+	BestClientVoice::WriteU16(vPacket, BESTCLIENT_VERSIONNR);
 	BestClientVoice::WriteU16(vPacket, RoomKeySize);
 	vPacket.insert(vPacket.end(), RoomKey.begin(), RoomKey.begin() + RoomKeySize);
 	BestClientVoice::WriteS16(vPacket, (int16_t)LocalClientId);
 	BestClientVoice::WriteS16(vPacket, (int16_t)VoiceTeam);
+	BestClientVoice::WriteU64(vPacket, AuthTimestamp);
+	AppendHelloAuthProof(vPacket);
 	net_udp_send(m_Socket, &m_ServerAddr, vPacket.data(), (int)vPacket.size());
 	m_LastHelloTick = time_get();
 	m_LastHeartbeatTick = m_LastHelloTick;
@@ -2522,15 +2566,18 @@ void CVoiceChat::SendHelloSecondary()
 	const std::string RoomKey = CurrentRoomKey();
 	const int LocalClientId = LocalGameClientId();
 	const int VoiceTeam = LocalOwnVoiceTeam();
+	const uint64_t AuthTimestamp = CurrentHelloAuthTimestamp();
 	std::vector<uint8_t> vPacket;
 	const uint16_t RoomKeySize = (uint16_t)minimum<size_t>(RoomKey.size(), BestClientVoice::MAX_ROOM_KEY_LENGTH);
-	vPacket.reserve(24 + RoomKeySize);
+	vPacket.reserve(40 + RoomKeySize + BestClientVoice::HELLO_AUTH_PROOF_SIZE);
 	BestClientVoice::WriteHeader(vPacket, BestClientVoice::PACKET_HELLO);
-	BestClientVoice::WriteU16(vPacket, 1);
+	BestClientVoice::WriteU16(vPacket, BESTCLIENT_VERSIONNR);
 	BestClientVoice::WriteU16(vPacket, RoomKeySize);
 	vPacket.insert(vPacket.end(), RoomKey.begin(), RoomKey.begin() + RoomKeySize);
 	BestClientVoice::WriteS16(vPacket, (int16_t)LocalClientId);
 	BestClientVoice::WriteS16(vPacket, (int16_t)VoiceTeam);
+	BestClientVoice::WriteU64(vPacket, AuthTimestamp);
+	AppendHelloAuthProof(vPacket);
 	net_udp_send(m_SecondarySocket, &m_ServerAddr, vPacket.data(), (int)vPacket.size());
 	m_SecondaryLastHelloTick = time_get();
 	m_SecondaryLastHeartbeatTick = m_SecondaryLastHelloTick;
@@ -3910,6 +3957,33 @@ int CVoiceChat::LocalGameClientId() const
 	return GameClient()->m_Snap.m_LocalClientId;
 }
 
+std::string CVoiceChat::EffectiveServerAddress() const
+{
+	if(IsManagedServerConfig())
+		return DefaultVoiceServerAddress();
+	return g_Config.m_BcVoiceChatServerAddress;
+}
+
+const char *CVoiceChat::EffectiveServerLabel() const
+{
+	return IsManagedServerConfig() ? "BestClient Voice" : g_Config.m_BcVoiceChatServerAddress;
+}
+
+bool CVoiceChat::IsManagedServerConfig() const
+{
+	return IsLegacyVoiceServerAddress(g_Config.m_BcVoiceChatServerAddress);
+}
+
+uint64_t CVoiceChat::CurrentHelloAuthTimestamp() const
+{
+	return (uint64_t)time_timestamp();
+}
+
+void CVoiceChat::AppendHelloAuthProof(std::vector<uint8_t> &vPacket) const
+{
+	BestClientIndicator::AppendHmacSha256(vPacket, VoiceAuthKey().c_str());
+}
+
 int CVoiceChat::ResolvePeerClientId(const CRemotePeer &Peer) const
 {
 	if(Peer.m_AnnouncedGameClientId >= 0 && Peer.m_AnnouncedGameClientId < MAX_CLIENTS)
@@ -3922,44 +3996,7 @@ int CVoiceChat::ResolvePeerClientId(const CRemotePeer &Peer) const
 			return Peer.m_AnnouncedGameClientId;
 	}
 
-	// Don't guess by proximity until we have an actual voice packet with position.
-	if(Peer.m_LastVoiceTick <= 0)
-		return -1;
-
-	int BestClientId = -1;
-	float BestDistSq = std::numeric_limits<float>::max();
-	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
-	{
-		const CGameClient::CClientData &ClientData = GameClient()->m_aClients[ClientId];
-		if(!ClientData.m_Active)
-			continue;
-		const CNetObj_PlayerInfo *pInfo = GameClient()->m_Snap.m_apPlayerInfos[ClientId];
-		if(pInfo && pInfo->m_Local)
-			continue;
-
-		vec2 Pos = ClientData.m_RenderPos;
-		if(GameClient()->m_Snap.m_aCharacters[ClientId].m_Active)
-		{
-			Pos = vec2(
-				(float)GameClient()->m_Snap.m_aCharacters[ClientId].m_Cur.m_X,
-				(float)GameClient()->m_Snap.m_aCharacters[ClientId].m_Cur.m_Y);
-		}
-
-		const vec2 Diff = Pos - Peer.m_Position;
-		const float DistSq = Diff.x * Diff.x + Diff.y * Diff.y;
-		if(DistSq < BestDistSq)
-		{
-			BestDistSq = DistSq;
-			BestClientId = ClientId;
-		}
-	}
-
-	// If no client is reasonably close, keep it as unknown participant id.
-	const float MaxMatchDist = 700.0f;
-	if(BestClientId < 0 || BestDistSq > MaxMatchDist * MaxMatchDist)
-		return -1;
-
-	return BestClientId;
+	return -1;
 }
 
 bool CVoiceChat::ShouldShowPeerInMembers(const CRemotePeer &Peer) const
@@ -4196,6 +4233,7 @@ void CVoiceChat::RenderServersSection(CUIRect View)
 			if(str_comp(g_Config.m_BcVoiceChatServerAddress, Entry.m_Address.c_str()) != 0)
 			{
 				str_copy(g_Config.m_BcVoiceChatServerAddress, Entry.m_Address.c_str(), sizeof(g_Config.m_BcVoiceChatServerAddress));
+				str_copy(m_aLastServerAddr, Entry.m_Address.c_str(), sizeof(m_aLastServerAddr));
 				StopVoice();
 				m_RuntimeState = RUNTIME_RECONNECTING;
 				StartVoice();
@@ -4831,7 +4869,7 @@ void CVoiceChat::FetchServerList()
 	if(m_pServerListTask && !m_pServerListTask->Done())
 		return;
 
-	m_pServerListTask = HttpGet(VOICE_MASTER_LIST_URL);
+	m_pServerListTask = HttpGet(VoiceMasterListUrl().c_str());
 	m_pServerListTask->Timeout(CTimeout{10000, 0, 500, 5});
 	m_pServerListTask->IpResolve(IPRESOLVE::V4);
 	m_pServerListTask->VerifyPeer(false); // allow self-signed/local TLS endpoint
@@ -4896,9 +4934,10 @@ void CVoiceChat::FinishServerList()
 	{
 		m_ServerRowButtons.resize(m_vServerEntries.size());
 		m_SelectedServerIndex = 0;
+		const std::string EffectiveAddress = EffectiveServerAddress();
 		for(size_t i = 0; i < m_vServerEntries.size(); ++i)
 		{
-			if(str_comp(m_vServerEntries[i].m_Address.c_str(), g_Config.m_BcVoiceChatServerAddress) == 0)
+			if(str_comp(m_vServerEntries[i].m_Address.c_str(), EffectiveAddress.c_str()) == 0)
 			{
 				m_SelectedServerIndex = (int)i;
 				break;
@@ -4959,7 +4998,7 @@ void CVoiceChat::ConVoiceConnect(IConsole::IResult *pResult, void *pUserData)
 	pSelf->StopVoice();
 	pSelf->m_RuntimeState = RUNTIME_RECONNECTING;
 	pSelf->StartVoice();
-	str_copy(pSelf->m_aLastServerAddr, g_Config.m_BcVoiceChatServerAddress, sizeof(pSelf->m_aLastServerAddr));
+	str_copy(pSelf->m_aLastServerAddr, pSelf->EffectiveServerAddress().c_str(), sizeof(pSelf->m_aLastServerAddr));
 	pSelf->m_LastInputDevice = g_Config.m_BcVoiceChatInputDevice;
 	pSelf->m_LastOutputDevice = g_Config.m_BcVoiceChatOutputDevice;
 }
@@ -4982,7 +5021,7 @@ void CVoiceChat::ConVoiceStatus(IConsole::IResult *pResult, void *pUserData)
 		g_Config.m_BcVoiceChatEnable ? 1 : 0,
 		pSelf->m_Registered ? 1 : 0,
 		(int)pSelf->m_vVisibleMemberPeerIds.size(),
-		g_Config.m_BcVoiceChatServerAddress,
+		pSelf->EffectiveServerLabel(),
 		pSelf->m_PushToTalkPressed ? 1 : 0,
 		g_Config.m_BcVoiceChatRadiusEnabled ? 1 : 0,
 		std::clamp(g_Config.m_BcVoiceChatRadiusTiles, 1, 500));
