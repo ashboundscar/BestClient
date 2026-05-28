@@ -82,7 +82,7 @@ constexpr int BcFastInputGammaEffectiveToUiAmount(int EffectiveAmount)
 
 constexpr int BcFastInputNormalizedMode(int Mode)
 {
-	if(Mode == 1 || Mode == 2)
+	if(Mode == 2)
 		return 3;
 	return Mode;
 }

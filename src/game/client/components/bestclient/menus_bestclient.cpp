@@ -4744,8 +4744,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				static CButtonContainer s_FastInputModeFast;
 				static CButtonContainer s_FastInputModeBest;
 				static CButtonContainer s_FastInputModeSaikoPlus;
-				g_Config.m_BcFastInputMode = BcFastInputNormalizedMode(g_Config.m_BcFastInputMode);
 				const int OldMode = g_Config.m_BcFastInputMode;
+				const int UiFastInputMode = g_Config.m_BcFastInputMode == 2 ? 3 : g_Config.m_BcFastInputMode;
 
 				Expand.HSplitTop(LineSize, &Button, &Expand);
 				{
@@ -4761,11 +4761,11 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 					BestButton.HMargin(2.0f, &BestButton);
 					SaikoPlusButton.HMargin(2.0f, &SaikoPlusButton);
 
-					if(DoButton_Menu(&s_FastInputModeFast, BCLocalize("Fast input"), g_Config.m_BcFastInputMode == 0, &FastButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
+					if(DoButton_Menu(&s_FastInputModeFast, BCLocalize("Fast input"), UiFastInputMode == 0, &FastButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
 						g_Config.m_BcFastInputMode = 0;
-					if(DoButton_Menu(&s_FastInputModeBest, BCLocalize("Best input"), g_Config.m_BcFastInputMode == 3, &BestButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
+					if(DoButton_Menu(&s_FastInputModeBest, BCLocalize("Best input"), UiFastInputMode == 3, &BestButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
 						g_Config.m_BcFastInputMode = 3;
-					if(DoButton_Menu(&s_FastInputModeSaikoPlus, "Saiko+", g_Config.m_BcFastInputMode == 4, &SaikoPlusButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
+					if(DoButton_Menu(&s_FastInputModeSaikoPlus, "Saiko+", UiFastInputMode == 4, &SaikoPlusButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
 						g_Config.m_BcFastInputMode = 4;
 				}
 
@@ -4826,7 +4826,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 					Value = (int)(Min + NewRel * (Max - Min) + 0.5f);
 					*pAmountValue = std::clamp(Value, Min, Max);
 				}
-				else
+				else if(g_Config.m_BcFastInputMode == 2 || g_Config.m_BcFastInputMode == 3)
 				{
 					const CGameClient::SBestInputSettings BestInputSettings = GameClient()->BestInputSettings();
 					Button.HMargin(2.0f, &Button);
@@ -4960,9 +4960,9 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
 				if(g_Config.m_BcFastInputMode == 0)
 					DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_TcFastInputOthers, BCLocalize("Fast Input others"), &g_Config.m_TcFastInputOthers, &Expand, LineSize);
-				else if(g_Config.m_BcFastInputMode == 3)
+				else if(g_Config.m_BcFastInputMode == 2 || g_Config.m_BcFastInputMode == 3)
 					DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcBestInputOthers, BCLocalize("Best input others"), &g_Config.m_BcBestInputOthers, &Expand, LineSize);
-				else
+				else if(g_Config.m_BcFastInputMode == 4)
 					DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcSaikoPlusOthers, "Saiko+ others", &g_Config.m_BcSaikoPlusOthers, &Expand, LineSize);
 			}
 

@@ -65,6 +65,13 @@ float EffectiveFastInputOffsetTicks(const CGameClient *pGameClient)
 		return g_Config.m_TcFastInputAmount / 20.0f;
 	}
 
+	if(BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 1)
+	{
+		if(g_Config.m_BcFastInputDeltaInput <= 0)
+			return 0.0f;
+		return g_Config.m_BcFastInputDeltaInput / 100.0f;
+	}
+
 	if(BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 4)
 	{
 		if(g_Config.m_BcSaikoPlusAmount <= 0)
@@ -104,6 +111,8 @@ bool EffectiveFastInputOthers()
 	const int FastInputMode = BcFastInputNormalizedMode(g_Config.m_BcFastInputMode);
 	if(FastInputMode == 0)
 		return g_Config.m_TcFastInputOthers != 0;
+	if(FastInputMode == 1)
+		return g_Config.m_BcDeltaInputOthers != 0;
 	if(FastInputMode == 4)
 		return g_Config.m_BcSaikoPlusOthers != 0;
 	return g_Config.m_BcBestInputOthers != 0;

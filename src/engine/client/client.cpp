@@ -3185,6 +3185,7 @@ void CClient::Update()
 				const bool HasFastInput =
 					g_Config.m_TcFastInput &&
 					((BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 0 && g_Config.m_TcFastInputAmount > 0) ||
+						(BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 1 && g_Config.m_BcFastInputDeltaInput > 0) ||
 						(BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 3 && g_Config.m_BcBestInputOffset > 0) ||
 						(BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 4 && g_Config.m_BcSaikoPlusAmount > 0));
 				if(HasFastInput && BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 4)
@@ -5952,6 +5953,11 @@ int CClient::PredictionMargin() const
 		if(FastInputMode == 0)
 		{
 			FastInputMargin = std::max(0, g_Config.m_TcFastInputAmount);
+		}
+		else if(FastInputMode == 1)
+		{
+			const int DeltaInputAmount = std::max(0, g_Config.m_BcFastInputDeltaInput);
+			FastInputMargin = (DeltaInputAmount + 2) / 5;
 		}
 		else if(FastInputMode == 4)
 		{

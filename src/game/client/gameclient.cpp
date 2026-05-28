@@ -189,6 +189,17 @@ namespace
 		return Offset;
 	}
 
+	float EffectiveFastInputOffsetTicksDeltaInputMode()
+	{
+		if(!g_Config.m_TcFastInput ||
+			BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) != 1 ||
+			IsGameplayInputComponentDisabled())
+			return 0.0f;
+		if(g_Config.m_BcFastInputDeltaInput <= 0)
+			return 0.0f;
+		return g_Config.m_BcFastInputDeltaInput / 100.0f;
+	}
+
 	float EffectiveFastInputOffsetTicksSaikoPlusMode()
 	{
 		if(!g_Config.m_TcFastInput ||
@@ -205,6 +216,8 @@ namespace
 		const int FastInputMode = BcFastInputNormalizedMode(g_Config.m_BcFastInputMode);
 		if(FastInputMode == 0)
 			return EffectiveFastInputOffsetTicksFastMode();
+		if(FastInputMode == 1)
+			return EffectiveFastInputOffsetTicksDeltaInputMode();
 		if(FastInputMode == 4)
 			return EffectiveFastInputOffsetTicksSaikoPlusMode();
 		return EffectiveFastInputOffsetTicksBestMode(pGameClient);
@@ -286,6 +299,13 @@ namespace
 		       !IsGameplayInputComponentDisabled();
 	}
 
+	bool EffectiveDeltaInputOthers()
+	{
+		return BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 1 &&
+		       g_Config.m_BcDeltaInputOthers != 0 &&
+		       !IsGameplayInputComponentDisabled();
+	}
+
 	bool EffectiveSaikoPlusOthers()
 	{
 		return BcFastInputNormalizedMode(g_Config.m_BcFastInputMode) == 4 &&
@@ -295,12 +315,12 @@ namespace
 
 	bool EffectiveAnyFastInputOthers()
 	{
-		return EffectiveFastInputOthers() || EffectiveBestInputOthers() || EffectiveSaikoPlusOthers();
+		return EffectiveFastInputOthers() || EffectiveDeltaInputOthers() || EffectiveBestInputOthers() || EffectiveSaikoPlusOthers();
 	}
 
 	bool EffectiveImmediateFastInputOthers()
 	{
-		return EffectiveBestInputOthers() || EffectiveSaikoPlusOthers();
+		return EffectiveDeltaInputOthers() || EffectiveBestInputOthers() || EffectiveSaikoPlusOthers();
 	}
 } // namespace
 
