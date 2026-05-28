@@ -81,6 +81,14 @@ struct VersionPacket {
 }
 
 #[derive(Clone)]
+struct PendingVersionEntry {
+    remote_addr: SocketAddr,
+    server_address: String,
+    player_name: String,
+    client_version: Option<String>,
+}
+
+#[derive(Clone)]
 struct PresenceEntry {
     identity: IdentityKey,
     server_address: String,
@@ -130,6 +138,7 @@ impl TokenBucket {
 
 struct ServerState {
     entries: HashMap<IdentityKey, PresenceEntry>,
+    pending_versions: HashMap<IdentityKey, PendingVersionEntry>,
     recent_nonces: HashMap<([u8; 16], [u8; 16]), Instant>,
     last_presence_by_identity: HashMap<IdentityKey, Instant>,
     last_dev_auth_by_identity: HashMap<IdentityKey, Instant>,
@@ -144,6 +153,7 @@ impl ServerState {
     fn new(json_path: PathBuf) -> Self {
         Self {
             entries: HashMap::new(),
+            pending_versions: HashMap::new(),
             recent_nonces: HashMap::new(),
             last_presence_by_identity: HashMap::new(),
             last_dev_auth_by_identity: HashMap::new(),
@@ -240,7 +250,17 @@ impl ServerState {
         let old_server = old.as_ref().map(|entry| entry.server_address.clone());
         let old_name = old.as_ref().map(|entry| entry.player_name.clone());
         let old_developer = old.as_ref().map_or(false, |entry| entry.developer);
-        let old_client_version = old.as_ref().and_then(|entry| entry.client_version.clone());
+        let pending_client_version = self.pending_versions.get(&identity).and_then(|entry| {
+            (entry.remote_addr == from
+                && entry.server_address == packet.server_address
+                && entry.player_name == packet.player_name)
+                .then(|| entry.client_version.clone())
+                .flatten()
+        });
+        let old_client_version = old
+            .as_ref()
+            .and_then(|entry| entry.client_version.clone())
+            .or(pending_client_version);
         let entry = PresenceEntry {
             identity,
             server_address: packet.server_address,
@@ -262,15 +282,20 @@ impl ServerState {
         }
 
         self.entries.insert(identity, entry.clone());
+        self.pending_versions.remove(&identity);
 
         if treat_as_join || server_changed {
             out.push(self.peer_list_for(&entry));
             out.push(self.peer_dev_list_for(&entry));
+            out.extend(self.peer_version_states_for(&entry));
         }
         if treat_as_join || server_changed || name_changed {
             out.extend(self.broadcast_peer_state(&entry, PACKET_PEER_STATE, Some(entry.remote_addr), Some(identity)));
             if entry.developer {
                 out.extend(self.broadcast_peer_dev_state(&entry, true, Some(entry.remote_addr), Some(identity)));
+            }
+            if entry.client_version.is_some() {
+                out.extend(self.broadcast_peer_version_state(&entry, Some(entry.remote_addr), Some(identity)));
             }
         }
 
@@ -284,6 +309,7 @@ impl ServerState {
         self.last_presence_by_identity.remove(&key);
         self.last_dev_auth_by_identity.remove(&key);
         self.last_version_by_identity.remove(&key);
+        self.pending_versions.remove(&key);
         let out = self.broadcast_peer_state(&entry, PACKET_PEER_REMOVE, None, Some(key));
         (true, out)
     }
@@ -337,7 +363,7 @@ impl ServerState {
         packet: VersionPacket,
         from: SocketAddr,
         now: Instant,
-    ) -> bool {
+    ) -> (bool, Vec<OutPacket>) {
         let key = IdentityKey {
             instance_id: packet.instance_id,
             client_id: packet.client_id,
@@ -347,27 +373,48 @@ impl ServerState {
             .get(&key)
             .map_or(false, |last| now.saturating_duration_since(*last) < MIN_VERSION_INTERVAL)
         {
-            return false;
+            return (false, Vec::new());
         }
         self.last_version_by_identity.insert(key, now);
 
+        let client_version = sanitize_client_version(&packet.client_version);
+
         let Some(entry) = self.entries.get_mut(&key) else {
-            return false;
+            self.pending_versions.insert(
+                key,
+                PendingVersionEntry {
+                    remote_addr: from,
+                    server_address: packet.server_address,
+                    player_name: packet.player_name,
+                    client_version,
+                },
+            );
+            return (false, Vec::new());
         };
         if entry.server_address != packet.server_address
             || entry.player_name != packet.player_name
             || entry.remote_addr != from
         {
-            return false;
+            self.pending_versions.insert(
+                key,
+                PendingVersionEntry {
+                    remote_addr: from,
+                    server_address: packet.server_address,
+                    player_name: packet.player_name,
+                    client_version,
+                },
+            );
+            return (false, Vec::new());
         }
 
-        let client_version = sanitize_client_version(&packet.client_version);
         if entry.client_version == client_version {
-            return false;
+            return (false, Vec::new());
         }
 
         entry.client_version = client_version;
-        true
+        let entry = entry.clone();
+        let out = self.broadcast_peer_version_state(&entry, None, Some(key));
+        (true, out)
     }
 
     fn cleanup(&mut self, now: Instant) -> (bool, Vec<OutPacket>) {
@@ -383,6 +430,7 @@ impl ServerState {
             self.last_presence_by_identity.remove(key);
             self.last_dev_auth_by_identity.remove(key);
             self.last_version_by_identity.remove(key);
+            self.pending_versions.remove(key);
         }
         self.cleanup_nonces(now);
         self.rate_by_ip
@@ -418,6 +466,19 @@ impl ServerState {
         self_key: Option<IdentityKey>,
     ) -> Vec<OutPacket> {
         let data = write_peer_dev_state(&entry.server_address, &entry.player_name, entry.identity.client_id, developer);
+        self.broadcast_to_server(entry, except, self_key, data)
+    }
+
+    fn broadcast_peer_version_state(
+        &self,
+        entry: &PresenceEntry,
+        except: Option<SocketAddr>,
+        self_key: Option<IdentityKey>,
+    ) -> Vec<OutPacket> {
+        let Some(client_version) = entry.client_version.as_deref() else {
+            return Vec::new();
+        };
+        let data = write_peer_version_state(&entry.server_address, &entry.player_name, entry.identity.client_id, client_version);
         self.broadcast_to_server(entry, except, self_key, data)
     }
 
@@ -483,6 +544,29 @@ impl ServerState {
             to: recipient.remote_addr,
             data: write_peer_list(PACKET_PEER_DEV_LIST, &recipient.server_address, &client_ids),
         }
+    }
+
+    fn peer_version_states_for(&self, recipient: &PresenceEntry) -> Vec<OutPacket> {
+        let mut out = Vec::new();
+        for entry in self.entries.values() {
+            if entry.identity == recipient.identity
+                || entry.server_address != recipient.server_address
+                || entry.identity.instance_id == recipient.identity.instance_id
+            {
+                continue;
+            }
+            let Some(client_version) = entry.client_version.as_deref() else {
+                continue;
+            };
+            out.push(OutPacket {
+                to: recipient.remote_addr,
+                data: write_peer_version_state(&entry.server_address, &entry.player_name, entry.identity.client_id, client_version),
+            });
+            if out.len() >= MAX_BROADCAST_PEERS {
+                break;
+            }
+        }
+        out
     }
 
     fn snapshot_json(&self) -> String {
@@ -552,6 +636,7 @@ const PACKET_DEV_AUTH: u8 = 7;
 const PACKET_PEER_DEV_STATE: u8 = 8;
 const PACKET_PEER_DEV_LIST: u8 = 9;
 const PACKET_VERSION_ANNOUNCE: u8 = 11;
+const PACKET_PEER_VERSION_STATE: u8 = 12;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -745,10 +830,11 @@ fn handle_udp_packet(
             return Vec::new();
         }
         let _timestamp = packet.timestamp;
-        if state.handle_version(packet, from, now) {
+        let (dirty, out) = state.handle_version(packet, from, now);
+        if dirty {
             let _ = state.write_snapshot();
         }
-        return Vec::new();
+        return out;
     }
 
     Vec::new()
@@ -1031,6 +1117,12 @@ fn write_peer_dev_state(server_address: &str, player_name: &str, client_id: i16,
     out
 }
 
+fn write_peer_version_state(server_address: &str, player_name: &str, client_id: i16, client_version: &str) -> Vec<u8> {
+    let mut out = write_peer_state(PACKET_PEER_VERSION_STATE, server_address, player_name, client_id);
+    write_string(&mut out, client_version);
+    out
+}
+
 fn write_peer_list(packet_type: u8, server_address: &str, client_ids: &[i16]) -> Vec<u8> {
     let mut out = Vec::with_capacity(128);
     write_header(&mut out, packet_type);
@@ -1238,5 +1330,46 @@ mod tests {
         assert_eq!(parsed.client_id, 4);
         assert_eq!(parsed.player_name, "dev");
         assert_eq!(parsed.client_version, "1.7.1");
+    }
+
+    #[test]
+    fn version_arriving_before_join_is_preserved() {
+        let now = Instant::now();
+        let mut state = ServerState::new(PathBuf::from("/tmp/clientindicator-test.json"));
+
+        let version_dirty = state.handle_version(
+            VersionPacket {
+                instance_id: [1; 16],
+                nonce: [2; 16],
+                timestamp: 1,
+                server_address: "127.0.0.1:8303".to_string(),
+                player_name: "dev".to_string(),
+                client_id: 4,
+                client_version: "1.7.1".to_string(),
+            },
+            "127.0.0.1:12345".parse().unwrap(),
+            now,
+        );
+        assert!(!version_dirty.0);
+
+        let (dirty, _out) = state.handle_presence(
+            PresencePacket {
+                packet_type: PACKET_JOIN,
+                instance_id: [1; 16],
+                nonce: [3; 16],
+                timestamp: 2,
+                server_address: "127.0.0.1:8303".to_string(),
+                player_name: "dev".to_string(),
+                client_id: 4,
+            },
+            "127.0.0.1:12345".parse().unwrap(),
+            now,
+        );
+        assert!(dirty);
+        let entry = state.entries.get(&IdentityKey {
+            instance_id: [1; 16],
+            client_id: 4,
+        });
+        assert_eq!(entry.and_then(|e| e.client_version.as_deref()), Some("1.7.1"));
     }
 }

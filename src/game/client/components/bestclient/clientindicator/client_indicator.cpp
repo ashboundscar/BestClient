@@ -98,6 +98,8 @@ namespace
 			return "dev_auth_result";
 		case BestClientIndicator::PACKET_VERSION_ANNOUNCE:
 			return "version_announce";
+		case BestClientIndicator::PACKET_PEER_VERSION_STATE:
+			return "peer_version_state";
 		default:
 			return "unknown";
 		}
@@ -272,6 +274,12 @@ bool CClientIndicator::GetPlayerVersionLabel(int ClientId, char *pVersion, int V
 
 	char aCurrentServerAddress[NETADDR_MAXSTRSIZE];
 	net_addr_str(&Client()->ServerAddress(), aCurrentServerAddress, sizeof(aCurrentServerAddress), true);
+	const auto It = m_ClientVersions.find(ClientId);
+	if(It != m_ClientVersions.end() && !It->second.empty())
+	{
+		str_copy(pVersion, It->second.c_str(), VersionSize);
+		return true;
+	}
 	if(m_BrowserCache.GetPlayerVersion(aCurrentServerAddress, pPlayerName, pVersion, VersionSize))
 		return true;
 
@@ -794,6 +802,7 @@ void CClientIndicator::ProcessIncomingPackets(bool Force)
 			{
 				m_PresenceCache.SetPresent(PeerState.m_ClientId, false);
 				m_DeveloperClientIds.erase(PeerState.m_ClientId);
+				m_ClientVersions.erase(PeerState.m_ClientId);
 				SchedulePresenceBrowserRefresh();
 			}
 			continue;
@@ -829,6 +838,15 @@ void CClientIndicator::ProcessIncomingPackets(bool Force)
 			m_DeveloperClientIds.clear();
 			for(const int ClientId : PeerList.m_vClientIds)
 				m_DeveloperClientIds.insert(ClientId);
+			continue;
+		}
+
+		BestClientIndicator::CPeerVersionState PeerVersionState;
+		if(BestClientIndicator::ReadPeerVersionStatePacket(pRawData, DataSize, PeerVersionState))
+		{
+			DebugLogF("received peer_version_state client_id=%d version='%s' player='%s' server=%s", PeerVersionState.m_ClientId, PeerVersionState.m_ClientVersion.c_str(), PeerVersionState.m_PlayerName.c_str(), PeerVersionState.m_ServerAddress.c_str());
+			if(PeerVersionState.m_ServerAddress == m_PresenceCache.ServerAddress())
+				m_ClientVersions[PeerVersionState.m_ClientId] = PeerVersionState.m_ClientVersion;
 			continue;
 		}
 
@@ -954,6 +972,7 @@ void CClientIndicator::UpdatePresence()
 		DebugLogF("presence server changed to game server %s", pCurrentGameServer);
 		m_RegisteredClientIds.clear();
 		m_DeveloperClientIds.clear();
+		m_ClientVersions.clear();
 		m_LastHeartbeatTick = 0;
 		SchedulePresenceBrowserRefresh();
 	}
@@ -1076,6 +1095,7 @@ void CClientIndicator::ResetPresenceState()
 	m_WasPresenceEnabled = false;
 	m_RegisteredClientIds.clear();
 	m_DeveloperClientIds.clear();
+	m_ClientVersions.clear();
 	m_PresenceCache.Clear();
 	m_aLastGameServerAddr[0] = '\0';
 	m_aLastBlockedGameServerAddr[0] = '\0';

@@ -15,6 +15,7 @@
 #include <engine/shared/uuid_manager.h>
 
 #include <memory>
+#include <unordered_map>
 #include <string>
 #include <unordered_set>
 
@@ -62,6 +63,7 @@ private:
 	CUuid m_ClientInstanceId = UUID_ZEROED;
 	std::unordered_set<int> m_RegisteredClientIds;
 	std::unordered_set<int> m_DeveloperClientIds;
+	std::unordered_map<int, std::string> m_ClientVersions;
 	CPresenceCache m_PresenceCache;
 
 	std::shared_ptr<CHttpRequest> m_pBrowserTask = nullptr;

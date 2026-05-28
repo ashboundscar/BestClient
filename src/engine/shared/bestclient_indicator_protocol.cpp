@@ -429,6 +429,24 @@ bool ReadPeerDevListPacket(const uint8_t *pData, int DataSize, CPeerList &Out)
 	return Offset == DataSize;
 }
 
+bool ReadPeerVersionStatePacket(const uint8_t *pData, int DataSize, CPeerVersionState &Out)
+{
+	int Offset = 0;
+	EPacketType Type;
+	if(!ReadHeader(pData, DataSize, Type, Offset) || Type != PACKET_PEER_VERSION_STATE)
+		return false;
+	int16_t ClientId = -1;
+	if(!ReadString(pData, DataSize, Offset, Out.m_ServerAddress) ||
+		!ReadString(pData, DataSize, Offset, Out.m_PlayerName) ||
+		!ReadS16(pData, DataSize, Offset, ClientId) ||
+		!ReadString(pData, DataSize, Offset, Out.m_ClientVersion))
+	{
+		return false;
+	}
+	Out.m_ClientId = ClientId;
+	return Offset == DataSize;
+}
+
 bool ReadDevAuthResultPacket(const uint8_t *pData, int DataSize, CDevAuthResult &Out)
 {
 	int Offset = 0;
@@ -485,6 +503,16 @@ void WritePeerDevListPacket(std::vector<uint8_t> &vOut, const char *pServerAddre
 	WriteU16(vOut, (uint16_t)vClientIds.size());
 	for(const int ClientId : vClientIds)
 		WriteS16(vOut, ClientId);
+}
+
+void WritePeerVersionStatePacket(std::vector<uint8_t> &vOut, const char *pServerAddress, const char *pPlayerName, int ClientId, const char *pClientVersion)
+{
+	vOut.clear();
+	WriteHeader(vOut, PACKET_PEER_VERSION_STATE);
+	WriteString(vOut, pServerAddress);
+	WriteString(vOut, pPlayerName);
+	WriteS16(vOut, ClientId);
+	WriteString(vOut, pClientVersion);
 }
 
 void WriteDevAuthResultPacket(std::vector<uint8_t> &vOut, const char *pServerAddress, int ClientId, bool Success)

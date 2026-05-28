@@ -32,6 +32,7 @@ enum EPacketType : uint8_t
 	PACKET_PEER_DEV_LIST = 9,
 	PACKET_DEV_AUTH_RESULT = 10,
 	PACKET_VERSION_ANNOUNCE = 11,
+	PACKET_PEER_VERSION_STATE = 12,
 };
 
 struct CClientPresencePacket
@@ -64,6 +65,14 @@ struct CDevAuthResult
 	std::string m_ServerAddress;
 	int m_ClientId = -1;
 	bool m_Success = false;
+};
+
+struct CPeerVersionState
+{
+	std::string m_ServerAddress;
+	std::string m_PlayerName;
+	int m_ClientId = -1;
+	std::string m_ClientVersion;
 };
 
 struct CClientVersionPacket
@@ -112,12 +121,14 @@ bool ReadPeerRemovePacket(const uint8_t *pData, int DataSize, CPeerState &Out);
 bool ReadPeerListPacket(const uint8_t *pData, int DataSize, CPeerList &Out);
 bool ReadPeerDevStatePacket(const uint8_t *pData, int DataSize, CPeerState &Out);
 bool ReadPeerDevListPacket(const uint8_t *pData, int DataSize, CPeerList &Out);
+bool ReadPeerVersionStatePacket(const uint8_t *pData, int DataSize, CPeerVersionState &Out);
 bool ReadDevAuthResultPacket(const uint8_t *pData, int DataSize, CDevAuthResult &Out);
 
 void WritePeerStatePacket(std::vector<uint8_t> &vOut, EPacketType Type, const char *pServerAddress, const char *pPlayerName, int ClientId);
 void WritePeerListPacket(std::vector<uint8_t> &vOut, const char *pServerAddress, const std::vector<int> &vClientIds);
 void WritePeerDevStatePacket(std::vector<uint8_t> &vOut, const char *pServerAddress, const char *pPlayerName, int ClientId, bool Developer);
 void WritePeerDevListPacket(std::vector<uint8_t> &vOut, const char *pServerAddress, const std::vector<int> &vClientIds);
+void WritePeerVersionStatePacket(std::vector<uint8_t> &vOut, const char *pServerAddress, const char *pPlayerName, int ClientId, const char *pClientVersion);
 void WriteDevAuthResultPacket(std::vector<uint8_t> &vOut, const char *pServerAddress, int ClientId, bool Success);
 }
 
