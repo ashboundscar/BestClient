@@ -64,35 +64,6 @@ static bool IsBestClientTabFlagSet(int32_t Flags, int Tab)
 	return (Flags & (1 << Tab)) != 0;
 }
 
-static void RenderBestClientHeadlineBadge(CUi *pUi, IGraphics *pGraphics, ITextRender *pTextRender, const CUIRect &LabelRect, const char *pHeadline, const char *pBadge, float FontSize)
-{
-	pUi->DoLabel(&LabelRect, pHeadline, FontSize, TEXTALIGN_ML);
-
-	const float BadgeFontSize = maximum(8.0f, FontSize * 0.5f);
-	const float BadgePaddingX = 6.0f;
-	const float BadgeHeight = maximum(12.0f, FontSize * 0.95f);
-	const float HeadlineWidth = pTextRender->TextWidth(FontSize, pHeadline, -1, -1.0f);
-	const float BadgeWidth = pTextRender->TextWidth(BadgeFontSize, pBadge, -1, -1.0f) + BadgePaddingX * 2.0f;
-
-	CUIRect BadgeRect = {
-		LabelRect.x + HeadlineWidth + 8.0f,
-		LabelRect.y + (LabelRect.h - BadgeHeight) * 0.5f,
-		BadgeWidth,
-		BadgeHeight,
-	};
-	pGraphics->DrawRect4(
-		BadgeRect.x, BadgeRect.y, BadgeRect.w, BadgeRect.h,
-		ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-		ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-		ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-		ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-		IGraphics::CORNER_ALL, 5.0f);
-
-	pTextRender->TextColor(ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f));
-	pUi->DoLabel(&BadgeRect, pBadge, BadgeFontSize, TEXTALIGN_MC);
-	pTextRender->TextColor(pTextRender->DefaultTextColor());
-}
-
 [[maybe_unused]] static void RenderSettingsBestClientReShadeUnsupported(CUi *pUi, CUIRect MainView)
 {
 	CUIRect Content, Line;
@@ -3498,14 +3469,31 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
+			const float ResetButtonWidth = LineSize + 8.0f;
+			const float BadgeWidth = 56.0f;
+			const float HeaderSpacing = 4.0f;
+			CUIRect TitleLabel, HeaderRight, BadgeSlot, ResetButton, ResetHitbox, Badge;
+			Label.VSplitRight(BadgeWidth + HeaderSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
+			HeaderRight.VSplitLeft(BadgeWidth, &BadgeSlot, &HeaderRight);
+			HeaderRight.VSplitLeft(HeaderSpacing, nullptr, &HeaderRight);
+			ResetButton = HeaderRight;
 			ResetHitbox = ResetButton;
 			const bool EyeComfortResetClicked = Ui()->DoButton_FontIcon(&s_EyeComfortResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
 			GameClient()->m_Tooltips.DoToolTip(&s_EyeComfortResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
 			if(EyeComfortResetClicked)
 				g_Config.m_BcEyeComfortStrength = DefaultConfig::BcEyeComfortStrength;
-			RenderBestClientHeadlineBadge(Ui(), Graphics(), TextRender(), TitleLabel, BCLocalize("Eye Comfort"), "NEW", HeadlineFontSize);
+			Ui()->DoLabel(&TitleLabel, BCLocalize("Eye Comfort"), HeadlineFontSize, TEXTALIGN_ML);
+			BadgeSlot.HMargin(1.5f, &Badge);
+			Badge.x += 4.0f;
+			Badge.w -= 4.0f;
+			Graphics()->DrawRect4(
+				Badge.x, Badge.y, Badge.w, Badge.h,
+				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
+				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				IGraphics::CORNER_ALL, 5.0f);
+			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcEyeComfort, BCLocalize("Enable warm screen filter"), &g_Config.m_BcEyeComfort, &Content, LineSize);
