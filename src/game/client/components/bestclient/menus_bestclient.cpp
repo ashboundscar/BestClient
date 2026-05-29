@@ -4151,17 +4151,32 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 					VisualizerExpand.HSplitTop(MarginSmall, nullptr, &VisualizerExpand);
 					CUIRect SliderRow;
-					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerTextScale, &g_Config.m_BcMusicPlayerTextScale, &SliderRow, BCLocalize("Text scale"), 70, 150, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					// Align slider tracks with the dropdowns/buttons above (label takes a fixed 120px)
+					const auto DoMusicPlayerSlider = [&](int *pOption, const CUIRect *pRow, const char *pStr, int Min, int Max, const char *pSuffix) {
+						int Value = std::clamp(*pOption, Min, Max);
+						char aBuf[256];
+						str_format(aBuf, sizeof(aBuf), "%s: %d%s", pStr, Value, pSuffix);
+						CUIRect SliderLabel, ScrollBar;
+						pRow->VSplitLeft(120.0f, &SliderLabel, &ScrollBar);
+						Ui()->DoLabel(&SliderLabel, aBuf, SliderLabel.h * CUi::ms_FontmodHeight * 0.8f, TEXTALIGN_ML);
+						const float Rel = (Value - Min) / (float)(Max - Min);
+						const float NewRel = Ui()->DoScrollbarH(pOption, &ScrollBar, Rel);
+						const int NewValue = std::clamp((int)(Min + NewRel * (Max - Min) + 0.5f), Min, Max);
+						if(NewValue != *pOption)
+							*pOption = NewValue;
+					};
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSensitivity, &g_Config.m_BcMusicPlayerVisualizerSensitivity, &SliderRow, BCLocalize("Sensitivity"), 50, 300, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					DoMusicPlayerSlider(&g_Config.m_BcMusicPlayerTextScale, &SliderRow, BCLocalize("Text scale"), 70, 150, "%");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSmoothing, &g_Config.m_BcMusicPlayerVisualizerSmoothing, &SliderRow, BCLocalize("Smoothing"), 0, 100, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					DoMusicPlayerSlider(&g_Config.m_BcMusicPlayerVisualizerSensitivity, &SliderRow, BCLocalize("Sensitivity"), 50, 300, "%");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerColumns, &g_Config.m_BcMusicPlayerVisualizerColumns, &SliderRow, BCLocalize("Columns"), 5, 10, &CUi::ms_LinearScrollbarScale, 0u);
+					DoMusicPlayerSlider(&g_Config.m_BcMusicPlayerVisualizerSmoothing, &SliderRow, BCLocalize("Smoothing"), 0, 100, "%");
+
+					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
+					DoMusicPlayerSlider(&g_Config.m_BcMusicPlayerVisualizerColumns, &SliderRow, BCLocalize("Columns"), 5, 10, "");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
 					CUIRect SliderLabel, SliderButton;
