@@ -1380,10 +1380,9 @@ namespace
 		return 1.0f;
 	}
 
-	static int MusicPlayerVisualizerColumns(bool MiniMode)
+	static int MusicPlayerVisualizerColumns()
 	{
-		const int Columns = std::clamp(g_Config.m_BcMusicPlayerVisualizerColumns, 2, MUSIC_PLAYER_MAX_VISUALIZER_BARS);
-		return MiniMode ? minimum(Columns, 6) : Columns;
+		return std::clamp(g_Config.m_BcMusicPlayerVisualizerColumns, 5, 10);
 	}
 
 	static float MusicPlayerVisualizerInnerPadX(bool MiniMode, float Scale, float WidthScale)
@@ -1403,7 +1402,7 @@ namespace
 
 	static float MusicPlayerVisualizerWidth(bool MiniMode, float Scale, float WidthScale, float ExpandT)
 	{
-		const int NumBars = MusicPlayerVisualizerColumns(MiniMode);
+		const int NumBars = MusicPlayerVisualizerColumns();
 		const float InnerPadX = MusicPlayerVisualizerInnerPadX(MiniMode, Scale, WidthScale);
 		const float Gap = MusicPlayerVisualizerGap(MiniMode, Scale, WidthScale);
 		const float BarW = MusicPlayerVisualizerBarWidth(MiniMode, Scale, WidthScale);
@@ -2738,7 +2737,7 @@ public:
 		DebugLogRenderDecision("fallback_motion", Snapshot);
 		for(int i = 0; i < RequestedBars; ++i)
 		{
-			const float Target = VisualizerBarTargetLevel(Snapshot, TimeSeconds, TrackProgress, i, VISUALIZER_BARS);
+			const float Target = VisualizerBarTargetLevel(Snapshot, TimeSeconds, TrackProgress, i, RequestedBars);
 			const float Speed = Target > m_aVisualizerLevels[i] ? 11.0f : 6.0f;
 			m_aVisualizerLevels[i] = ApproachAnim(m_aVisualizerLevels[i], Target, Delta, Speed);
 		}
@@ -3111,7 +3110,7 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 	const float MiniTitleFont = 5.8f * LayoutScale * TextScale;
 	const float CompactTextSlotWidth = ComputeCompactTextSlotWidth(TextRender(), GameTimer, CompactTitleFont, LayoutScale, LayoutWidthScale);
 	const float MiniTextSlotWidth = ComputeMiniTextSlotWidth(TextRender(), Snapshot, GameTimer, MiniTitleFont, LayoutScale, LayoutWidthScale);
-	const int NumBars = MusicPlayerVisualizerColumns(MiniMode);
+	const int NumBars = MusicPlayerVisualizerColumns();
 	Graphics()->MapScreen(0.0f, 0.0f, Width, Height);
 
 	const bool BackgroundEnabled = Layout.m_BackgroundEnabled;
@@ -3182,6 +3181,7 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 	if(RenderMiniLayout)
 	{
 		const float MiniVisualPad = 1.05f * Scale * WidthScale;
+		const float MiniCoverPad = 0.95f * Scale * WidthScale;
 		const float MiniArtSize = RenderCover ? maximum(0.0f, View.h - 3.0f * Scale) : 0.0f;
 		ArtRect = {Content.x + (RenderCover ? 0.1f * Scale * WidthScale : 0.0f), View.y + (View.h - MiniArtSize) * 0.5f, MiniArtSize, MiniArtSize};
 		VisualRect = RenderVisualizer ?
@@ -3189,7 +3189,7 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 			CUIRect{View.x + View.w, View.y, 0.0f, 0.0f};
 		TextArea = Content;
 		if(RenderCover)
-			TextArea.x = ArtRect.x + ArtRect.w + 1.10f * Scale * WidthScale;
+			TextArea.x = ArtRect.x + ArtRect.w + MiniCoverPad;
 		TextArea.w = RenderVisualizer ? maximum(0.0f, VisualRect.x - MiniVisualPad - TextArea.x) : maximum(0.0f, Content.x + Content.w - TextArea.x);
 	}
 	else
@@ -3385,7 +3385,22 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 	const float TitleWidth = TextRender()->TextWidth(UiTitleFont, Title.c_str(), -1, -1.0f);
 	if(ShowGameTimer)
 	{
-		if(TitleWidth > UiTitleRect.w)
+		if(MiniMode)
+		{
+			if(TitleWidth > UiTitleRect.w)
+			{
+				CUIRect ClipRect = UiTitleRect;
+				Ui()->ClipEnable(&ClipRect);
+				const float CenteredX = ClipRect.x + (ClipRect.w - TitleWidth) * 0.5f;
+				TextRender()->Text(CenteredX, ClipRect.y + (ClipRect.h - UiTitleFont) * 0.5f, UiTitleFont, Title.c_str(), -1.0f);
+				Ui()->ClipDisable();
+			}
+			else
+			{
+				TextRender()->Text(UiTitleRect.x + (UiTitleRect.w - TitleWidth) * 0.5f, UiTitleRect.y + (UiTitleRect.h - UiTitleFont) * 0.5f, UiTitleFont, Title.c_str(), -1.0f);
+			}
+		}
+		else if(TitleWidth > UiTitleRect.w)
 		{
 			CUIRect ClipRect = UiTitleRect;
 			Ui()->ClipEnable(&ClipRect);

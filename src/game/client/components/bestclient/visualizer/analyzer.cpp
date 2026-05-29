@@ -29,6 +29,38 @@ static constexpr SCompactBarRange gs_aCompactBarRanges[5] = {
 	{15, 23, 0.96f},
 	{23, MAX_VISUALIZER_BANDS, 0.90f},
 };
+
+static float ComputeRenderBarValue(const SVisualizerFrame &Frame, float Start, float End, float Emphasis, int RequestedBarCount)
+{
+	const int IndexStart = std::clamp((int)floorf(Start), 0, MAX_VISUALIZER_BANDS - 1);
+	const int IndexEnd = std::clamp((int)ceilf(End), IndexStart + 1, MAX_VISUALIZER_BANDS);
+	float Sum = 0.0f;
+	float WeightSum = 0.0f;
+	float Peak = 0.0f;
+	const float RangeWidth = maximum(0.001f, End - Start);
+	for(int Band = IndexStart; Band < IndexEnd; ++Band)
+	{
+		const float SegmentStart = maximum(Start, (float)Band);
+		const float SegmentEnd = minimum(End, (float)(Band + 1));
+		const float Span = maximum(0.001f, SegmentEnd - SegmentStart);
+		const float LocalCenter = (SegmentStart + SegmentEnd) * 0.5f;
+		const float LocalT = std::clamp((LocalCenter - Start) / RangeWidth, 0.0f, 1.0f);
+		const float LocalWeight = 1.28f - 0.34f * LocalT;
+		const float BandT = Band / maximum(1.0f, (float)(MAX_VISUALIZER_BANDS - 1));
+		const float Focus = 1.24f - 0.28f * BandT;
+		const float Weight = Span * LocalWeight * Focus;
+		const float Value = Frame.m_aBands[Band];
+		Sum += Value * Weight;
+		WeightSum += Weight;
+		Peak = maximum(Peak, Value);
+	}
+
+	const float Average = WeightSum > 0.0f ? Sum / WeightSum : 0.0f;
+	const float CountBoost = 4.45f * powf(maximum(1.0f, RequestedBarCount / 5.0f), 0.18f);
+	float BarValue = (Average * 0.46f + Peak * 0.54f) * Emphasis * CountBoost;
+	BarValue = powf(std::clamp(BarValue, 0.0f, 1.0f), 0.92f);
+	return std::clamp(BarValue, 0.0f, 1.0f);
+}
 } // namespace
 
 const char *VisualizerBackendStatusName(EVisualizerBackendStatus Status)
@@ -350,23 +382,7 @@ void BuildRenderBars(const SVisualizerFrame &Frame, float *pOutBars, int Request
 		for(int Bar = 0; Bar < RequestedBarCount; ++Bar)
 		{
 			const SCompactBarRange &Range = gs_aCompactBarRanges[Bar];
-			float Sum = 0.0f;
-			float WeightSum = 0.0f;
-			float Peak = 0.0f;
-			const int Width = maximum(1, Range.m_End - Range.m_Start);
-			for(int Band = Range.m_Start; Band < Range.m_End; ++Band)
-			{
-				const float LocalT = Width > 1 ? (Band - Range.m_Start) / (float)(Width - 1) : 0.0f;
-				const float Weight = 1.28f - 0.34f * LocalT;
-				const float Value = Frame.m_aBands[Band];
-				Sum += Value * Weight;
-				WeightSum += Weight;
-				Peak = maximum(Peak, Value);
-			}
-			const float Average = WeightSum > 0.0f ? Sum / WeightSum : 0.0f;
-			float CompactValue = (Average * 0.46f + Peak * 0.54f) * Range.m_Emphasis * 4.45f;
-			CompactValue = std::pow(std::clamp(CompactValue, 0.0f, 1.0f), 0.92f);
-			pOutBars[Bar] = std::clamp(CompactValue, 0.0f, 1.0f);
+			pOutBars[Bar] = ComputeRenderBarValue(Frame, (float)Range.m_Start, (float)Range.m_End, Range.m_Emphasis, RequestedBarCount);
 		}
 		return;
 	}
@@ -375,21 +391,9 @@ void BuildRenderBars(const SVisualizerFrame &Frame, float *pOutBars, int Request
 	{
 		const float Start = (float)Bar * MAX_VISUALIZER_BANDS / RequestedBarCount;
 		const float End = (float)(Bar + 1) * MAX_VISUALIZER_BANDS / RequestedBarCount;
-		const int IndexStart = std::clamp((int)floorf(Start), 0, MAX_VISUALIZER_BANDS - 1);
-		const int IndexEnd = std::clamp((int)ceilf(End), IndexStart + 1, MAX_VISUALIZER_BANDS);
-		float Sum = 0.0f;
-		float WeightSum = 0.0f;
-		for(int Band = IndexStart; Band < IndexEnd; ++Band)
-		{
-			const float SegmentStart = maximum(Start, (float)Band);
-			const float SegmentEnd = minimum(End, (float)(Band + 1));
-			const float Span = maximum(0.001f, SegmentEnd - SegmentStart);
-			const float Focus = 0.85f + 0.45f * (1.0f - Band / maximum(1.0f, (float)(MAX_VISUALIZER_BANDS - 1)));
-			Sum += Frame.m_aBands[Band] * Span * Focus;
-			WeightSum += Span * Focus;
-		}
-		if(WeightSum > 0.0f)
-			pOutBars[Bar] = std::clamp(Sum / WeightSum, 0.0f, 1.0f);
+		const float BarT = RequestedBarCount > 1 ? Bar / (float)(RequestedBarCount - 1) : 0.0f;
+		const float Emphasis = 1.28f - 0.38f * BarT;
+		pOutBars[Bar] = ComputeRenderBarValue(Frame, Start, End, Emphasis, RequestedBarCount);
 	}
 }
 

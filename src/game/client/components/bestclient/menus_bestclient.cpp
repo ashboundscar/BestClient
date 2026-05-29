@@ -4161,7 +4161,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSmoothing, &g_Config.m_BcMusicPlayerVisualizerSmoothing, &SliderRow, BCLocalize("Smoothing"), 0, 100, &CUi::ms_LinearScrollbarScale, 0u, "%");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerColumns, &g_Config.m_BcMusicPlayerVisualizerColumns, &SliderRow, BCLocalize("Columns"), 2, 12, &CUi::ms_LinearScrollbarScale, 0u);
+					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerColumns, &g_Config.m_BcMusicPlayerVisualizerColumns, &SliderRow, BCLocalize("Columns"), 5, 10, &CUi::ms_LinearScrollbarScale, 0u);
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
 					CUIRect SliderLabel, SliderButton;
