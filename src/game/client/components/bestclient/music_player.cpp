@@ -1836,7 +1836,7 @@ namespace
 		return Rect;
 	}
 
-	static SMusicPlayerMetrics ComputeMusicPlayerMetrics(const HudLayout::SModuleLayout &Layout, float Width, float Height, float SizeT, float CompactTextSlotWidth, float MiniTextSlotWidth, bool MiniMode, bool ShowCover, float TextScale)
+	static SMusicPlayerMetrics ComputeMusicPlayerMetrics(const HudLayout::SModuleLayout &Layout, float Width, float Height, float SizeT, float CompactTextSlotWidth, float DisplayedTextSlotWidth, bool MiniMode, bool ShowCover, float TextScale)
 	{
 		SMusicPlayerMetrics Metrics;
 		Metrics.m_Scale = std::clamp(Layout.m_Scale / 100.0f, 0.25f, 3.0f);
@@ -1853,7 +1853,7 @@ namespace
 			Metrics.m_CompactH = maximum(10.8f * Metrics.m_Scale, TitleFont + PadY * 2.0f);
 			Metrics.m_ExpandedH = Metrics.m_CompactH;
 			const float ArtSize = ShowCover ? maximum(0.0f, Metrics.m_CompactH - PadY * 2.0f) : 0.0f;
-			const float DesiredWidth = PadX * 2.0f + MiniTextSlotWidth + VisualGap + VisualW + ArtSize + CoverGap;
+			const float DesiredWidth = PadX * 2.0f + DisplayedTextSlotWidth + VisualGap + VisualW + ArtSize + CoverGap;
 			Metrics.m_CompactW = minimum(Width, maximum(18.0f * Metrics.m_Scale * Metrics.m_WidthScale, DesiredWidth));
 			Metrics.m_ExpandedW = minimum(Width, maximum(AnchorBaseW, Metrics.m_CompactW));
 			Metrics.m_CompactRect = MakeMusicPlayerRect(Layout.m_X, Layout.m_Y, Metrics.m_ExpandedW, Width, Height, Metrics.m_CompactW, Metrics.m_CompactH);
@@ -1870,13 +1870,13 @@ namespace
 		const float CompactOuterPad = 2.5f * Metrics.m_Scale * Metrics.m_WidthScale;
 		const float CompactInnerGap = 1.15f * Metrics.m_Scale * Metrics.m_WidthScale;
 		const float CompactLeftSection = ShowCover ? CompactArtSize + CompactInnerGap : 0.0f;
-		Metrics.m_CompactW = CompactOuterPad * 2.0f + CompactLeftSection + CompactTextSlotWidth + CompactVisualW + CompactInnerGap;
+		Metrics.m_CompactW = CompactOuterPad * 2.0f + CompactLeftSection + DisplayedTextSlotWidth + CompactVisualW + CompactInnerGap;
 		const float ExpandedBaseW = 104.0f * Metrics.m_Scale * Metrics.m_WidthScale;
 		const float ExpandedArtSize = ShowCover ? minimum(Metrics.m_ExpandedH - 3.0f * Metrics.m_Scale, 11.8f * Metrics.m_Scale + 1.8f * Metrics.m_Scale) : 0.0f;
 		const float ExpandedTextLeftInset = 1.7f * Metrics.m_Scale * Metrics.m_WidthScale + ExpandedArtSize + (ShowCover ? (0.1f + 1.15f) * Metrics.m_Scale * Metrics.m_WidthScale : 0.0f);
 		const float ExpandedVisualW = MusicPlayerVisualizerWidth(false, Metrics.m_Scale, Metrics.m_WidthScale, 1.0f);
 		const float ExpandedTextRightInset = (1.95f + 1.15f) * Metrics.m_Scale * Metrics.m_WidthScale + ExpandedVisualW;
-		Metrics.m_ExpandedW = maximum(ExpandedBaseW, CompactTextSlotWidth + 2.0f * maximum(ExpandedTextLeftInset, ExpandedTextRightInset));
+		Metrics.m_ExpandedW = maximum(ExpandedBaseW, DisplayedTextSlotWidth + 2.0f * maximum(ExpandedTextLeftInset, ExpandedTextRightInset));
 		Metrics.m_CompactRect = MakeMusicPlayerRect(Layout.m_X, Layout.m_Y, Metrics.m_ExpandedW, Width, Height, Metrics.m_CompactW, Metrics.m_CompactH);
 		Metrics.m_ExpandedRect = MakeMusicPlayerRect(Layout.m_X, Layout.m_Y, Metrics.m_ExpandedW, Width, Height, Metrics.m_ExpandedW, Metrics.m_ExpandedH);
 		Metrics.m_ViewRect = MakeMusicPlayerRect(Layout.m_X, Layout.m_Y, Metrics.m_ExpandedW, Width, Height, mix(Metrics.m_CompactW, Metrics.m_ExpandedW, SizeT), mix(Metrics.m_CompactH, Metrics.m_ExpandedH, SizeT));
@@ -2803,7 +2803,8 @@ public:
 						 (pOwner->GameClient()->m_GameConsole.IsActive() || pOwner->GameClient()->m_Menus.IsActive());
 
 		const float ProbeT = MiniMode ? 0.0f : EaseInOutCubic(m_ExpandAnim);
-		const SMusicPlayerMetrics ProbeMetrics = ComputeMusicPlayerMetrics(Layout, Width, Height, ProbeT, CompactTextSlotWidth, MiniTextSlotWidth, MiniMode, ShowCover, TextScale);
+		const float ProbeTextSlotWidth = m_CompactTextSlotWidthAnim > 0.0f ? m_CompactTextSlotWidthAnim : (MiniMode ? MiniTextSlotWidth : CompactTextSlotWidth);
+		const SMusicPlayerMetrics ProbeMetrics = ComputeMusicPlayerMetrics(Layout, Width, Height, ProbeT, CompactTextSlotWidth, ProbeTextSlotWidth, MiniMode, ShowCover, TextScale);
 		const CUIRect UiView = HudToUiRect(ProbeMetrics.m_ViewRect, UiScreen, Width, Height);
 		const CUIRect UiExpandedRect = HudToUiRect(ProbeMetrics.m_ExpandedRect, UiScreen, Width, Height);
 		const float UiMargin = 2.5f * ProbeMetrics.m_Scale * UiScreen.h / Height;
