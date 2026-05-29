@@ -64,6 +64,15 @@ static bool IsBestClientTabFlagSet(int32_t Flags, int Tab)
 	return (Flags & (1 << Tab)) != 0;
 }
 
+static int MusicPlayerVisualizerRoundingPreset(int RoundingPercent)
+{
+	if(RoundingPercent < 100)
+		return 0;
+	if(RoundingPercent < 300)
+		return 1;
+	return 2;
+}
+
 [[maybe_unused]] static void RenderSettingsBestClientReShadeUnsupported(CUi *pUi, CUIRect MainView)
 {
 	CUIRect Content, Line;
@@ -4003,8 +4012,16 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			static CButtonContainer s_MusicPlayerResizeButton;
 			static CButtonContainer s_MusicPlayerResetButton;
 			const bool MusicPlayerEnabled = g_Config.m_BcMusicPlayer != 0;
+			if(MusicPlayerEnabled)
+			{
+				g_Config.m_BcMusicPlayerShowCover = 1;
+				g_Config.m_BcMusicPlayerVisualizer = 1;
+				g_Config.m_BcMusicPlayerAnimationMs = DefaultConfig::BcMusicPlayerAnimationMs;
+				g_Config.m_BcMusicPlayerVisualizerColumnWidth = DefaultConfig::BcMusicPlayerVisualizerColumnWidth;
+				g_Config.m_BcMusicPlayerVisualizerGap = DefaultConfig::BcMusicPlayerVisualizerGap;
+			}
 			const bool StaticColorOn = MusicPlayerEnabled && g_Config.m_BcMusicPlayerColorMode == 0;
-			const bool VisualizerOn = MusicPlayerEnabled && g_Config.m_BcMusicPlayerVisualizer != 0;
+			const bool VisualizerOn = MusicPlayerEnabled;
 			UpdateRevealPhase(s_MusicPlayerPhase, MusicPlayerEnabled);
 			if(BCUiAnimations::Enabled())
 			{
@@ -4019,8 +4036,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 			const float VisualizerSliderHeight = LineSize;
 			const float StaticColorTargetHeight = ColorPickerLineSize + ColorPickerSpacing;
-			const float VisualizerTargetHeight = LineSize * 7.0f;
-			const float ExtraTargetHeight = LineSize * 6.0f + MarginSmall + VisualizerTargetHeight * s_MusicPlayerVisualizerPhase + StaticColorTargetHeight * s_MusicPlayerStaticColorPhase;
+			const float VisualizerTargetHeight = LineSize * 6.0f + MarginSmall;
+			const float ExtraTargetHeight = LineSize * 2.0f + MarginSmall * 2.0f + VisualizerTargetHeight * s_MusicPlayerVisualizerPhase + StaticColorTargetHeight * s_MusicPlayerStaticColorPhase;
 			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_MusicPlayerPhase;
 			CUIRect Content, Label, Row, Visible;
 			BeginBlock(Column, ContentHeight, Content);
@@ -4107,21 +4124,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				g_Config.m_BcMusicPlayerSizeMode = std::clamp(g_Config.m_BcMusicPlayerSizeMode, 0, 1);
 				g_Config.m_BcMusicPlayerSizeMode = Ui()->DoDropDown(&ModeDropDown, g_Config.m_BcMusicPlayerSizeMode, apMusicPlayerSizeModes, (int)std::size(apMusicPlayerSizeModes), s_MusicPlayerSizeModeState);
 
-				DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMusicPlayerShowCover, BCLocalize("Show cover art"), &g_Config.m_BcMusicPlayerShowCover, &Expand, LineSize);
-
-				CUIRect SliderRow, SliderLabel, SliderButton;
-				Expand.HSplitTop(VisualizerSliderHeight, &SliderRow, &Expand);
-				SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-				Ui()->DoLabel(&SliderLabel, BCLocalize("Text scale"), 14.0f, TEXTALIGN_ML);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerTextScale, &g_Config.m_BcMusicPlayerTextScale, &SliderButton, "", 70, 150, &CUi::ms_LinearScrollbarScale, 0u, "%");
-
-				Expand.HSplitTop(VisualizerSliderHeight, &SliderRow, &Expand);
-				SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-				Ui()->DoLabel(&SliderLabel, BCLocalize("Animation duration"), 14.0f, TEXTALIGN_ML);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerAnimationMs, &g_Config.m_BcMusicPlayerAnimationMs, &SliderButton, "", 50, 1000, &CUi::ms_LinearScrollbarScale, 0u, " ms");
-
-				DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMusicPlayerVisualizer, BCLocalize("Enable visualizer"), &g_Config.m_BcMusicPlayerVisualizer, &Expand, LineSize);
-
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
 				const float VisualizerHeight = VisualizerTargetHeight * s_MusicPlayerVisualizerPhase;
 				if(VisualizerHeight > 0.0f)
 				{
@@ -4133,47 +4136,58 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 					CUIRect VisualizerExpand = {VisualizerVisible.x, VisualizerVisible.y, VisualizerVisible.w, VisualizerTargetHeight};
 					VisualizerExpand.HSplitTop(LineSize, &Row, &VisualizerExpand);
 					Row.VSplitLeft(120.0f, &ModeLabel, &ModeDropDown);
-					Ui()->DoLabel(&ModeLabel, BCLocalize("Visualizer mode"), 14.0f, TEXTALIGN_ML);
+					Ui()->DoLabel(&ModeLabel, BCLocalize("Mode"), 14.0f, TEXTALIGN_ML);
 
 					static CUi::SDropDownState s_MusicPlayerVisualizerModeState;
 					static CScrollRegion s_MusicPlayerVisualizerModeScrollRegion;
 					s_MusicPlayerVisualizerModeState.m_SelectionPopupContext.m_pScrollRegion = &s_MusicPlayerVisualizerModeScrollRegion;
-					const char *apMusicPlayerVisualizerModes[2] = {
+					const char *apMusicPlayerVisualizerModes[3] = {
 						BCLocalize("Bottom"),
 						BCLocalize("Center"),
+						BCLocalize("Up"),
 					};
-					g_Config.m_BcMusicPlayerVisualizerMode = std::clamp(g_Config.m_BcMusicPlayerVisualizerMode, 0, 1);
+					g_Config.m_BcMusicPlayerVisualizerMode = std::clamp(g_Config.m_BcMusicPlayerVisualizerMode, 0, 2);
 					g_Config.m_BcMusicPlayerVisualizerMode = Ui()->DoDropDown(&ModeDropDown, g_Config.m_BcMusicPlayerVisualizerMode, apMusicPlayerVisualizerModes, (int)std::size(apMusicPlayerVisualizerModes), s_MusicPlayerVisualizerModeState);
 
+					VisualizerExpand.HSplitTop(MarginSmall, nullptr, &VisualizerExpand);
+					CUIRect SliderRow;
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-					Ui()->DoLabel(&SliderLabel, BCLocalize("Visualizer sensitivity"), 14.0f, TEXTALIGN_ML);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSensitivity, &g_Config.m_BcMusicPlayerVisualizerSensitivity, &SliderButton, "", 50, 300, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerTextScale, &g_Config.m_BcMusicPlayerTextScale, &SliderRow, BCLocalize("Text scale"), 70, 150, &CUi::ms_LinearScrollbarScale, 0u, "%");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-					Ui()->DoLabel(&SliderLabel, BCLocalize("Visualizer smoothing"), 14.0f, TEXTALIGN_ML);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSmoothing, &g_Config.m_BcMusicPlayerVisualizerSmoothing, &SliderButton, "", 0, 100, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSensitivity, &g_Config.m_BcMusicPlayerVisualizerSensitivity, &SliderRow, BCLocalize("Sensitivity"), 50, 300, &CUi::ms_LinearScrollbarScale, 0u, "%");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-					Ui()->DoLabel(&SliderLabel, BCLocalize("Visualizer columns"), 14.0f, TEXTALIGN_ML);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerColumns, &g_Config.m_BcMusicPlayerVisualizerColumns, &SliderButton, "", 2, 12, &CUi::ms_LinearScrollbarScale, 0u);
+					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerSmoothing, &g_Config.m_BcMusicPlayerVisualizerSmoothing, &SliderRow, BCLocalize("Smoothing"), 0, 100, &CUi::ms_LinearScrollbarScale, 0u, "%");
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-					Ui()->DoLabel(&SliderLabel, BCLocalize("Visualizer column width"), 14.0f, TEXTALIGN_ML);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerColumnWidth, &g_Config.m_BcMusicPlayerVisualizerColumnWidth, &SliderButton, "", 50, 250, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerColumns, &g_Config.m_BcMusicPlayerVisualizerColumns, &SliderRow, BCLocalize("Columns"), 2, 12, &CUi::ms_LinearScrollbarScale, 0u);
 
 					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
-					SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
-					Ui()->DoLabel(&SliderLabel, BCLocalize("Visualizer gap"), 14.0f, TEXTALIGN_ML);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerGap, &g_Config.m_BcMusicPlayerVisualizerGap, &SliderButton, "", 0, 250, &CUi::ms_LinearScrollbarScale, 0u, "%");
-
-					VisualizerExpand.HSplitTop(VisualizerSliderHeight, &SliderRow, &VisualizerExpand);
+					CUIRect SliderLabel, SliderButton;
 					SliderRow.VSplitLeft(120.0f, &SliderLabel, &SliderButton);
 					Ui()->DoLabel(&SliderLabel, BCLocalize("Rounding"), 14.0f, TEXTALIGN_ML);
-					Ui()->DoScrollbarOption(&g_Config.m_BcMusicPlayerVisualizerRounding, &g_Config.m_BcMusicPlayerVisualizerRounding, &SliderButton, "", 0, 400, &CUi::ms_LinearScrollbarScale, 0u, "%");
+					static CButtonContainer s_MusicPlayerVisualizerRoundingCube;
+					static CButtonContainer s_MusicPlayerVisualizerRoundingSoft;
+					static CButtonContainer s_MusicPlayerVisualizerRoundingPill;
+					const int VisualizerRoundingPreset = MusicPlayerVisualizerRoundingPreset(g_Config.m_BcMusicPlayerVisualizerRounding);
+					CUIRect CubeButton, SoftButton, PillButton, Rest;
+					const float Spacing = 2.0f;
+					const float ButtonWidth = (SliderButton.w - Spacing * 2.0f) / 3.0f;
+					SliderButton.VSplitLeft(ButtonWidth, &CubeButton, &Rest);
+					Rest.VSplitLeft(Spacing, nullptr, &Rest);
+					Rest.VSplitLeft(ButtonWidth, &SoftButton, &Rest);
+					Rest.VSplitLeft(Spacing, nullptr, &Rest);
+					PillButton = Rest;
+					CubeButton.HMargin(2.0f, &CubeButton);
+					SoftButton.HMargin(2.0f, &SoftButton);
+					PillButton.HMargin(2.0f, &PillButton);
+					if(DoButton_Menu(&s_MusicPlayerVisualizerRoundingCube, BCLocalize("Cube"), VisualizerRoundingPreset == 0, &CubeButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
+						g_Config.m_BcMusicPlayerVisualizerRounding = 0;
+					if(DoButton_Menu(&s_MusicPlayerVisualizerRoundingSoft, BCLocalize("Soft"), VisualizerRoundingPreset == 1, &SoftButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
+						g_Config.m_BcMusicPlayerVisualizerRounding = 200;
+					if(DoButton_Menu(&s_MusicPlayerVisualizerRoundingPill, BCLocalize("Pill"), VisualizerRoundingPreset == 2, &PillButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
+						g_Config.m_BcMusicPlayerVisualizerRounding = 400;
 				}
 
 				const float StaticColorHeight = StaticColorTargetHeight * s_MusicPlayerStaticColorPhase;

@@ -1346,7 +1346,7 @@ namespace
 
 	static bool MusicPlayerCoverEnabled()
 	{
-		return g_Config.m_BcMusicPlayerShowCover != 0;
+		return true;
 	}
 
 	static float MusicPlayerTextScale()
@@ -1361,7 +1361,7 @@ namespace
 
 	static float MusicPlayerAnimationDurationSeconds()
 	{
-		return std::clamp(g_Config.m_BcMusicPlayerAnimationMs / 1000.0f, 0.05f, 1.0f);
+		return 0.18f;
 	}
 
 	static float MusicPlayerAnimationSpeed(float ReferenceSpeed)
@@ -1372,12 +1372,12 @@ namespace
 
 	static float MusicPlayerVisualizerColumnWidthScale()
 	{
-		return std::clamp(g_Config.m_BcMusicPlayerVisualizerColumnWidth / 100.0f, 0.5f, 2.5f);
+		return 1.0f;
 	}
 
 	static float MusicPlayerVisualizerGapScale()
 	{
-		return std::clamp(g_Config.m_BcMusicPlayerVisualizerGap / 100.0f, 0.0f, 2.5f);
+		return 1.0f;
 	}
 
 	static int MusicPlayerVisualizerColumns(bool MiniMode)
@@ -2564,7 +2564,7 @@ public:
 	{
 		Snapshot.m_HasVisualizer = false;
 		Snapshot.m_Visualizer = BestClientVisualizer::SVisualizerFrame();
-		if(g_Config.m_BcMusicPlayerVisualizer == 0 || !m_pVisualizer)
+		if(!m_pVisualizer)
 			return;
 
 		Snapshot.m_HasVisualizer = true;
@@ -2576,7 +2576,7 @@ public:
 	void RefreshVisualizerData()
 	{
 		m_VisualizerData = BestClientVisualizer::SVisualizerFrame();
-		if(g_Config.m_BcMusicPlayerVisualizer == 0 || !m_pVisualizer)
+		if(!m_pVisualizer)
 		{
 			m_VisualizerData.m_IsPassiveFallback = true;
 			m_VisualizerData.m_BackendStatus = BestClientVisualizer::EVisualizerBackendStatus::FALLBACK;
@@ -2679,14 +2679,6 @@ public:
 	{
 		(void)pOwner;
 		RequestedBars = std::clamp(RequestedBars, 2, VISUALIZER_BARS);
-
-		if(g_Config.m_BcMusicPlayerVisualizer == 0)
-		{
-			DebugLogRenderDecision("visualizer_disabled", Snapshot);
-			for(float &Level : m_aVisualizerLevels)
-				Level = ApproachAnim(Level, 0.0f, Delta, 12.0f);
-			return;
-		}
 
 		const float Smoothing = std::clamp(g_Config.m_BcMusicPlayerVisualizerSmoothing / 100.0f, 0.0f, 1.0f);
 		const float AttackSpeed = mix(34.0f, 16.0f, Smoothing);
@@ -3016,7 +3008,7 @@ void CMusicPlayer::OnUpdate()
 
 	EnsureImpl();
 	const int64_t Now = time_get();
-	if(g_Config.m_BcMusicPlayerVisualizer != 0 && m_pImpl->m_pVisualizer &&
+	if(m_pImpl->m_pVisualizer &&
 		(m_pImpl->m_LastVisualizerPollTick == 0 || Now - m_pImpl->m_LastVisualizerPollTick >= time_freq() / 60))
 	{
 		m_pImpl->RefreshVisualizerData();
@@ -3280,7 +3272,9 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 		const float BaseMidY = LaneY + LaneH * 0.5f;
 		const float RawLaneW = BarW * 0.72f;
 		const float SnappedLaneW = maximum(PixelWidth, roundf(RawLaneW / PixelWidth) * PixelWidth);
-			const bool CenterMode = MiniMode || g_Config.m_BcMusicPlayerVisualizerMode == 1;
+			const int VisualizerMode = std::clamp(g_Config.m_BcMusicPlayerVisualizerMode, 0, 2);
+			const bool CenterMode = MiniMode || VisualizerMode == 1;
+			const bool UpMode = !MiniMode && VisualizerMode == 2;
 		for(int i = 0; i < NumBars; ++i)
 		{
 			const float BarT = i / maximum(1.0f, (float)(NumBars - 1));
@@ -3307,7 +3301,7 @@ void CMusicPlayer::RenderMusicPlayer(bool ForcePreview)
 			const int SourceIndex = i;
 			const float HeightFactor = powf(std::clamp(m_pImpl->m_aVisualizerLevels[SourceIndex], 0.0f, 1.0f), 0.94f);
 			const float H = minimum(LaneH, maximum(0.0f, LaneH * HeightFactor));
-			const float Y = CenterMode ? (BaseMidY - H * 0.5f) : (LaneY + LaneH - H);
+			const float Y = CenterMode ? (BaseMidY - H * 0.5f) : (UpMode ? LaneY : (LaneY + LaneH - H));
 			const float LaneDrawX = SnappedLaneX;
 			const float LaneDrawW = SnappedLaneW;
 			const float LightT = 0.18f + (1.0f - Centered) * 0.52f;
