@@ -859,6 +859,36 @@ Minimal
 Full
 == Полный
 
+Size mode
+== Режим размера
+
+Show cover art
+== Показывать обложку
+
+Text scale
+== Масштаб текста
+
+Use Music Player color for HUD
+== Использовать цвет Music Player для HUD
+
+Music Player / HUD alpha
+== Альфа Music Player / HUD
+
+Animation duration
+== Длительность анимации
+
+Visualizer columns
+== Колонки визуализатора
+
+Visualizer column width
+== Ширина колонок визуализатора
+
+Visualizer gap
+== Отступ колонок визуализатора
+
+Mini
+== Мини
+
 Micro
 == Микро
 

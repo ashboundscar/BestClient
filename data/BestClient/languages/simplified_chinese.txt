@@ -1347,3 +1347,33 @@ PTT
 
 Voice chat
 == 
+
+Size mode
+== 大小模式
+
+Show cover art
+== 显示封面
+
+Text scale
+== 文本缩放
+
+Use Music Player color for HUD
+== 将 Music Player 颜色用于 HUD
+
+Music Player / HUD alpha
+== Music Player / HUD 透明度
+
+Animation duration
+== 动画时长
+
+Visualizer columns
+== 可视化柱数
+
+Visualizer column width
+== 可视化柱宽度
+
+Visualizer gap
+== 可视化柱间距
+
+Mini
+== 迷你

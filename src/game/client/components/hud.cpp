@@ -40,6 +40,21 @@
 
 namespace
 {
+	ColorRGBA ThemeHudColor(CGameClient *pGameClient, ColorRGBA Fallback, bool ForcePreview, float MixAmount)
+	{
+		ColorRGBA ThemeColor;
+		if(pGameClient != nullptr && pGameClient->m_MusicPlayer.GetHudThemeColor(ThemeColor, ForcePreview))
+		{
+			const float Blend = std::clamp(MixAmount, 0.0f, 1.0f);
+			return ColorRGBA(
+				mix(Fallback.r, ThemeColor.r, Blend),
+				mix(Fallback.g, ThemeColor.g, Blend),
+				mix(Fallback.b, ThemeColor.b, Blend),
+				mix(Fallback.a, ThemeColor.a, Blend));
+		}
+		return Fallback;
+	}
+
 	constexpr float KEYSTROKES_ATLAS_SCALE = 0.14f;
 	constexpr float KEYSTROKES_DEFAULT_GAP = 4.0f;
 	constexpr int KEYSTROKES_WHEEL_HIGHLIGHT_MS = 150;
@@ -1254,7 +1269,7 @@ void CHud::RenderScoreHud(bool ForcePreview)
 
 	auto DrawScoreBox = [&](float X, float Y, float W, float H, const ColorRGBA &Color) {
 		const int Corners = HudLayout::BackgroundCorners(IGraphics::CORNER_ALL, X, Y, W, H, m_Width, m_Height);
-		Graphics()->DrawRect(X, Y, W, H, Color, Corners, Rounding);
+		Graphics()->DrawRect(X, Y, W, H, ThemeHudColor(GameClient(), Color, ForcePreview, 1.0f), Corners, Rounding);
 	};
 
 	if(GameClient()->IsTeamPlay() && GameClient()->m_Snap.m_pGameDataObj)
@@ -2538,7 +2553,7 @@ void CHud::RenderSpectatorCount(bool ForcePreview)
 	const float LineHeight = Fontsize + 2.0f * Scale;
 	const float PaddingX = 2.0f * Scale;
 	const float PaddingY = 2.0f * Scale;
-	const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	const ColorRGBA BackgroundColor = ThemeHudColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), ForcePreview, 1.0f);
 	const int Corners = HudLayout::BackgroundCorners(IGraphics::CORNER_ALL, Rect.x, Rect.y, Rect.w, Rect.h, m_Width, m_Height);
 
 	if(Layout.m_BackgroundEnabled)
@@ -2593,7 +2608,7 @@ void CHud::RenderDummyActions()
 	if(ScoreRect.h > 0.0f)
 		StartY -= ScoreRect.h;
 
-	Graphics()->DrawRect(StartX, StartY, BoxWidth, BoxHeight, ColorRGBA(0.0f, 0.0f, 0.0f, 0.4f), IGraphics::CORNER_L, 5.0f);
+	Graphics()->DrawRect(StartX, StartY, BoxWidth, BoxHeight, ThemeHudColor(GameClient(), ColorRGBA(0.0f, 0.0f, 0.0f, 0.4f), false, 1.0f), IGraphics::CORNER_L, 5.0f);
 
 	float y = StartY + 2;
 	float x = StartX + 2;
@@ -2877,7 +2892,7 @@ void CHud::RenderMovementInformation(bool ForcePreview)
 	const float Fontsize = 6.0f * Scale;
 	const float LineHeight = MOVEMENT_INFORMATION_LINE_HEIGHT * Scale;
 	const bool BackgroundEnabled = Layout.m_BackgroundEnabled;
-	const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	const ColorRGBA BackgroundColor = ThemeHudColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), ForcePreview, 1.0f);
 	const int Corners = HudLayout::BackgroundCorners(IGraphics::CORNER_ALL, Rect.x, Rect.y, Rect.w, Rect.h, m_Width, m_Height);
 
 	if(BackgroundEnabled)
@@ -2895,8 +2910,18 @@ void CHud::RenderMovementInformation(bool ForcePreview)
 		if(!State.m_ShowDummyCoordIndicator)
 			return;
 
-		const ColorRGBA IndicatorNormalColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BcShowhudDummyCoordIndicatorColor));
-		const ColorRGBA IndicatorSameHeightColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BcShowhudDummyCoordIndicatorSameHeightColor));
+		ColorRGBA IndicatorNormalColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BcShowhudDummyCoordIndicatorColor));
+		ColorRGBA IndicatorSameHeightColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BcShowhudDummyCoordIndicatorSameHeightColor));
+		ColorRGBA ThemeColor;
+		if(GameClient()->m_MusicPlayer.GetHudThemeColor(ThemeColor, ForcePreview))
+		{
+			const float NormalAlpha = IndicatorNormalColor.a;
+			const float SameHeightAlpha = IndicatorSameHeightColor.a;
+			IndicatorNormalColor = ThemeHudColor(GameClient(), IndicatorNormalColor, ForcePreview, 0.85f);
+			IndicatorSameHeightColor = ThemeHudColor(GameClient(), IndicatorSameHeightColor, ForcePreview, 0.45f);
+			IndicatorNormalColor.a = NormalAlpha;
+			IndicatorSameHeightColor.a = SameHeightAlpha;
+		}
 		const ColorRGBA IndicatorColor = HasPlayerBelow ? IndicatorSameHeightColor : IndicatorNormalColor;
 
 		TextRender()->Text(LeftX, y, Fontsize, Localize("Player below"), -1.0f);
@@ -3031,7 +3056,7 @@ void CHud::RenderSpectatorHud()
 	// TClient
 	float AdjustedHeight = m_Height - (g_Config.m_TcStatusBar ? g_Config.m_TcStatusBarHeight : 0.0f);
 	// draw the box
-	Graphics()->DrawRect(m_Width - 180.0f, AdjustedHeight - 15.0f, 180.0f, 15.0f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.4f), IGraphics::CORNER_TL, 5.0f);
+	Graphics()->DrawRect(m_Width - 180.0f, AdjustedHeight - 15.0f, 180.0f, 15.0f, ThemeHudColor(GameClient(), ColorRGBA(0.0f, 0.0f, 0.0f, 0.4f), false, 1.0f), IGraphics::CORNER_TL, 5.0f);
 
 	// draw the text
 	char aBuf[128];
@@ -3155,7 +3180,8 @@ void CHud::RenderFrozenHud(bool ForcePreview)
 
 	Graphics()->TextureClear();
 	Graphics()->QuadsBegin();
-	Graphics()->SetColor(0.0f, 0.0f, 0.0f, 0.4f);
+	const ColorRGBA FrozenHudBgColor = ThemeHudColor(GameClient(), ColorRGBA(0.0f, 0.0f, 0.0f, 0.4f), ForcePreview, 1.0f);
+	Graphics()->SetColor(FrozenHudBgColor.r, FrozenHudBgColor.g, FrozenHudBgColor.b, FrozenHudBgColor.a);
 	Graphics()->DrawRectExt(Rect.x, Rect.y, Rect.w, Rect.h, 5.0f * Scale, Corners);
 	Graphics()->QuadsEnd();
 
@@ -3282,7 +3308,7 @@ void CHud::RenderLocalTime(bool ForcePreview)
 	const auto Layout = HudLayout::Get(HudLayout::MODULE_LOCAL_TIME, m_Width, m_Height);
 	const float Scale = std::clamp(Layout.m_Scale / 100.0f, 0.25f, 3.0f);
 	const bool BackgroundEnabled = Layout.m_BackgroundEnabled;
-	const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	const ColorRGBA BackgroundColor = ThemeHudColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), ForcePreview, 1.0f);
 	const bool Seconds = g_Config.m_TcShowLocalTimeSeconds; // TClient
 
 	char aTimeStr[16];
@@ -3724,7 +3750,7 @@ void CHud::RenderFinishPredictionClassic(const CUIRect &Rect, const SFinishPredi
 	const float PaddingX = 6.0f * Scale;
 	const float PaddingY = 4.0f * Scale;
 	const float Gap = 1.5f * Scale;
-	const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	const ColorRGBA BackgroundColor = ThemeHudColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), false, 1.0f);
 	const int Corners = HudLayout::BackgroundCorners(IGraphics::CORNER_ALL, Rect.x, Rect.y, Rect.w, Rect.h, m_Width, m_Height);
 	const bool ShowTime = g_Config.m_BcFinishPredictionShowTime != 0;
 	const bool ShowRemaining = g_Config.m_BcFinishPredictionTimeMode == 0;
@@ -3763,7 +3789,7 @@ void CHud::RenderFinishPredictionBar(const CUIRect &Rect, const SFinishPredictio
 {
 	const auto Layout = HudLayout::Get(HudLayout::MODULE_FINISH_PREDICTION, m_Width, m_Height);
 	const float Scale = std::clamp(Layout.m_Scale / 100.0f, 0.25f, 3.0f);
-	const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	const ColorRGBA BackgroundColor = ThemeHudColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), ForcePreview, 1.0f);
 	const int Corners = HudLayout::BackgroundCorners(IGraphics::CORNER_ALL, Rect.x, Rect.y, Rect.w, Rect.h, m_Width, m_Height);
 	if(Layout.m_BackgroundEnabled)
 	{

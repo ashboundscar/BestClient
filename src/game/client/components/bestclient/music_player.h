@@ -2,6 +2,8 @@
 #ifndef GAME_CLIENT_COMPONENTS_BESTCLIENT_MUSIC_PLAYER_H
 #define GAME_CLIENT_COMPONENTS_BESTCLIENT_MUSIC_PLAYER_H
 
+#include <base/color.h>
+
 #include <game/client/component.h>
 #include <game/client/ui_rect.h>
 
@@ -43,6 +45,7 @@ public:
 	float GetHudPushOffsetForRect(const CUIRect &Rect, float CanvasWidth, float Padding = 0.0f) const;
 	float GetHudPushDownOffsetForRect(const CUIRect &Rect, float CanvasHeight, float Padding = 0.0f) const;
 	bool GetNowPlayingInfo(SNowPlayingInfo &Out) const;
+	bool GetHudThemeColor(ColorRGBA &Out, bool ForcePreview = false) const;
 	CUIRect GetHudEditorRect(bool ForcePreview = false) const;
 	void RenderHudEditor(bool ForcePreview);
 

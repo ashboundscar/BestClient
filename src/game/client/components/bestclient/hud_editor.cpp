@@ -498,10 +498,11 @@ void CHudEditor::ApplyDraggedPosition(HudLayout::EModule Module, const CUIRect &
 	else if(Module == HudLayout::MODULE_MUSIC_PLAYER)
 	{
 		const auto Layout = HudLayout::Get(HudLayout::MODULE_MUSIC_PLAYER, HudWidth(), HudHeight());
-		const float Scale = std::clamp(Layout.m_Scale / 100.0f, 0.25f, 3.0f);
-		const float WidthScale = HudWidth() / maximum(HudLayout::CANVAS_WIDTH, 0.001f);
-		const float ExpandedW = 104.0f * Scale * WidthScale;
-		const float BaseX = Rect.x - maximum(0.0f, ExpandedW - Rect.w) * 0.5f;
+		CUIRect CurrentRect = GameClient()->m_MusicPlayer.GetHudEditorRect(false);
+		if(CurrentRect.w <= 0.0f || CurrentRect.h <= 0.0f)
+			CurrentRect = GameClient()->m_MusicPlayer.GetHudEditorRect(true);
+		const float AnchorOffsetX = CurrentRect.w > 0.0f ? (CurrentRect.x - Layout.m_X) : 0.0f;
+		const float BaseX = Rect.x - AnchorOffsetX;
 		HudLayout::SetPosition(Module, BaseX * (HudLayout::CANVAS_WIDTH / maximum(HudWidth(), 1.0f)), Rect.y);
 	}
 	else if(Module == HudLayout::MODULE_LOCAL_TIME)

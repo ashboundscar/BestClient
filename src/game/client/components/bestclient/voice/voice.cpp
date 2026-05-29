@@ -570,6 +570,21 @@ namespace
 		return Color;
 	}
 
+	ColorRGBA VoiceHudThemeColor(CGameClient *pGameClient, ColorRGBA Fallback, bool ForcePreview, float MixAmount)
+	{
+		ColorRGBA ThemeColor;
+		if(pGameClient != nullptr && pGameClient->m_MusicPlayer.GetHudThemeColor(ThemeColor, ForcePreview))
+		{
+			const float Blend = std::clamp(MixAmount, 0.0f, 1.0f);
+			return ColorRGBA(
+				mix(Fallback.r, ThemeColor.r, Blend),
+				mix(Fallback.g, ThemeColor.g, Blend),
+				mix(Fallback.b, ThemeColor.b, Blend),
+				mix(Fallback.a, ThemeColor.a, Blend));
+		}
+		return Fallback;
+	}
+
 	int VoiceHudBackgroundCorners(CGameClient *pGameClient, int Module, int DefaultCorners, float RectX, float RectY, float RectW, float RectH, float CanvasWidth, float CanvasHeight)
 	{
 		(void)pGameClient;
@@ -1725,6 +1740,7 @@ void CVoiceChat::RenderHudMuteStatusIndicator(float HudWidth, float HudHeight, b
 	ColorRGBA BackgroundColor = ColorRGBA(0.0f, 0.0f, 0.0f, 0.32f);
 	if(Layout.m_BackgroundEnabled)
 		BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	BackgroundColor = VoiceHudThemeColor(GameClient(), BackgroundColor, ForcePreview, 1.0f);
 	BackgroundColor = ApplyVoiceHudAlpha(GameClient(), BackgroundColor);
 	const int Corners = VoiceHudBackgroundCorners(GameClient(), HudLayout::MODULE_VOICE_STATUS, IGraphics::CORNER_ALL, DrawX, DrawY, BoxWidth, BoxHeight, HudWidth, HudHeight);
 	Graphics()->DrawRect(DrawX, DrawY, BoxWidth, BoxHeight, BackgroundColor, Corners, 2.3f * Scale);
@@ -1854,7 +1870,7 @@ void CVoiceChat::RenderHudTalkingIndicator(float HudWidth, float HudHeight, bool
 		DrawY = std::clamp(DrawY, 0.0f, maximum(0.0f, HudHeight - BoxHeight));
 
 		const bool BackgroundEnabled = Layout.m_BackgroundEnabled;
-		const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+		const ColorRGBA BackgroundColor = VoiceHudThemeColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), ForcePreview, 1.0f);
 		if(BackgroundEnabled)
 		{
 			const int Corners = VoiceHudBackgroundCorners(GameClient(), HudLayout::MODULE_VOICE_TALKERS, IGraphics::CORNER_ALL, DrawX, DrawY, BoxWidth, BoxHeight, HudWidth, HudHeight);
@@ -1866,7 +1882,7 @@ void CVoiceChat::RenderHudTalkingIndicator(float HudWidth, float HudHeight, bool
 			const STalkingEntry &Entry = vPreviewEntries[Index];
 			const float RowY = DrawY + Index * (RowHeight + RowGap);
 			const int RowCorners = VoiceHudBackgroundCorners(GameClient(), HudLayout::MODULE_VOICE_TALKERS, IGraphics::CORNER_ALL, DrawX, RowY, BoxWidth, RowHeight, HudWidth, HudHeight);
-			Graphics()->DrawRect(DrawX, RowY, BoxWidth, RowHeight, ApplyVoiceHudAlpha(GameClient(), ColorRGBA(0.06f, 0.07f, 0.09f, 0.60f)), RowCorners, 3.1f * Scale);
+			Graphics()->DrawRect(DrawX, RowY, BoxWidth, RowHeight, ApplyVoiceHudAlpha(GameClient(), VoiceHudThemeColor(GameClient(), ColorRGBA(0.06f, 0.07f, 0.09f, 0.60f), ForcePreview, 1.0f)), RowCorners, 3.1f * Scale);
 
 			const float AvatarX = DrawX + RowPadding;
 			const float AvatarY = RowY + (RowHeight - AvatarSize) * 0.5f;
@@ -1913,7 +1929,7 @@ void CVoiceChat::RenderHudTalkingIndicator(float HudWidth, float HudHeight, bool
 			TextRender()->TextEx(&NameCursor, aName, -1);
 
 			TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
-			const ColorRGBA MicColor = ColorRGBA(0.68f, 1.0f, 0.68f, 0.85f);
+			const ColorRGBA MicColor = VoiceHudThemeColor(GameClient(), ColorRGBA(0.68f, 1.0f, 0.68f, 0.85f), ForcePreview, 1.0f);
 			TextRender()->TextColor(ApplyVoiceHudAlpha(GameClient(), MicColor));
 			const float MicGlyphWidth = TextRender()->TextWidth(IconSize, FontIcon::MICROPHONE, -1, -1.0f);
 			TextRender()->Text(MicX + (IconWidth - MicGlyphWidth) * 0.5f, RowY + (RowHeight - IconSize) * 0.5f, IconSize, FontIcon::MICROPHONE, -1.0f);
@@ -1945,7 +1961,7 @@ void CVoiceChat::RenderHudTalkingIndicator(float HudWidth, float HudHeight, bool
 	DrawY = std::clamp(DrawY, 0.0f, maximum(0.0f, HudHeight - BoxHeight));
 
 	const bool BackgroundEnabled = Layout.m_BackgroundEnabled;
-	const ColorRGBA BackgroundColor = color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true));
+	const ColorRGBA BackgroundColor = VoiceHudThemeColor(GameClient(), color_cast<ColorRGBA>(ColorHSLA(Layout.m_BackgroundColor, true)), ForcePreview, 1.0f);
 	if(BackgroundEnabled)
 	{
 		const int Corners = VoiceHudBackgroundCorners(GameClient(), HudLayout::MODULE_VOICE_TALKERS, IGraphics::CORNER_ALL, DrawX, DrawY, BoxWidth, BoxHeight, HudWidth, HudHeight);
@@ -1957,7 +1973,7 @@ void CVoiceChat::RenderHudTalkingIndicator(float HudWidth, float HudHeight, bool
 		const STalkingEntry &Entry = vEntries[Index];
 		const float RowY = DrawY + Index * (RowHeight + RowGap);
 		const int RowCorners = VoiceHudBackgroundCorners(GameClient(), HudLayout::MODULE_VOICE_TALKERS, IGraphics::CORNER_ALL, DrawX, RowY, BoxWidth, RowHeight, HudWidth, HudHeight);
-		Graphics()->DrawRect(DrawX, RowY, BoxWidth, RowHeight, ApplyVoiceHudAlpha(GameClient(), ColorRGBA(0.06f, 0.07f, 0.09f, 0.60f)), RowCorners, 3.1f * Scale);
+		Graphics()->DrawRect(DrawX, RowY, BoxWidth, RowHeight, ApplyVoiceHudAlpha(GameClient(), VoiceHudThemeColor(GameClient(), ColorRGBA(0.06f, 0.07f, 0.09f, 0.60f), ForcePreview, 1.0f)), RowCorners, 3.1f * Scale);
 
 		const float AvatarX = DrawX + RowPadding;
 		const float AvatarY = RowY + (RowHeight - AvatarSize) * 0.5f;
@@ -2006,7 +2022,7 @@ void CVoiceChat::RenderHudTalkingIndicator(float HudWidth, float HudHeight, bool
 		TextRender()->TextEx(&NameCursor, aName, -1);
 
 		TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
-		const ColorRGBA MicColor = ColorRGBA(0.68f, 1.0f, 0.68f, ForcePreview ? 0.85f : 0.92f);
+		const ColorRGBA MicColor = VoiceHudThemeColor(GameClient(), ColorRGBA(0.68f, 1.0f, 0.68f, ForcePreview ? 0.85f : 0.92f), ForcePreview, 1.0f);
 		TextRender()->TextColor(ApplyVoiceHudAlpha(GameClient(), MicColor));
 		const float MicGlyphWidth = TextRender()->TextWidth(IconSize, FontIcon::MICROPHONE, -1, -1.0f);
 		TextRender()->Text(MicX + (IconWidth - MicGlyphWidth) * 0.5f, RowY + (RowHeight - IconSize) * 0.5f, IconSize, FontIcon::MICROPHONE, -1.0f);
