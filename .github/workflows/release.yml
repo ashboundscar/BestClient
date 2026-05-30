@@ -34,7 +34,7 @@ jobs:
         include:
         - name: linux
           os: ubuntu-24.04
-          cmake-args: -G Ninja
+          cmake-args: -G Ninja -DPREFER_BUNDLED_LIBS=ON
           cmake-init-env: CXXFLAGS="-Werror -Wno-unused-function"
           package-file: "*-linux_x86_64.tar.xz"
           artifact-name: release-linux
