@@ -6,6 +6,8 @@
 #include <base/system.h>
 #include <base/os.h>
 
+#include <engine/shared/bestclient_indicator_protocol.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -15,8 +17,10 @@
 namespace
 {
 constexpr int MAX_CLIENTS = 256;
+constexpr int MAX_CLIENTS_PER_IP = 4;
 constexpr int64_t CLIENT_TIMEOUT_SECONDS = 30;
 constexpr int64_t PEER_LIST_SAFETY_BROADCAST_SECONDS = 5;
+constexpr int64_t MAX_AUTH_TIME_DIFF = 300; // 5 minutes
 
 constexpr float PACKETS_PER_SECOND = 90.0f;
 constexpr float PACKETS_BURST = 140.0f;
@@ -108,6 +112,15 @@ CClientSlot *AcquireClientSlot(std::array<CClientSlot, MAX_CLIENTS> &aSlots, con
 		ResetClientSlotTrafficState(*pSlot, Now);
 		return pSlot;
 	}
+
+	int IpCount = 0;
+	for(const auto &Slot : aSlots)
+	{
+		if(Slot.m_Used && net_addr_comp(&Slot.m_Addr, &Addr, true) == 0)
+			IpCount++;
+	}
+	if(IpCount >= MAX_CLIENTS_PER_IP)
+		return nullptr;
 
 	for(auto &Slot : aSlots)
 	{
@@ -277,6 +290,14 @@ int main(int argc, const char **argv)
 	uint16_t NextClientId = 1;
 	int64_t LastPeerListBroadcast = 0;
 
+	const char *pAuthKey = getenv("BC_VOICE_AUTH_KEY");
+	if(!pAuthKey || pAuthKey[0] == '\0')
+	{
+		// Fallback to the known default key if not provided via env
+		pAuthKey = "bcv4-red-171-vgise-dgsk";
+	}
+	log_info("voice-server", "using auth key: %s...", std::string(pAuthKey).substr(0, 4).c_str());
+
 	while(true)
 	{
 		using namespace std::chrono_literals;
@@ -321,6 +342,22 @@ int main(int argc, const char **argv)
 					Offset += RoomKeySize;
 					if(Offset < DataSize && !BestClientVoice::ReadS16(pRawData, DataSize, Offset, GameClientId))
 						continue;
+				}
+
+				uint64_t AuthTimestamp = 0;
+				if(Offset < DataSize && !BestClientVoice::ReadU64(pRawData, DataSize, Offset, AuthTimestamp))
+					continue;
+
+				// Security Checks
+				const int64_t ServerTimestamp = (int64_t)time_timestamp();
+				if(AuthTimestamp == 0 || (int64_t)AuthTimestamp < ServerTimestamp - MAX_AUTH_TIME_DIFF || (int64_t)AuthTimestamp > ServerTimestamp + MAX_AUTH_TIME_DIFF)
+				{
+					continue;
+				}
+
+				if(!BestClientIndicator::ValidateHmacSha256(pAuthKey, pRawData, DataSize))
+				{
+					continue;
 				}
 
 				bool NewSlot = false;
