@@ -6189,12 +6189,12 @@ void CMenus::RenderComponentsEditorScreen(CUIRect MainView)
 
 	CUIRect HeaderText = Header;
 	CUIRect CloseButtonArea, HeaderSpacer;
-	HeaderText.VSplitLeft(14.0f, &CloseButtonArea, &HeaderText);
+	HeaderText.VSplitLeft(18.0f, &CloseButtonArea, &HeaderText);
 	HeaderText.VSplitLeft(6.0f, &HeaderSpacer, &HeaderText);
 	(void)HeaderSpacer;
 
 	CUIRect CloseButton;
-	CloseButtonArea.HMargin(5.0f, &CloseButton);
+	CloseButtonArea.HMargin(3.0f, &CloseButton);
 
 	static CButtonContainer s_CloseButton;
 	if(Ui()->DoButton_FontIcon(&s_CloseButton, FontIcon::XMARK, 0, &CloseButton, IGraphics::CORNER_ALL))
