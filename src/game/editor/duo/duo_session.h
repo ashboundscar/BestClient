@@ -1,0 +1,97 @@
+#ifndef GAME_EDITOR_DUO_SESSION_H
+#define GAME_EDITOR_DUO_SESSION_H
+
+#include <game/editor/component.h>
+#include <game/editor/duo/duo_protocol.h>
+#include <game/client/ui.h>
+#include <base/net.h>
+#include <base/system.h>
+#include <set>
+#include <utility>
+#include <vector>
+
+class CDuoSession : public CEditorComponent
+{
+public:
+	void OnInit(CEditor *pEditor) override;
+	void OnReset() override;
+	void OnUpdate() override;
+	void OnRender(CUIRect View) override;
+
+	void NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags);
+	void NotifyStrokeEnd(); // call when mouse button released after drawing
+	void NotifyFullSync();  // call after undo/redo — checks all tile layers
+	bool IsLive() const { return m_State == STATE_LIVE; }
+
+	static CUi::EPopupMenuFunctionResult PopupDuoMain(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupDuoCreate(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupDuoJoin(void *pContext, CUIRect View, bool Active);
+
+	enum EState
+	{
+		STATE_IDLE = 0,
+		STATE_CONNECTING,
+		STATE_WAITING,
+		STATE_LIVE,
+		STATE_ERROR,
+	};
+
+	EState m_State = STATE_IDLE;
+	NETSOCKET m_Socket = nullptr;
+	NETADDR m_ServerAddr = {};
+	int64_t m_LastHeartbeatTime = 0;
+	int64_t m_LastServerPacketTime = 0;
+	int64_t m_LastCursorSendTime = 0;
+	char m_aRoomCode[DuoProtocol::ROOM_CODE_LEN + 1] = {};
+	bool m_IsCreator = false;
+
+	float m_RemoteCursorX = 0.0f;
+	float m_RemoteCursorY = 0.0f;
+	bool m_HasRemoteCursor = false;
+
+	int m_ParticipantCount = 0;
+	char m_aJoinCodeInput[DuoProtocol::ROOM_CODE_LEN + 1] = {};
+	int m_JoinCodeLen = 0;
+	char m_aErrorMsg[128] = {};
+
+	// TCP recv buffer for stream reassembly
+	std::vector<uint8_t> m_vRecvBuf;
+	int m_RecvBufLen = 0;
+
+	struct STileEditEntry
+	{
+		int m_GroupIdx;
+		int m_LayerIdx;
+		int m_TileX;
+		int m_TileY;
+		uint8_t m_Index;
+		uint8_t m_Flags;
+	};
+	std::vector<STileEditEntry> m_vPendingTileEdits;
+
+	// layers touched during current mouse stroke — flushed on NotifyStrokeEnd
+	std::set<std::pair<int, int>> m_DirtyLayers;
+
+	void Connect(const char *pRoomCode, bool Create);
+	void Disconnect();
+	void OpenSocket();
+	void CloseSocket();
+	void SendFrame(const std::vector<uint8_t> &vPayload);
+	void SendHello();
+	void SendHeartbeat();
+	void SendCursor(float WorldX, float WorldY);
+	void SendTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags);
+	void FlushTileEdits();
+	void SendSyncCheck(int GroupIdx, int LayerIdx);
+	void SendSyncRequest(int GroupIdx, int LayerIdx);
+	void SendSyncData(int GroupIdx, int LayerIdx);
+	void SendGoodbye();
+	void ProcessNetwork();
+	void HandleMessage(const uint8_t *pData, int Size);
+	void AppendAuth(std::vector<uint8_t> &vPacket) const;
+
+private:
+	static uint32_t CalcLayerCRC(const uint8_t *pTiles, int Count);
+};
+
+#endif // GAME_EDITOR_DUO_SESSION_H

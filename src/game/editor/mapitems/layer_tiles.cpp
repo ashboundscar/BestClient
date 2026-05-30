@@ -87,6 +87,28 @@ void CLayerTiles::SetTile(int x, int y, CTile Tile)
 	SetTileIgnoreHistory(x, y, Tile);
 	RecordStateChange(x, y, CurrentTile, Tile);
 
+	if(Editor()->m_DuoSession.IsLive())
+	{
+		int GroupIdx = -1, LayerIdx = -1;
+		for(int g = 0; g < (int)Map()->m_vpGroups.size(); g++)
+		{
+			auto &vLayers = Map()->m_vpGroups[g]->m_vpLayers;
+			for(int l = 0; l < (int)vLayers.size(); l++)
+			{
+				if(vLayers[l].get() == this)
+				{
+					GroupIdx = g;
+					LayerIdx = l;
+					break;
+				}
+			}
+			if(GroupIdx >= 0)
+				break;
+		}
+		if(GroupIdx >= 0 && LayerIdx >= 0)
+			Editor()->m_DuoSession.NotifyTileEdit(GroupIdx, LayerIdx, x, y, Tile.m_Index, Tile.m_Flags);
+	}
+
 	if(m_FillGameTile != -1 && m_LiveGameTiles)
 	{
 		std::shared_ptr<CLayerTiles> pLayer = Map()->m_pGameLayer;

@@ -21,6 +21,7 @@
 
 #include <game/client/ui.h>
 #include <game/client/ui_listbox.h>
+#include <game/editor/duo/duo_session.h>
 #include <game/editor/enums.h>
 #include <game/editor/file_browser.h>
 #include <game/editor/mapitems/envelope.h>
@@ -166,6 +167,8 @@ public:
 	CMapView *MapView() { return &m_MapView; }
 	const CMapView *MapView() const { return &m_MapView; }
 	CLayerSelector *LayerSelector() { return &m_LayerSelector; }
+
+	CDuoSession m_DuoSession;
 
 	void FillGameTiles(EGameTileOp FillTile) const;
 	bool CanFillGameTiles() const;

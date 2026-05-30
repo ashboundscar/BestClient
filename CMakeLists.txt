@@ -3040,6 +3040,9 @@ if(CLIENT)
     auto_map.h
     component.cpp
     component.h
+    duo/duo_protocol.h
+    duo/duo_session.cpp
+    duo/duo_session.h
     editor.cpp
     editor.h
     editor_action.h

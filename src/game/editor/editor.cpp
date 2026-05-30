@@ -492,6 +492,7 @@ void CEditor::DoToolbarLayers(CUIRect ToolBar)
 		if(DoButton_FontIcon(&s_UndoButton, FontIcon::UNDO, Map()->m_EditorHistory.CanUndo() - 1, &Button, BUTTONFLAG_LEFT, "[Ctrl+Z] Undo the last action.", IGraphics::CORNER_L))
 		{
 			Map()->m_EditorHistory.Undo();
+			m_DuoSession.NotifyFullSync();
 		}
 
 		ToolbarTop.VSplitLeft(25.0f, &Button, &ToolbarTop);
@@ -499,6 +500,7 @@ void CEditor::DoToolbarLayers(CUIRect ToolBar)
 		if(DoButton_FontIcon(&s_RedoButton, FontIcon::REDO, Map()->m_EditorHistory.CanRedo() - 1, &Button, BUTTONFLAG_LEFT, "[Ctrl+Y] Redo the last action.", IGraphics::CORNER_R))
 		{
 			Map()->m_EditorHistory.Redo();
+			m_DuoSession.NotifyFullSync();
 		}
 
 		ToolbarTop.VSplitLeft(5.0f, nullptr, &ToolbarTop);
@@ -2895,6 +2897,8 @@ void CEditor::DoMapEditor(CUIRect View)
 
 				if(!pAction->IsEmpty()) // Avoid recording tile draw action when placing quads only
 					Map()->m_EditorHistory.RecordAction(pAction);
+
+				m_DuoSession.NotifyStrokeEnd();
 			}
 
 			s_Operation = OP_NONE;
@@ -6137,6 +6141,7 @@ void CEditor::RenderEditorHistory(CUIRect View)
 			}
 		}
 		s_ActionSelectedIndex = NewSelected;
+		m_DuoSession.NotifyFullSync();
 	}
 }
 
@@ -6216,7 +6221,7 @@ void CEditor::RenderMenubar(CUIRect MenuBar)
 	if(DoButton_Ex(&s_ToolsButton, "Tools", 0, &ToolsButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_T, EditorFontSizes::MENU, TEXTALIGN_ML))
 	{
 		static SPopupMenuId s_PopupMenuToolsId;
-		Ui()->DoPopupMenu(&s_PopupMenuToolsId, ToolsButton.x, ToolsButton.y + ToolsButton.h - 1.0f, 200.0f, 78.0f, this, PopupMenuTools, PopupProperties);
+		Ui()->DoPopupMenu(&s_PopupMenuToolsId, ToolsButton.x, ToolsButton.y + ToolsButton.h - 1.0f, 200.0f, 92.0f, this, PopupMenuTools, PopupProperties);
 	}
 
 	MenuBar.VSplitLeft(5.0f, nullptr, &MenuBar);
@@ -6336,9 +6341,9 @@ void CEditor::Render()
 		if(Ui()->CheckActiveItem(nullptr))
 		{
 			if(Input()->KeyPress(KEY_Z) && Input()->ModifierIsPressed() && !Input()->ShiftIsPressed())
-				ActiveHistory().Undo();
-			if((Input()->KeyPress(KEY_Y) && Input()->ModifierIsPressed()) || (Input()->KeyPress(KEY_Z) && Input()->ModifierIsPressed() && Input()->ShiftIsPressed()))
-				ActiveHistory().Redo();
+			{ ActiveHistory().Undo(); m_DuoSession.NotifyFullSync(); }
+		if((Input()->KeyPress(KEY_Y) && Input()->ModifierIsPressed()) || (Input()->KeyPress(KEY_Z) && Input()->ModifierIsPressed() && Input()->ShiftIsPressed()))
+			{ ActiveHistory().Redo(); m_DuoSession.NotifyFullSync(); }
 		}
 
 		// handle brush save/load hotkeys
@@ -7086,6 +7091,7 @@ void CEditor::Init()
 	m_vComponents.emplace_back(m_FileBrowser);
 	m_vComponents.emplace_back(m_Prompt);
 	m_vComponents.emplace_back(m_FontTyper);
+	m_vComponents.emplace_back(m_DuoSession);
 	for(CEditorComponent &Component : m_vComponents)
 		Component.OnInit(this);
 

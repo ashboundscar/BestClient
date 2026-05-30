@@ -216,6 +216,16 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuTools(void *pContext, CUIRect Vi
 		return CUi::POPUP_CLOSE_CURRENT;
 	}
 
+	static int s_DuoMappingButton = 0;
+	View.HSplitTop(2.0f, nullptr, &View);
+	View.HSplitTop(12.0f, &Slot, &View);
+	if(pEditor->DoButton_MenuItem(&s_DuoMappingButton, "Duo mapping", 0, &Slot, BUTTONFLAG_LEFT, "Collaborate on a map in real-time with another person."))
+	{
+		static SPopupMenuId s_PopupDuoId;
+		pEditor->Ui()->DoPopupMenu(&s_PopupDuoId, Slot.x + Slot.w, Slot.y, 220.0f, 100.0f, pEditor, CDuoSession::PopupDuoMain);
+		return CUi::POPUP_CLOSE_CURRENT;
+	}
+
 	return CUi::POPUP_KEEP_OPEN;
 }
 

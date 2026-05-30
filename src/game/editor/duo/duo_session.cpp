@@ -1,0 +1,804 @@
+#include "duo_session.h"
+
+#include <game/editor/editor.h>
+#include <game/editor/mapitems/layer_tiles.h>
+#include <game/editor/mapitems/image.h>
+#include <base/hash_ctxt.h>
+#include <game/client/lineinput.h>
+
+using namespace DuoProtocol;
+
+static const uint8_t s_aAuthKeyObfuscated[32] = {
+	0x1e, 0x2f, 0x3b, 0x37, 0x3b, 0x2b, 0x3e, 0x2b,
+	0x6b, 0x78, 0x7e, 0x7a, 0x6e, 0x6b, 0x7b, 0x6b,
+	0x29, 0x3f, 0x2b, 0x3d, 0x3f, 0x2b, 0x4b, 0x7b,
+	0x7b, 0x3c, 0x3d, 0x3e, 0x3f, 0x60, 0x62, 0x63,
+};
+static constexpr uint8_t AUTH_XOR_KEY = 0x5A;
+
+static void DeobfuscateKey(uint8_t *pOut)
+{
+	for(int i = 0; i < 32; i++)
+		pOut[i] = s_aAuthKeyObfuscated[i] ^ AUTH_XOR_KEY;
+}
+
+void CDuoSession::OnInit(CEditor *pEditor)
+{
+	CEditorComponent::OnInit(pEditor);
+}
+
+void CDuoSession::OnReset()
+{
+	Disconnect();
+}
+
+void CDuoSession::OnUpdate()
+{
+	if(m_State == STATE_IDLE || m_State == STATE_ERROR)
+		return;
+
+	if(m_Socket == nullptr)
+		return;
+
+	ProcessNetwork();
+
+	if(m_Socket == nullptr)
+		return;
+
+	int64_t Now = time_get();
+	int64_t Freq = time_freq();
+
+	// Stale server detection (30s no data)
+	if(m_State >= STATE_CONNECTING && Now - m_LastServerPacketTime > Freq * 30)
+	{
+		str_copy(m_aErrorMsg, "Connection lost");
+		m_State = STATE_ERROR;
+		CloseSocket();
+		return;
+	}
+
+	// Heartbeat every 5 seconds
+	if(m_State >= STATE_WAITING && Now - m_LastHeartbeatTime > Freq * 5)
+	{
+		SendHeartbeat();
+		m_LastHeartbeatTime = Now;
+	}
+
+	// Cursor sync at ~30 Hz
+	if(m_State == STATE_LIVE && Now - m_LastCursorSendTime > Freq / 30)
+	{
+		SendCursor(Editor()->m_MouseWorldNoParaPos.x, Editor()->m_MouseWorldNoParaPos.y);
+		m_LastCursorSendTime = Now;
+	}
+
+	// Flush batched tile edits
+	if(m_State == STATE_LIVE)
+		FlushTileEdits();
+}
+
+void CDuoSession::OnRender(CUIRect View)
+{
+	if(m_State != STATE_LIVE || !m_HasRemoteCursor)
+		return;
+
+	std::shared_ptr<CLayerGroup> pGameGroup;
+	for(const auto &pGroup : Editor()->Map()->m_vpGroups)
+	{
+		if(pGroup->m_GameGroup)
+		{
+			pGameGroup = pGroup;
+			break;
+		}
+	}
+	if(!pGameGroup)
+		return;
+
+	float aPoints[4];
+	pGameGroup->Mapping(aPoints);
+	float WorldWidth = aPoints[2] - aPoints[0];
+	float WorldHeight = aPoints[3] - aPoints[1];
+	if(WorldWidth <= 0.0f || WorldHeight <= 0.0f)
+		return;
+
+	const CUIRect *pScreen = Ui()->Screen();
+	float ScreenX = (m_RemoteCursorX - aPoints[0]) / WorldWidth * pScreen->w;
+	float ScreenY = (m_RemoteCursorY - aPoints[1]) / WorldHeight * pScreen->h;
+
+	if(ScreenX < View.x || ScreenX > View.x + View.w || ScreenY < View.y || ScreenY > View.y + View.h)
+		return;
+
+	Graphics()->WrapClamp();
+	Graphics()->TextureSet(Editor()->m_aCursorTextures[CEditor::CURSOR_NORMAL]);
+	Graphics()->QuadsBegin();
+	Graphics()->SetColor(0.2f, 0.8f, 1.0f, 0.85f);
+	IGraphics::CQuadItem QuadItem(ScreenX, ScreenY, 16.0f, 16.0f);
+	Graphics()->QuadsDrawTL(&QuadItem, 1);
+	Graphics()->QuadsEnd();
+	Graphics()->WrapNormal();
+}
+
+void CDuoSession::Connect(const char *pRoomCode, bool Create)
+{
+	Disconnect();
+	m_IsCreator = Create;
+	m_ParticipantCount = 0;
+	m_HasRemoteCursor = false;
+	m_aErrorMsg[0] = '\0';
+	m_vRecvBuf.clear();
+	m_RecvBufLen = 0;
+	m_LastHeartbeatTime = time_get();
+	m_LastCursorSendTime = time_get();
+
+	if(pRoomCode)
+		str_copy(m_aRoomCode, pRoomCode, sizeof(m_aRoomCode));
+	else
+		m_aRoomCode[0] = '\0';
+
+	NETADDR Addr;
+	mem_zero(&Addr, sizeof(Addr));
+	if(net_addr_from_str(&Addr, "193.23.201.125:5555") != 0)
+	{
+		str_copy(m_aErrorMsg, "Invalid server address");
+		m_State = STATE_ERROR;
+		return;
+	}
+	m_ServerAddr = Addr;
+
+	OpenSocket();
+	if(m_Socket == nullptr)
+	{
+		str_copy(m_aErrorMsg, "Failed to connect");
+		m_State = STATE_ERROR;
+		return;
+	}
+	m_State = STATE_CONNECTING;
+	m_LastServerPacketTime = time_get();
+	SendHello();
+}
+
+void CDuoSession::Disconnect()
+{
+	if(m_State >= STATE_CONNECTING)
+		SendGoodbye();
+	CloseSocket();
+	m_State = STATE_IDLE;
+	m_HasRemoteCursor = false;
+	m_ParticipantCount = 0;
+	m_RecvBufLen = 0;
+	m_vRecvBuf.clear();
+	m_vPendingTileEdits.clear();
+	m_DirtyLayers.clear();
+}
+
+void CDuoSession::OpenSocket()
+{
+	NETADDR Bind;
+	mem_zero(&Bind, sizeof(Bind));
+	Bind.type = NETTYPE_IPV4;
+	Bind.port = 0;
+	m_Socket = net_tcp_create(Bind);
+	if(m_Socket == nullptr)
+		return;
+	if(net_tcp_connect(m_Socket, &m_ServerAddr) != 0)
+	{
+		net_tcp_close(m_Socket);
+		m_Socket = nullptr;
+		return;
+	}
+	net_set_non_blocking(m_Socket);
+}
+
+void CDuoSession::CloseSocket()
+{
+	if(m_Socket != nullptr)
+	{
+		net_tcp_close(m_Socket);
+		m_Socket = nullptr;
+	}
+}
+
+void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
+{
+	if(m_Socket == nullptr)
+		return;
+	uint8_t aLen[2];
+	aLen[0] = (vPayload.size() >> 8) & 0xFF;
+	aLen[1] = vPayload.size() & 0xFF;
+	if(net_tcp_send(m_Socket, aLen, 2) < 0 ||
+		net_tcp_send(m_Socket, vPayload.data(), static_cast<int>(vPayload.size())) < 0)
+	{
+		str_copy(m_aErrorMsg, "Connection lost");
+		m_State = STATE_ERROR;
+		CloseSocket();
+	}
+}
+
+void CDuoSession::SendHello()
+{
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_HELLO);
+	WriteU16(vPacket, 100); // client build
+	WriteU8(vPacket, m_IsCreator ? 1 : 0);
+	int CodeLen = str_length(m_aRoomCode);
+	WriteString(vPacket, m_aRoomCode, CodeLen);
+	WriteU64(vPacket, static_cast<uint64_t>(time(nullptr)));
+	AppendAuth(vPacket);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendHeartbeat()
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_HEARTBEAT);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendCursor(float WorldX, float WorldY)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_CURSOR);
+	WriteS32(vPacket, static_cast<int32_t>(WorldX * 1000.0f));
+	WriteS32(vPacket, static_cast<int32_t>(WorldY * 1000.0f));
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_TILE_EDIT);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	WriteS32(vPacket, TileX);
+	WriteS32(vPacket, TileY);
+	WriteU8(vPacket, Index);
+	WriteU8(vPacket, Flags);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::FlushTileEdits()
+{
+	if(m_Socket == nullptr || m_vPendingTileEdits.empty())
+		return;
+	for(const auto &Edit : m_vPendingTileEdits)
+		SendTileEdit(Edit.m_GroupIdx, Edit.m_LayerIdx, Edit.m_TileX, Edit.m_TileY, Edit.m_Index, Edit.m_Flags);
+	m_vPendingTileEdits.clear();
+}
+
+void CDuoSession::SendGoodbye()
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_GOODBYE);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::AppendAuth(std::vector<uint8_t> &vPacket) const
+{
+	uint8_t aKey[32];
+	DeobfuscateKey(aKey);
+
+	uint8_t aKeyPad[64];
+	memset(aKeyPad, 0, 64);
+	memcpy(aKeyPad, aKey, 32);
+
+	uint8_t aIpad[64], aOpad[64];
+	for(int i = 0; i < 64; i++)
+	{
+		aIpad[i] = aKeyPad[i] ^ 0x36;
+		aOpad[i] = aKeyPad[i] ^ 0x5c;
+	}
+
+	SHA256_CTX Ctx;
+	sha256_init(&Ctx);
+	sha256_update(&Ctx, aIpad, 64);
+	sha256_update(&Ctx, vPacket.data(), vPacket.size());
+	SHA256_DIGEST Inner = sha256_finish(&Ctx);
+
+	sha256_init(&Ctx);
+	sha256_update(&Ctx, aOpad, 64);
+	sha256_update(&Ctx, Inner.data, 32);
+	SHA256_DIGEST Hmac = sha256_finish(&Ctx);
+
+	WriteBytes(vPacket, Hmac.data, 32);
+}
+
+void CDuoSession::ProcessNetwork()
+{
+	if(m_Socket == nullptr)
+		return;
+
+	// grow buffer to fit incoming data
+	const int ChunkSize = 4096;
+	m_vRecvBuf.resize(m_RecvBufLen + ChunkSize);
+	int Bytes = net_tcp_recv(m_Socket, m_vRecvBuf.data() + m_RecvBufLen, ChunkSize);
+	if(Bytes > 0)
+		m_RecvBufLen += Bytes;
+	else if(Bytes == 0)
+	{
+		str_copy(m_aErrorMsg, "Connection closed");
+		m_State = STATE_ERROR;
+		CloseSocket();
+		return;
+	}
+	// Bytes < 0: WOULDBLOCK — normal for non-blocking
+
+	int Offset = 0;
+	while(Offset + 2 <= m_RecvBufLen)
+	{
+		uint16_t MsgLen = (static_cast<uint16_t>(m_vRecvBuf[Offset]) << 8) | m_vRecvBuf[Offset + 1];
+		if(MsgLen == 0)
+		{
+			m_RecvBufLen = 0;
+			return;
+		}
+		if(Offset + 2 + MsgLen > m_RecvBufLen)
+			break; // wait for more data
+		HandleMessage(m_vRecvBuf.data() + Offset + 2, MsgLen);
+		Offset += 2 + MsgLen;
+		if(m_Socket == nullptr)
+			break;
+	}
+
+	if(Offset > 0 && Offset < m_RecvBufLen)
+	{
+		memmove(m_vRecvBuf.data(), m_vRecvBuf.data() + Offset, m_RecvBufLen - Offset);
+		m_RecvBufLen -= Offset;
+	}
+	else if(Offset >= m_RecvBufLen)
+		m_RecvBufLen = 0;
+}
+
+void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
+{
+	CPacketReader Reader(pData, Size);
+	EPacketType Type;
+	if(!Reader.ValidateHeader(&Type))
+		return;
+
+	m_LastServerPacketTime = time_get();
+
+	switch(Type)
+	{
+	case PACKET_HELLO_ACK:
+	{
+		uint16_t CodeLen = Reader.ReadU16();
+		if(CodeLen > 0 && CodeLen <= ROOM_CODE_LEN)
+		{
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(m_aRoomCode), CodeLen);
+			m_aRoomCode[CodeLen] = '\0';
+		}
+		m_State = STATE_WAITING;
+		break;
+	}
+	case PACKET_ROOM_STATE:
+	{
+		m_ParticipantCount = Reader.ReadU8();
+		uint8_t Live = Reader.ReadU8();
+		if(Live)
+			m_State = STATE_LIVE;
+		if(m_ParticipantCount < 2)
+			m_HasRemoteCursor = false;
+		break;
+	}
+	case PACKET_START:
+	{
+		m_State = STATE_LIVE;
+		break;
+	}
+	case PACKET_CURSOR_RELAY:
+	{
+		int32_t wx = Reader.ReadS32();
+		int32_t wy = Reader.ReadS32();
+		m_RemoteCursorX = static_cast<float>(wx) / 1000.0f;
+		m_RemoteCursorY = static_cast<float>(wy) / 1000.0f;
+		m_HasRemoteCursor = true;
+		break;
+	}
+	case PACKET_TILE_RELAY:
+	{
+		int32_t GroupIdx = Reader.ReadS32();
+		int32_t LayerIdx = Reader.ReadS32();
+		int32_t TileX = Reader.ReadS32();
+		int32_t TileY = Reader.ReadS32();
+		uint8_t TileIndex = Reader.ReadU8();
+		uint8_t TileFlags = Reader.ReadU8();
+
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx >= 0 && GroupIdx < (int)vGroups.size())
+		{
+			auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+			if(LayerIdx >= 0 && LayerIdx < (int)vLayers.size())
+			{
+				if(vLayers[LayerIdx]->m_Type == LAYERTYPE_TILES)
+				{
+					auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+					if(TileX >= 0 && TileX < pTiles->m_Width && TileY >= 0 && TileY < pTiles->m_Height)
+					{
+						CTile Tile;
+						Tile.m_Index = TileIndex;
+						Tile.m_Flags = TileFlags & 0x0F;
+						Tile.m_Skip = 0;
+						Tile.m_Reserved = 0;
+						pTiles->SetTileIgnoreHistory(TileX, TileY, Tile);
+					}
+				}
+			}
+		}
+		break;
+	}
+	case PACKET_ERROR:
+	{
+		uint8_t Code = Reader.ReadU8();
+		switch(Code)
+		{
+		case ERROR_ROOM_FULL: str_copy(m_aErrorMsg, "Room is full"); break;
+		case ERROR_ROOM_NOT_FOUND: str_copy(m_aErrorMsg, "Room not found"); break;
+		case ERROR_AUTH_FAILED: str_copy(m_aErrorMsg, "Auth failed"); break;
+		case ERROR_RATE_LIMITED: str_copy(m_aErrorMsg, "Rate limited"); break;
+		default: str_copy(m_aErrorMsg, "Unknown error"); break;
+		}
+		m_State = STATE_ERROR;
+		CloseSocket();
+		break;
+	}
+	case PACKET_SYNC_CHECK:
+	{
+		// partner finished a stroke — check if our layer matches their CRC
+		int32_t GroupIdx = Reader.ReadS32();
+		int32_t LayerIdx = Reader.ReadS32();
+		uint32_t TheirCrc = Reader.ReadU32();
+
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+			break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
+			break;
+		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+		int Count = pTiles->m_Width * pTiles->m_Height * (int)sizeof(CTile);
+		uint32_t OurCrc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTiles->m_pTiles), Count);
+		if(OurCrc != TheirCrc)
+			SendSyncRequest(GroupIdx, LayerIdx);
+		break;
+	}
+	case PACKET_SYNC_REQUEST:
+	{
+		// partner detected desync — send them our full layer
+		int32_t GroupIdx = Reader.ReadS32();
+		int32_t LayerIdx = Reader.ReadS32();
+		SendSyncData(GroupIdx, LayerIdx);
+		break;
+	}
+	case PACKET_SYNC_DATA:
+	{
+		// one row of full layer dump from partner — apply it
+		int32_t GroupIdx = Reader.ReadS32();
+		int32_t LayerIdx = Reader.ReadS32();
+		int32_t Width    = Reader.ReadS32();
+		int32_t Height   = Reader.ReadS32();
+		int32_t Row      = Reader.ReadS32();
+		int RowBytes = Width * (int)sizeof(CTile);
+		if(!Reader.HasBytes(RowBytes) || Width <= 0 || Height <= 0 || Row < 0 || Row >= Height)
+			break;
+
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+			break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
+			break;
+		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+		if(pTiles->m_Width != Width || pTiles->m_Height != Height)
+			break;
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(pTiles->m_pTiles + Row * Width), RowBytes);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void CDuoSession::NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags)
+{
+	if(m_State != STATE_LIVE)
+		return;
+	m_vPendingTileEdits.push_back({GroupIdx, LayerIdx, TileX, TileY, Index, Flags});
+	m_DirtyLayers.emplace(GroupIdx, LayerIdx);
+}
+
+uint32_t CDuoSession::CalcLayerCRC(const uint8_t *pTiles, int Count)
+{
+	// CRC-32 (ISO 3309)
+	static uint32_t s_aTable[256] = {};
+	static bool s_Init = false;
+	if(!s_Init)
+	{
+		for(uint32_t i = 0; i < 256; i++)
+		{
+			uint32_t c = i;
+			for(int j = 0; j < 8; j++)
+				c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+			s_aTable[i] = c;
+		}
+		s_Init = true;
+	}
+	uint32_t crc = 0xFFFFFFFFu;
+	for(int i = 0; i < Count; i++)
+		crc = s_aTable[(crc ^ pTiles[i]) & 0xFF] ^ (crc >> 8);
+	return crc ^ 0xFFFFFFFFu;
+}
+
+void CDuoSession::NotifyStrokeEnd()
+{
+	if(m_State != STATE_LIVE || m_DirtyLayers.empty())
+		return;
+	for(const auto &[g, l] : m_DirtyLayers)
+		SendSyncCheck(g, l);
+	m_DirtyLayers.clear();
+}
+
+void CDuoSession::NotifyFullSync()
+{
+	if(m_State != STATE_LIVE)
+		return;
+	auto &vGroups = Editor()->Map()->m_vpGroups;
+	for(int g = 0; g < (int)vGroups.size(); g++)
+	{
+		auto &vLayers = vGroups[g]->m_vpLayers;
+		for(int l = 0; l < (int)vLayers.size(); l++)
+		{
+			if(vLayers[l]->m_Type == LAYERTYPE_TILES)
+				SendSyncCheck(g, l);
+		}
+	}
+}
+
+void CDuoSession::SendSyncCheck(int GroupIdx, int LayerIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	auto &vGroups = Editor()->Map()->m_vpGroups;
+	if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+		return;
+	auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+	if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+		return;
+	if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
+		return;
+	auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+	int Count = pTiles->m_Width * pTiles->m_Height * (int)sizeof(CTile);
+	uint32_t Crc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTiles->m_pTiles), Count);
+
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_SYNC_CHECK);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	WriteU32(vPacket, Crc);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendSyncRequest(int GroupIdx, int LayerIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_SYNC_REQUEST);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendSyncData(int GroupIdx, int LayerIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	auto &vGroups = Editor()->Map()->m_vpGroups;
+	if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+		return;
+	auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+	if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+		return;
+	if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
+		return;
+	auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+	int W = pTiles->m_Width;
+	int H = pTiles->m_Height;
+	int RowBytes = W * (int)sizeof(CTile);
+
+	// send one row per frame to stay within uint16_t frame size limit
+	for(int row = 0; row < H; row++)
+	{
+		std::vector<uint8_t> vPacket;
+		WriteHeader(vPacket, PACKET_SYNC_DATA);
+		WriteS32(vPacket, GroupIdx);
+		WriteS32(vPacket, LayerIdx);
+		WriteS32(vPacket, W);
+		WriteS32(vPacket, H);
+		WriteS32(vPacket, row);
+		WriteBytes(vPacket, reinterpret_cast<const uint8_t *>(pTiles->m_pTiles + row * W), RowBytes);
+		SendFrame(vPacket);
+		if(m_Socket == nullptr)
+			return;
+	}
+}
+
+// --- UI Popups ---
+
+CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect View, bool Active)
+{
+	CEditor *pEditor = static_cast<CEditor *>(pContext);
+	CDuoSession *pDuo = &pEditor->m_DuoSession;
+	CUIRect Slot;
+
+	if(pDuo->m_State == STATE_ERROR && pDuo->m_aErrorMsg[0])
+	{
+		View.HSplitTop(12.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, pDuo->m_aErrorMsg, 10.0f, TEXTALIGN_MC);
+		View.HSplitTop(4.0f, nullptr, &View);
+	}
+
+	if(pDuo->m_State == STATE_IDLE || pDuo->m_State == STATE_ERROR)
+	{
+		static int s_CreateButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_CreateButton, "Create room", 0, &Slot, BUTTONFLAG_LEFT, "Create a new duo mapping room."))
+		{
+			pDuo->Connect(nullptr, true);
+			static SPopupMenuId s_PopupCreateId;
+			pEditor->Ui()->DoPopupMenu(&s_PopupCreateId, View.x + View.w, View.y - 14.0f, 220.0f, 110.0f, pEditor, PopupDuoCreate);
+			return CUi::POPUP_CLOSE_CURRENT;
+		}
+
+		View.HSplitTop(4.0f, nullptr, &View);
+		static int s_JoinButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_JoinButton, "Join room", 0, &Slot, BUTTONFLAG_LEFT, "Join an existing duo mapping room."))
+		{
+			pDuo->m_aErrorMsg[0] = '\0';
+			static SPopupMenuId s_PopupJoinId;
+			pEditor->Ui()->DoPopupMenu(&s_PopupJoinId, View.x + View.w, View.y - 14.0f, 220.0f, 110.0f, pEditor, PopupDuoJoin);
+			return CUi::POPUP_CLOSE_CURRENT;
+		}
+	}
+	else if(pDuo->m_State == STATE_WAITING || pDuo->m_State == STATE_LIVE)
+	{
+		View.HSplitTop(12.0f, &Slot, &View);
+		char aBuf[64];
+		str_format(aBuf, sizeof(aBuf), "Room: %s", pDuo->m_aRoomCode);
+		pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_ML);
+
+		View.HSplitTop(12.0f, &Slot, &View);
+		str_format(aBuf, sizeof(aBuf), "Players: %d / 2", pDuo->m_ParticipantCount);
+		pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_ML);
+	}
+
+	if(pDuo->m_State == STATE_CONNECTING || pDuo->m_State == STATE_WAITING || pDuo->m_State == STATE_LIVE)
+	{
+		View.HSplitTop(4.0f, nullptr, &View);
+		static int s_DisconnectButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_DisconnectButton, "Disconnect", 0, &Slot, BUTTONFLAG_LEFT, "Leave the duo session."))
+		{
+			pDuo->Disconnect();
+			return CUi::POPUP_CLOSE_CURRENT;
+		}
+	}
+
+	return CUi::POPUP_KEEP_OPEN;
+}
+
+CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoCreate(void *pContext, CUIRect View, bool Active)
+{
+	CEditor *pEditor = static_cast<CEditor *>(pContext);
+	CDuoSession *pDuo = &pEditor->m_DuoSession;
+	CUIRect Slot;
+
+	View.HSplitTop(14.0f, &Slot, &View);
+	char aBuf[64];
+	if(pDuo->m_aRoomCode[0])
+		str_format(aBuf, sizeof(aBuf), "Code: %s", pDuo->m_aRoomCode);
+	else
+		str_copy(aBuf, "Connecting...");
+	pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_MC);
+
+	View.HSplitTop(14.0f, &Slot, &View);
+	str_format(aBuf, sizeof(aBuf), "Players: %d / 2", pDuo->m_ParticipantCount);
+	pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_MC);
+
+	if(pDuo->m_aRoomCode[0])
+	{
+		View.HSplitTop(4.0f, nullptr, &View);
+		static int s_CopyButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_CopyButton, "Copy Code", 0, &Slot, BUTTONFLAG_LEFT, "Copy room code to clipboard."))
+			pEditor->Input()->SetClipboardText(pDuo->m_aRoomCode);
+	}
+
+	if(pDuo->m_ParticipantCount >= 2)
+	{
+		View.HSplitTop(4.0f, nullptr, &View);
+		static int s_StartButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_StartButton, "Start", 0, &Slot, BUTTONFLAG_LEFT, "Begin collaborative editing."))
+		{
+			return CUi::POPUP_CLOSE_CURRENT;
+		}
+	}
+	else
+	{
+		View.HSplitTop(14.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, "Waiting for partner...", 9.0f, TEXTALIGN_MC);
+	}
+
+	return CUi::POPUP_KEEP_OPEN;
+}
+
+CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoJoin(void *pContext, CUIRect View, bool Active)
+{
+	CEditor *pEditor = static_cast<CEditor *>(pContext);
+	CDuoSession *pDuo = &pEditor->m_DuoSession;
+	CUIRect Slot;
+
+	// если уже подключились — закрыть попап
+	if(pDuo->m_State == STATE_WAITING || pDuo->m_State == STATE_LIVE)
+		return CUi::POPUP_CLOSE_CURRENT;
+
+	View.HSplitTop(14.0f, &Slot, &View);
+	pEditor->Ui()->DoLabel(&Slot, "Enter room code:", 10.0f, TEXTALIGN_ML);
+
+	View.HSplitTop(14.0f, &Slot, &View);
+	static CLineInput s_CodeInput;
+	s_CodeInput.SetBuffer(pDuo->m_aJoinCodeInput, sizeof(pDuo->m_aJoinCodeInput));
+
+	bool bConnecting = pDuo->m_State == STATE_CONNECTING;
+	if(bConnecting)
+		pEditor->Ui()->DoLabel(&Slot, pDuo->m_aJoinCodeInput, 10.0f, TEXTALIGN_ML);
+	else
+		pEditor->DoEditBox(&s_CodeInput, &Slot, 10.0f);
+
+	View.HSplitTop(4.0f, nullptr, &View);
+	static int s_ConnectButton = 0;
+	View.HSplitTop(14.0f, &Slot, &View);
+
+	if(bConnecting)
+	{
+		pEditor->Ui()->DoLabel(&Slot, "Connecting...", 10.0f, TEXTALIGN_MC);
+	}
+	else
+	{
+		if(pEditor->DoButton_MenuItem(&s_ConnectButton, "Connect", 0, &Slot, BUTTONFLAG_LEFT, "Connect to the room."))
+		{
+			if(str_length(pDuo->m_aJoinCodeInput) == ROOM_CODE_LEN)
+				pDuo->Connect(pDuo->m_aJoinCodeInput, false);
+		}
+	}
+
+	// ошибка (неверный код, комната не найдена, полная)
+	if(pDuo->m_State == STATE_ERROR && pDuo->m_aErrorMsg[0])
+	{
+		View.HSplitTop(6.0f, nullptr, &View);
+		View.HSplitTop(14.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, pDuo->m_aErrorMsg, 9.0f, TEXTALIGN_MC);
+		View.HSplitTop(4.0f, nullptr, &View);
+		static int s_RetryButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_RetryButton, "Try again", 0, &Slot, BUTTONFLAG_LEFT, "Clear error and try again."))
+		{
+			pDuo->m_State = STATE_IDLE;
+			pDuo->m_aErrorMsg[0] = '\0';
+		}
+	}
+
+	return CUi::POPUP_KEEP_OPEN;
+}
