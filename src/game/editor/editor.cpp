@@ -3845,6 +3845,19 @@ bool CEditor::AddImage(const char *pFilename, int StorageType, void *pUser)
 	pEditor->Map()->m_vpImages.push_back(pImg);
 	pEditor->Map()->SortImages();
 	pEditor->Map()->SelectImage(pImg);
+
+	// Duo sync: send image to partner
+	if(pImg->m_External)
+	{
+		pEditor->m_DuoSession.NotifyAddImage(pImg->m_aName, true, nullptr, 0);
+	}
+	else
+	{
+		CByteBufferWriter PngWriter;
+		if(CImageLoader::SavePng(PngWriter, *pImg))
+			pEditor->m_DuoSession.NotifyAddImage(pImg->m_aName, false, PngWriter.Data(), (int)PngWriter.Size());
+	}
+
 	pEditor->OnDialogClose();
 	return true;
 }

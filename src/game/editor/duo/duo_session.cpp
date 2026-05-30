@@ -4,6 +4,7 @@
 #include <game/editor/editor_actions.h>
 #include <game/editor/mapitems/layer_tiles.h>
 #include <game/editor/mapitems/image.h>
+#include <engine/gfx/image_loader.h>
 #include <base/hash_ctxt.h>
 #include <game/client/lineinput.h>
 
@@ -640,6 +641,119 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_ApplyingRemote = false;
 		break;
 	}
+	case PACKET_STRUCT_LAYER_PROP:
+	{
+		if(!Reader.HasBytes(13))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int PropId = Reader.ReadU8();
+		int Value = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+			break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
+			break;
+		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+		m_ApplyingRemote = true;
+		ETilesProp Prop = static_cast<ETilesProp>(PropId);
+		if(Prop == ETilesProp::WIDTH)
+			pTiles->Resize(Value, pTiles->m_Height);
+		else if(Prop == ETilesProp::HEIGHT)
+			pTiles->Resize(pTiles->m_Width, Value);
+		else if(Prop == ETilesProp::COLOR)
+			pTiles->m_Color = UnpackColor(Value);
+		else if(Prop == ETilesProp::AUTOMAPPER)
+		{
+			if(pTiles->m_Image >= 0 && (int)Editor()->Map()->m_vpImages.size() > pTiles->m_Image &&
+				Editor()->Map()->m_vpImages[pTiles->m_Image]->m_AutoMapper.ConfigNamesNum() > 0 && Value >= 0)
+				pTiles->m_AutoMapperConfig = Value % Editor()->Map()->m_vpImages[pTiles->m_Image]->m_AutoMapper.ConfigNamesNum();
+			else
+				pTiles->m_AutoMapperConfig = -1;
+		}
+		else if(Prop == ETilesProp::SEED)
+			pTiles->m_Seed = Value;
+		else if(Prop == ETilesProp::COLOR_ENV)
+			pTiles->m_ColorEnv = Value;
+		else if(Prop == ETilesProp::COLOR_ENV_OFFSET)
+			pTiles->m_ColorEnvOffset = Value;
+		else if(Prop == ETilesProp::LIVE_GAMETILES)
+			pTiles->m_LiveGameTiles = Value != 0;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_ADD_IMAGE:
+	{
+		if(!Reader.HasBytes(4))
+			break;
+		uint8_t External = Reader.ReadU8();
+		uint16_t NameLen = Reader.ReadU16();
+		if(!Reader.HasBytes(NameLen))
+			break;
+		char aName[128] = {};
+		int CopyLen = minimum((int)NameLen, (int)sizeof(aName) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aName), CopyLen);
+		// skip remaining name bytes if truncated
+		if((int)NameLen > CopyLen)
+		{
+			uint8_t aDummy[1];
+			for(int i = CopyLen; i < (int)NameLen; i++)
+				Reader.ReadBytes(aDummy, 1);
+		}
+		if(!Reader.HasBytes(4))
+			break;
+		int DataSize = Reader.ReadS32();
+		// check if image with this name already exists
+		for(const auto &pImg : Editor()->Map()->m_vpImages)
+		{
+			if(!str_comp(pImg->m_aName, aName))
+				goto skip_add_image;
+		}
+		if(External)
+		{
+			// external image — just add reference, no pixel data needed
+			auto pImg = std::make_shared<CEditorImage>(Editor()->Map());
+			str_copy(pImg->m_aName, aName, sizeof(pImg->m_aName));
+			pImg->m_External = 1;
+			pImg->m_AutoMapper.Load(pImg->m_aName);
+			m_ApplyingRemote = true;
+			Editor()->Map()->m_vpImages.push_back(pImg);
+			Editor()->Map()->SortImages();
+			m_ApplyingRemote = false;
+		}
+		else if(DataSize > 0 && Reader.HasBytes(DataSize))
+		{
+			std::vector<uint8_t> vData(DataSize);
+			Reader.ReadBytes(vData.data(), DataSize);
+			// decode PNG from memory
+			CImageInfo ImgInfo;
+			if(Editor()->Graphics()->LoadPng(ImgInfo, vData.data(), (size_t)DataSize, aName))
+			{
+				auto pImg = std::make_shared<CEditorImage>(Editor()->Map());
+				pImg->m_Width = ImgInfo.m_Width;
+				pImg->m_Height = ImgInfo.m_Height;
+				pImg->m_Format = ImgInfo.m_Format;
+				pImg->m_pData = ImgInfo.m_pData;
+				pImg->m_External = 0;
+				str_copy(pImg->m_aName, aName, sizeof(pImg->m_aName));
+				int TexFlag = Editor()->Graphics()->Uses2DTextureArrays() ? IGraphics::TEXLOAD_TO_2D_ARRAY_TEXTURE : IGraphics::TEXLOAD_TO_3D_TEXTURE;
+				if(pImg->m_Width % 16 != 0 || pImg->m_Height % 16 != 0)
+					TexFlag = 0;
+				pImg->m_Texture = Editor()->Graphics()->LoadTextureRaw(*pImg, TexFlag, aName);
+				pImg->m_AutoMapper.Load(pImg->m_aName);
+				m_ApplyingRemote = true;
+				Editor()->Map()->m_vpImages.push_back(pImg);
+				Editor()->Map()->SortImages();
+				m_ApplyingRemote = false;
+			}
+		}
+		skip_add_image:;
+		break;
+	}
 	default:
 		break;
 	}
@@ -897,6 +1011,48 @@ void CDuoSession::SendStructRenameLayer(int GroupIdx, int LayerIdx, const char *
 	int NameLen = str_length(pName);
 	WriteString(vPacket, pName, NameLen);
 	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructLayerProp(int GroupIdx, int LayerIdx, int PropId, int Value)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_LAYER_PROP);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	WriteU8(vPacket, (uint8_t)PropId);
+	WriteS32(vPacket, Value);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructAddImage(const char *pName, bool External, const uint8_t *pData, int DataSize)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_ADD_IMAGE);
+	WriteU8(vPacket, External ? 1 : 0);
+	int NameLen = str_length(pName);
+	WriteString(vPacket, pName, NameLen);
+	WriteS32(vPacket, DataSize);
+	if(DataSize > 0 && pData)
+		WriteBytes(vPacket, pData, DataSize);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::NotifyLayerProp(int GroupIdx, int LayerIdx, int PropId, int Value)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructLayerProp(GroupIdx, LayerIdx, PropId, Value);
+}
+
+void CDuoSession::NotifyAddImage(const char *pName, bool External, const uint8_t *pData, int DataSize)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructAddImage(pName, External, pData, DataSize);
 }
 
 // --- UI Popups ---

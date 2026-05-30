@@ -1203,6 +1203,18 @@ CUi::EPopupMenuFunctionResult CLayerTiles::RenderProperties(CUIRect *pToolBox)
 	// Since we may also squeeze a tile changes action, we want both to appear as one, thus using a bulk
 	Map()->m_EditorHistory.EndBulk(0);
 
+	// Duo sync: notify partner of property change (only on final state, not during drag)
+	if((State == EEditState::END || State == EEditState::ONE_GO) && !Map()->m_vSelectedLayers.empty())
+	{
+		if(Prop == ETilesProp::WIDTH || Prop == ETilesProp::HEIGHT ||
+			Prop == ETilesProp::COLOR || Prop == ETilesProp::AUTOMAPPER ||
+			Prop == ETilesProp::SEED || Prop == ETilesProp::COLOR_ENV ||
+			Prop == ETilesProp::COLOR_ENV_OFFSET || Prop == ETilesProp::LIVE_GAMETILES)
+		{
+			Editor()->m_DuoSession.NotifyLayerProp(Map()->m_SelectedGroup, Map()->m_vSelectedLayers[0], (int)Prop, NewVal);
+		}
+	}
+
 	return CUi::POPUP_KEEP_OPEN;
 }
 

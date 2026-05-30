@@ -28,6 +28,8 @@ public:
 	void NotifySetImage(int GroupIdx, int LayerIdx, int ImageIdx);
 	void NotifyRenameGroup(int GroupIdx, const char *pName);
 	void NotifyRenameLayer(int GroupIdx, int LayerIdx, const char *pName);
+	void NotifyLayerProp(int GroupIdx, int LayerIdx, int PropId, int Value);
+	void NotifyAddImage(const char *pName, bool External, const uint8_t *pData, int DataSize);
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
 	static CUi::EPopupMenuFunctionResult PopupDuoMain(void *pContext, CUIRect View, bool Active);
@@ -102,6 +104,8 @@ public:
 	void SendStructSetImage(int GroupIdx, int LayerIdx, int ImageIdx);
 	void SendStructRenameGroup(int GroupIdx, const char *pName);
 	void SendStructRenameLayer(int GroupIdx, int LayerIdx, const char *pName);
+	void SendStructLayerProp(int GroupIdx, int LayerIdx, int PropId, int Value);
+	void SendStructAddImage(const char *pName, bool External, const uint8_t *pData, int DataSize);
 	void SendGoodbye();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);
