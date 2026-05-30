@@ -23,6 +23,7 @@ enum
 constexpr float MAX_DELTA = 0.1f;
 constexpr float PROJ_DIST = 600.0f;
 constexpr float ZOOM_CHANGE_THRESHOLD = 0.02f;
+constexpr float MIN_SPAWN_RESCALE_SPAN = 0.001f;
 constexpr int PARTICLE_MAX_RENDERED = 200;
 
 const std::array<vec3, 8> g_aCubeVertices = { {
@@ -318,14 +319,22 @@ void C3DParticles::OnRender()
 
 	if(ZoomChanged && m_HasLastSpawnBounds && !m_vParticles.empty())
 	{
-		const float OldW = maximum(1.0f, m_LastSpawnMax.x - m_LastSpawnMin.x);
-		const float OldH = maximum(1.0f, m_LastSpawnMax.y - m_LastSpawnMin.y);
+		const float OldW = m_LastSpawnMax.x - m_LastSpawnMin.x;
+		const float OldH = m_LastSpawnMax.y - m_LastSpawnMin.y;
+		const float NewW = SpawnMaxX - SpawnMinX;
+		const float NewH = SpawnMaxY - SpawnMinY;
+		const float OldCenterX = (m_LastSpawnMin.x + m_LastSpawnMax.x) * 0.5f;
+		const float OldCenterY = (m_LastSpawnMin.y + m_LastSpawnMax.y) * 0.5f;
+		const float NewCenterX = (SpawnMinX + SpawnMaxX) * 0.5f;
+		const float NewCenterY = (SpawnMinY + SpawnMaxY) * 0.5f;
+		const bool CanRescaleX = std::abs(OldW) > MIN_SPAWN_RESCALE_SPAN;
+		const bool CanRescaleY = std::abs(OldH) > MIN_SPAWN_RESCALE_SPAN;
+		const float ScaleX = CanRescaleX ? NewW / OldW : 1.0f;
+		const float ScaleY = CanRescaleY ? NewH / OldH : 1.0f;
 		for(auto &Part : m_vParticles)
 		{
-			const float U = std::clamp((Part.m_Pos.x - m_LastSpawnMin.x) / OldW, 0.0f, 1.0f);
-			const float V = std::clamp((Part.m_Pos.y - m_LastSpawnMin.y) / OldH, 0.0f, 1.0f);
-			Part.m_Pos.x = mix(SpawnMinX, SpawnMaxX, U);
-			Part.m_Pos.y = mix(SpawnMinY, SpawnMaxY, V);
+			Part.m_Pos.x = CanRescaleX ? NewCenterX + (Part.m_Pos.x - OldCenterX) * ScaleX : NewCenterX;
+			Part.m_Pos.y = CanRescaleY ? NewCenterY + (Part.m_Pos.y - OldCenterY) * ScaleY : NewCenterY;
 			if(Part.m_FadingOut)
 			{
 				Part.m_FadingOut = false;
