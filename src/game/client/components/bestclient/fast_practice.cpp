@@ -131,6 +131,12 @@ namespace
 		return std::clamp(WeaponId, -1, NUM_WEAPONS - 1);
 	}
 
+	std::string LowercaseCopy(std::string Text)
+	{
+		std::transform(Text.begin(), Text.end(), Text.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+		return Text;
+	}
+
 	struct STrackedProjectile
 	{
 		int m_Owner = -1;
@@ -744,24 +750,7 @@ void CFastPractice::ResetPracticeToAnchor()
 	ReleaseBufferedInputState();
 
 	// Keep camera interpolation coherent after hard reset.
-	GameClient()->m_PredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
-	GameClient()->m_PrevPredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
-	if(CCharacter *pPredChar = GameClient()->m_PredictedWorld.GetCharacterById(m_EnableLocalClientId))
-	{
-		GameClient()->m_PredictedChar = pPredChar->GetCore();
-		GameClient()->m_PredictedPrevChar = pPredChar->GetCore();
-		GameClient()->m_aClients[m_EnableLocalClientId].m_Predicted = pPredChar->GetCore();
-		GameClient()->m_aClients[m_EnableLocalClientId].m_PrevPredicted = pPredChar->GetCore();
-	}
-	if(m_RequireDummy && m_EnableDummyClientId >= 0)
-	{
-		if(CCharacter *pPredDummy = GameClient()->m_PredictedWorld.GetCharacterById(m_EnableDummyClientId))
-		{
-			GameClient()->m_aClients[m_EnableDummyClientId].m_Predicted = pPredDummy->GetCore();
-			GameClient()->m_aClients[m_EnableDummyClientId].m_PrevPredicted = pPredDummy->GetCore();
-		}
-	}
-	GameClient()->m_PredictedTick = m_PracticeBaseWorld.GameTick();
+	SyncPredictedWorldAfterPracticeCommand(m_EnableLocalClientId, m_EnableDummyClientId, m_PracticeBaseWorld.GetCharacterById(m_EnableLocalClientId), false);
 }
 
 void CFastPractice::PrepareInputForSend(int *pData, int Size, bool Dummy) const
@@ -1654,6 +1643,101 @@ void CFastPractice::TeleportCharacter(CCharacter *pChar, const vec2 &Pos) const
 	NormalizeCharacterAfterReset(pChar, false);
 }
 
+void CFastPractice::SaveTeleportHistory(int ClientId, const vec2 &CurrentPos, const vec2 &TargetPos)
+{
+	StoreLastTeleport(ClientId, TargetPos);
+	StoreLastDeathPosition(ClientId, CurrentPos);
+}
+
+void CFastPractice::ApplyPracticeTeleport(int ClientId, CCharacter *pChar, const vec2 &TargetPos)
+{
+	if(!pChar)
+		return;
+
+	SaveTeleportHistory(ClientId, pChar->Core()->m_Pos, TargetPos);
+	TeleportCharacter(pChar, TargetPos);
+}
+
+void CFastPractice::GivePracticeWeapon(CCharacter *pChar, int Weapon, bool Remove) const
+{
+	if(!pChar)
+		return;
+
+	if(Weapon == -1)
+	{
+		pChar->GiveWeapon(WEAPON_SHOTGUN, Remove);
+		pChar->GiveWeapon(WEAPON_GRENADE, Remove);
+		pChar->GiveWeapon(WEAPON_LASER, Remove);
+	}
+	else
+	{
+		pChar->GiveWeapon(Weapon, Remove);
+	}
+}
+
+void CFastPractice::EnsureActiveWeaponIsValid(CCharacter *pChar) const
+{
+	if(!pChar)
+		return;
+
+	const CCharacterCore Core = pChar->GetCore();
+	if(Core.m_ActiveWeapon >= WEAPON_HAMMER && Core.m_ActiveWeapon < NUM_WEAPONS && Core.m_aWeapons[Core.m_ActiveWeapon].m_Got)
+		return;
+
+	if(Core.m_aWeapons[WEAPON_HAMMER].m_Got)
+	{
+		pChar->SetActiveWeapon(WEAPON_HAMMER);
+		return;
+	}
+	if(Core.m_aWeapons[WEAPON_GUN].m_Got)
+	{
+		pChar->SetActiveWeapon(WEAPON_GUN);
+		return;
+	}
+	for(int Weapon = WEAPON_SHOTGUN; Weapon < NUM_WEAPONS; Weapon++)
+	{
+		if(Core.m_aWeapons[Weapon].m_Got)
+		{
+			pChar->SetActiveWeapon(Weapon);
+			return;
+		}
+	}
+}
+
+void CFastPractice::TogglePracticeHit(CCharacter *pChar, int Weapon) const
+{
+	if(!pChar)
+		return;
+
+	CCharacterCore Core = pChar->GetCore();
+	switch(Weapon)
+	{
+	case WEAPON_HAMMER: Core.m_HammerHitDisabled = !Core.m_HammerHitDisabled; break;
+	case WEAPON_SHOTGUN: Core.m_ShotgunHitDisabled = !Core.m_ShotgunHitDisabled; break;
+	case WEAPON_GRENADE: Core.m_GrenadeHitDisabled = !Core.m_GrenadeHitDisabled; break;
+	case WEAPON_LASER: Core.m_LaserHitDisabled = !Core.m_LaserHitDisabled; break;
+	default: return;
+	}
+	pChar->SetCore(Core);
+}
+
+vec2 CFastPractice::ClampToPracticePlayableBounds(const vec2 &Pos) const
+{
+	float MinX = -std::numeric_limits<float>::max();
+	float MinY = -std::numeric_limits<float>::max();
+	float MaxX = std::numeric_limits<float>::max();
+	float MaxY = std::numeric_limits<float>::max();
+	if(CMapItemLayerTilemap *pGameLayer = Layers()->GameLayer())
+	{
+		constexpr float OuterKillTileBoundaryDistance = 201.0f * 32.0f;
+		MinX = (-OuterKillTileBoundaryDistance) + 1.0f;
+		MinY = (-OuterKillTileBoundaryDistance) + 1.0f;
+		MaxX = (-OuterKillTileBoundaryDistance) + (pGameLayer->m_Width * 32.0f) + (OuterKillTileBoundaryDistance * 2.0f) - 1.0f;
+		MaxY = (-OuterKillTileBoundaryDistance) + (pGameLayer->m_Height * 32.0f) + (OuterKillTileBoundaryDistance * 2.0f) - 1.0f;
+	}
+	return vec2(std::clamp(Pos.x, MinX, MaxX), std::clamp(Pos.y, MinY, MaxY));
+}
+
 void CFastPractice::StoreLastTeleport(int ClientId, const vec2 &Pos)
 {
 	if(ClientId < 0 || ClientId >= MAX_CLIENTS)
@@ -1758,90 +1842,37 @@ bool CFastPractice::FindNearestSafeRescuePosition(int ClientId, const vec2 &From
 	return Found;
 }
 
-bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharacter *pChar, const std::vector<std::string> &vArgs, bool &WeaponsMutated)
+void CFastPractice::SyncPredictedWorldAfterPracticeCommand(int LocalClientId, int DummyClientId, CCharacter *pBaseChar, bool WeaponsMutated)
 {
-	(void)Team;
-	WeaponsMutated = false;
-	if(vArgs.empty() || vArgs[0].size() < 2 || vArgs[0][0] != '/')
-		return false;
+	if(WeaponsMutated)
+	{
+		NormalizeWeaponSelectionInput(pBaseChar);
+		if(m_RequireDummy && DummyClientId >= 0)
+			NormalizeWeaponSelectionInput(m_PracticeBaseWorld.GetCharacterById(DummyClientId));
+	}
 
-	std::string Cmd = vArgs[0].substr(1);
-	std::transform(Cmd.begin(), Cmd.end(), Cmd.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	GameClient()->m_PredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
+	GameClient()->m_PrevPredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
+	if(CCharacter *pPredChar = GameClient()->m_PredictedWorld.GetCharacterById(LocalClientId))
+	{
+		GameClient()->m_PredictedChar = pPredChar->GetCore();
+		GameClient()->m_PredictedPrevChar = pPredChar->GetCore();
+		GameClient()->m_aClients[LocalClientId].m_Predicted = pPredChar->GetCore();
+		GameClient()->m_aClients[LocalClientId].m_PrevPredicted = pPredChar->GetCore();
+	}
+	if(m_RequireDummy && DummyClientId >= 0)
+	{
+		if(CCharacter *pPredDummy = GameClient()->m_PredictedWorld.GetCharacterById(DummyClientId))
+		{
+			GameClient()->m_aClients[DummyClientId].m_Predicted = pPredDummy->GetCore();
+			GameClient()->m_aClients[DummyClientId].m_PrevPredicted = pPredDummy->GetCore();
+		}
+	}
+	GameClient()->m_PredictedTick = m_PracticeBaseWorld.GameTick();
+}
 
-	auto &State = m_aPracticeCommandState[LocalClientId];
-	const vec2 CurrentPos = pChar->Core()->m_Pos;
-	const auto SaveTeleportPos = [&](const vec2 &Pos) {
-		StoreLastTeleport(LocalClientId, Pos);
-		StoreLastDeathPosition(LocalClientId, CurrentPos);
-	};
-	const auto ApplyTeleport = [&](const vec2 &Pos) {
-		SaveTeleportPos(Pos);
-		TeleportCharacter(pChar, Pos);
-	};
-	const auto GiveWeapon = [&](int Weapon, bool Remove) {
-		if(Weapon == -1)
-		{
-			pChar->GiveWeapon(WEAPON_SHOTGUN, Remove);
-			pChar->GiveWeapon(WEAPON_GRENADE, Remove);
-			pChar->GiveWeapon(WEAPON_LASER, Remove);
-		}
-		else
-		{
-			pChar->GiveWeapon(Weapon, Remove);
-		}
-	};
-	const auto EnsureActiveWeaponIsValid = [&]() {
-		const CCharacterCore Core = pChar->GetCore();
-		if(Core.m_ActiveWeapon >= WEAPON_HAMMER && Core.m_ActiveWeapon < NUM_WEAPONS && Core.m_aWeapons[Core.m_ActiveWeapon].m_Got)
-			return;
-
-		if(Core.m_aWeapons[WEAPON_HAMMER].m_Got)
-		{
-			pChar->SetActiveWeapon(WEAPON_HAMMER);
-			return;
-		}
-		if(Core.m_aWeapons[WEAPON_GUN].m_Got)
-		{
-			pChar->SetActiveWeapon(WEAPON_GUN);
-			return;
-		}
-		for(int Weapon = WEAPON_SHOTGUN; Weapon < NUM_WEAPONS; Weapon++)
-		{
-			if(Core.m_aWeapons[Weapon].m_Got)
-			{
-				pChar->SetActiveWeapon(Weapon);
-				return;
-			}
-		}
-	};
-	const auto ToggleHit = [&](int Weapon) {
-		CCharacterCore Core = pChar->GetCore();
-		switch(Weapon)
-		{
-		case WEAPON_HAMMER: Core.m_HammerHitDisabled = !Core.m_HammerHitDisabled; break;
-		case WEAPON_SHOTGUN: Core.m_ShotgunHitDisabled = !Core.m_ShotgunHitDisabled; break;
-		case WEAPON_GRENADE: Core.m_GrenadeHitDisabled = !Core.m_GrenadeHitDisabled; break;
-		case WEAPON_LASER: Core.m_LaserHitDisabled = !Core.m_LaserHitDisabled; break;
-		default: return;
-		}
-		pChar->SetCore(Core);
-	};
-	const auto ClampToPlayableBounds = [&](const vec2 &Pos) {
-		float MinX = -std::numeric_limits<float>::max();
-		float MinY = -std::numeric_limits<float>::max();
-		float MaxX = std::numeric_limits<float>::max();
-		float MaxY = std::numeric_limits<float>::max();
-		if(CMapItemLayerTilemap *pGameLayer = Layers()->GameLayer())
-		{
-			constexpr float OuterKillTileBoundaryDistance = 201.0f * 32.0f;
-			MinX = (-OuterKillTileBoundaryDistance) + 1.0f;
-			MinY = (-OuterKillTileBoundaryDistance) + 1.0f;
-			MaxX = (-OuterKillTileBoundaryDistance) + (pGameLayer->m_Width * 32.0f) + (OuterKillTileBoundaryDistance * 2.0f) - 1.0f;
-			MaxY = (-OuterKillTileBoundaryDistance) + (pGameLayer->m_Height * 32.0f) + (OuterKillTileBoundaryDistance * 2.0f) - 1.0f;
-		}
-		return vec2(std::clamp(Pos.x, MinX, MaxX), std::clamp(Pos.y, MinY, MaxY));
-	};
-
+bool CFastPractice::ExecutePracticeMetaCommand(const std::string &Cmd)
+{
 	if(Cmd == "unpractice")
 	{
 		Disable();
@@ -1863,7 +1894,12 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 		ResetPracticeToAnchor();
 		return true;
 	}
+	return false;
+}
 
+bool CFastPractice::ExecutePracticeRescueCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs)
+{
+	auto &State = m_aPracticeCommandState[LocalClientId];
 	if(Cmd == "rescuemode")
 	{
 		if(vArgs.size() <= 1)
@@ -1871,8 +1907,8 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 			EchoPractice("rescue mode: %s", State.m_RescueManual ? "manual" : "auto");
 			return true;
 		}
-		std::string Arg = vArgs[1];
-		std::transform(Arg.begin(), Arg.end(), Arg.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+		const std::string Arg = LowercaseCopy(vArgs[1]);
 		if(Arg == "auto")
 		{
 			State.m_RescueManual = false;
@@ -1894,46 +1930,51 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 		return true;
 	}
 
-	if(Cmd == "r" || Cmd == "rescue")
-	{
-		const bool Frozen = IsFrozenState(pChar);
-		if(State.m_RescueManual)
-		{
-			if(pChar->IsGrounded() && !Frozen && IsSafeRescuePosition(CurrentPos, pChar->GetProximityRadius()))
-			{
-				State.m_HasRescueManual = true;
-				State.m_RescueManualPos = pChar->Core()->m_Pos;
-				EchoPractice("manual rescue point saved");
-				TrackSafeRescuePosition(LocalClientId, pChar);
-			}
-			else if(State.m_HasRescueManual && IsSafeRescuePosition(State.m_RescueManualPos, pChar->GetProximityRadius()))
-			{
-				ApplyTeleport(State.m_RescueManualPos);
-			}
-			else
-			{
-				EchoPractice("can't set manual rescue while not grounded");
-			}
-			return true;
-		}
+	if(Cmd != "r" && Cmd != "rescue")
+		return false;
 
-		if(State.m_HasRescueAuto && IsSafeRescuePosition(State.m_RescueAutoPos, pChar->GetProximityRadius()))
+	const vec2 CurrentPos = pChar->Core()->m_Pos;
+	const bool Frozen = IsFrozenState(pChar);
+	if(State.m_RescueManual)
+	{
+		if(pChar->IsGrounded() && !Frozen && IsSafeRescuePosition(CurrentPos, pChar->GetProximityRadius()))
 		{
-			ApplyTeleport(State.m_RescueAutoPos);
-			return true;
-		}
-		if(IsSafeRescuePosition(CurrentPos, pChar->GetProximityRadius()))
-		{
+			State.m_HasRescueManual = true;
+			State.m_RescueManualPos = CurrentPos;
+			EchoPractice("manual rescue point saved");
 			TrackSafeRescuePosition(LocalClientId, pChar);
-			EchoPractice("safe position updated");
+		}
+		else if(State.m_HasRescueManual && IsSafeRescuePosition(State.m_RescueManualPos, pChar->GetProximityRadius()))
+		{
+			ApplyPracticeTeleport(LocalClientId, pChar, State.m_RescueManualPos);
 		}
 		else
 		{
-			EchoPractice("no safe rescue position found");
+			EchoPractice("can't set manual rescue while not grounded");
 		}
 		return true;
 	}
 
+	if(State.m_HasRescueAuto && IsSafeRescuePosition(State.m_RescueAutoPos, pChar->GetProximityRadius()))
+	{
+		ApplyPracticeTeleport(LocalClientId, pChar, State.m_RescueAutoPos);
+		return true;
+	}
+	if(IsSafeRescuePosition(CurrentPos, pChar->GetProximityRadius()))
+	{
+		TrackSafeRescuePosition(LocalClientId, pChar);
+		EchoPractice("safe position updated");
+	}
+	else
+	{
+		EchoPractice("no safe rescue position found");
+	}
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeTeleportCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs)
+{
+	const auto &State = m_aPracticeCommandState[LocalClientId];
 	if(Cmd == "back")
 	{
 		if(!State.m_HasLastDeath)
@@ -1941,7 +1982,7 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 			EchoPractice("there is nowhere to go back to");
 			return true;
 		}
-		ApplyTeleport(State.m_LastDeathPos);
+		ApplyPracticeTeleport(LocalClientId, pChar, State.m_LastDeathPos);
 		return true;
 	}
 
@@ -1952,7 +1993,7 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 			EchoPractice("you haven't previously teleported");
 			return true;
 		}
-		ApplyTeleport(State.m_LastTeleportPos);
+		ApplyPracticeTeleport(LocalClientId, pChar, State.m_LastTeleportPos);
 		return true;
 	}
 
@@ -1960,9 +2001,8 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 	{
 		vec2 Target = GameClient()->m_Controls.m_aTargetPos[g_Config.m_ClDummy];
 		if(Cmd == "tc" || Cmd == "telecursor")
-		{
 			Target = (Target - GameClient()->m_Camera.m_Center) * GameClient()->m_Camera.m_Zoom + GameClient()->m_Camera.m_Center;
-		}
+
 		if(vArgs.size() > 1)
 		{
 			const int TargetId = FindClientByName(vArgs[1].c_str());
@@ -1973,7 +2013,8 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 			}
 			Target = vec2((float)GameClient()->m_Snap.m_aCharacters[TargetId].m_Cur.m_X, (float)GameClient()->m_Snap.m_aCharacters[TargetId].m_Cur.m_Y);
 		}
-		ApplyTeleport(ClampToPlayableBounds(Target));
+
+		ApplyPracticeTeleport(LocalClientId, pChar, ClampToPracticePlayableBounds(Target));
 		return true;
 	}
 
@@ -1998,35 +2039,39 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 			return true;
 		}
 
-		ApplyTeleport(ClampToPlayableBounds(vec2(X, Y)));
+		ApplyPracticeTeleport(LocalClientId, pChar, ClampToPracticePlayableBounds(vec2(X, Y)));
 		return true;
 	}
 
-	if(Cmd == "totele" || Cmd == "totelecp")
+	if(Cmd != "totele" && Cmd != "totelecp")
+		return false;
+
+	if(vArgs.size() < 2)
 	{
-		if(vArgs.size() < 2)
-		{
-			EchoPractice("usage: /%s <index>", Cmd.c_str());
-			return true;
-		}
-		int TeleIndex = 0;
-		if(!str_toint(vArgs[1].c_str(), &TeleIndex) || TeleIndex <= 0)
-		{
-			EchoPractice("invalid teleporter index");
-			return true;
-		}
-
-		const auto &vTeleOuts = Cmd == "totele" ? Collision()->TeleOuts(TeleIndex - 1) : Collision()->TeleCheckOuts(TeleIndex - 1);
-		if(vTeleOuts.empty())
-		{
-			EchoPractice("there is no teleporter with that index on the map");
-			return true;
-		}
-
-		ApplyTeleport(vTeleOuts[0]);
+		EchoPractice("usage: /%s <index>", Cmd.c_str());
 		return true;
 	}
 
+	int TeleIndex = 0;
+	if(!str_toint(vArgs[1].c_str(), &TeleIndex) || TeleIndex <= 0)
+	{
+		EchoPractice("invalid teleporter index");
+		return true;
+	}
+
+	const auto &vTeleOuts = Cmd == "totele" ? Collision()->TeleOuts(TeleIndex - 1) : Collision()->TeleCheckOuts(TeleIndex - 1);
+	if(vTeleOuts.empty())
+	{
+		EchoPractice("there is no teleporter with that index on the map");
+		return true;
+	}
+
+	ApplyPracticeTeleport(LocalClientId, pChar, vTeleOuts[0]);
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeStateCommand(CCharacter *pChar, const std::string &Cmd)
+{
 	if(Cmd == "solo" || Cmd == "unsolo")
 	{
 		pChar->SetSolo(Cmd == "solo");
@@ -2063,90 +2108,6 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 		return true;
 	}
 
-	if(Cmd == "shotgun" || Cmd == "grenade" || Cmd == "laser" || Cmd == "rifle" || Cmd == "unshotgun" || Cmd == "ungrenade" || Cmd == "unlaser" || Cmd == "unrifle" || Cmd == "weapons" || Cmd == "unweapons")
-	{
-		if(Cmd == "shotgun")
-			GiveWeapon(WEAPON_SHOTGUN, false);
-		else if(Cmd == "grenade")
-			GiveWeapon(WEAPON_GRENADE, false);
-		else if(Cmd == "laser" || Cmd == "rifle")
-			GiveWeapon(WEAPON_LASER, false);
-		else if(Cmd == "unshotgun")
-			GiveWeapon(WEAPON_SHOTGUN, true);
-		else if(Cmd == "ungrenade")
-			GiveWeapon(WEAPON_GRENADE, true);
-		else if(Cmd == "unlaser" || Cmd == "unrifle")
-			GiveWeapon(WEAPON_LASER, true);
-		else if(Cmd == "weapons")
-			GiveWeapon(-1, false);
-		else if(Cmd == "unweapons")
-			GiveWeapon(-1, true);
-		EnsureActiveWeaponIsValid();
-		WeaponsMutated = true;
-		return true;
-	}
-
-	if(Cmd == "addweapon" || Cmd == "removeweapon")
-	{
-		if(vArgs.size() < 2)
-		{
-			EchoPractice("usage: /%s <weapon-id>", Cmd.c_str());
-			return true;
-		}
-		int WeaponId = 0;
-		if(!str_toint(vArgs[1].c_str(), &WeaponId) || WeaponId != ClampWeaponId(WeaponId))
-		{
-			EchoPractice("invalid weapon id");
-			return true;
-		}
-		GiveWeapon(WeaponId, Cmd == "removeweapon");
-		EnsureActiveWeaponIsValid();
-		WeaponsMutated = true;
-		return true;
-	}
-
-	if(Cmd == "jetpack" || Cmd == "unjetpack" || Cmd == "infjump" || Cmd == "uninfjump" || Cmd == "endless" || Cmd == "unendless" || Cmd == "setjumps")
-	{
-		CCharacterCore Core = pChar->GetCore();
-		if(Cmd == "jetpack")
-			Core.m_Jetpack = true;
-		else if(Cmd == "unjetpack")
-			Core.m_Jetpack = false;
-		else if(Cmd == "infjump")
-		{
-			Core.m_EndlessJump = true;
-			State.m_InvincibleAddedEndlessJump = false;
-		}
-		else if(Cmd == "uninfjump")
-		{
-			Core.m_EndlessJump = false;
-			State.m_InvincibleAddedEndlessJump = false;
-		}
-		else if(Cmd == "endless")
-			Core.m_EndlessHook = true;
-		else if(Cmd == "unendless")
-			Core.m_EndlessHook = false;
-		else if(Cmd == "setjumps")
-		{
-			if(vArgs.size() < 2)
-			{
-				EchoPractice("usage: /setjumps <count>");
-				return true;
-			}
-			int Jumps = 0;
-			if(!str_toint(vArgs[1].c_str(), &Jumps))
-			{
-				EchoPractice("invalid jumps value");
-				return true;
-			}
-			Core.m_Jumps = Jumps;
-			Core.m_Jumped = 0;
-			Core.m_JumpedTotal = 0;
-		}
-		pChar->SetCore(Core);
-		return true;
-	}
-
 	if(Cmd == "ninja" || Cmd == "unninja")
 	{
 		if(Cmd == "ninja")
@@ -2156,103 +2117,225 @@ bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharact
 		return true;
 	}
 
-	if(Cmd == "invincible" || Cmd == "invisbl" || Cmd == "invinsbl")
+	return false;
+}
+
+bool CFastPractice::ExecutePracticeWeaponCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs, bool &WeaponsMutated)
+{
+	(void)LocalClientId;
+	if(Cmd == "shotgun" || Cmd == "grenade" || Cmd == "laser" || Cmd == "rifle" || Cmd == "unshotgun" || Cmd == "ungrenade" || Cmd == "unlaser" || Cmd == "unrifle" || Cmd == "weapons" || Cmd == "unweapons")
 	{
-		bool Invincible = false;
-		CCharacterCore Core = pChar->GetCore();
-		if(vArgs.size() > 1)
-		{
-			int Value = 0;
-			if(!str_toint(vArgs[1].c_str(), &Value))
-			{
-				EchoPractice("invalid value, use 0 or 1");
-				return true;
-			}
-			Invincible = Value != 0;
-		}
-		else
-		{
-			Invincible = !Core.m_Invincible;
-		}
-
-		if(Invincible)
-		{
-			pChar->SetSuper(false);
-			Core = pChar->GetCore();
-			Core.m_DeepFrozen = false;
-			Core.m_LiveFrozen = false;
-			Core.m_IsInFreeze = false;
-			Core.m_FreezeEnd = 0;
-			if(!Core.m_EndlessJump)
-			{
-				Core.m_EndlessJump = true;
-				State.m_InvincibleAddedEndlessJump = true;
-			}
-			else
-			{
-				State.m_InvincibleAddedEndlessJump = false;
-			}
-			pChar->SetCore(Core);
-			pChar->Unfreeze();
-			pChar->m_FreezeTime = 0;
-		}
-
-		Core = pChar->GetCore();
-		if(!Invincible && State.m_InvincibleAddedEndlessJump)
-		{
-			Core.m_EndlessJump = false;
-			State.m_InvincibleAddedEndlessJump = false;
-		}
-		Core.m_Invincible = Invincible;
-		pChar->SetCore(Core);
+		if(Cmd == "shotgun")
+			GivePracticeWeapon(pChar, WEAPON_SHOTGUN, false);
+		else if(Cmd == "grenade")
+			GivePracticeWeapon(pChar, WEAPON_GRENADE, false);
+		else if(Cmd == "laser" || Cmd == "rifle")
+			GivePracticeWeapon(pChar, WEAPON_LASER, false);
+		else if(Cmd == "unshotgun")
+			GivePracticeWeapon(pChar, WEAPON_SHOTGUN, true);
+		else if(Cmd == "ungrenade")
+			GivePracticeWeapon(pChar, WEAPON_GRENADE, true);
+		else if(Cmd == "unlaser" || Cmd == "unrifle")
+			GivePracticeWeapon(pChar, WEAPON_LASER, true);
+		else if(Cmd == "weapons")
+			GivePracticeWeapon(pChar, -1, false);
+		else if(Cmd == "unweapons")
+			GivePracticeWeapon(pChar, -1, true);
+		EnsureActiveWeaponIsValid(pChar);
+		WeaponsMutated = true;
 		return true;
 	}
 
-	if(Cmd == "collision")
+	if(Cmd != "addweapon" && Cmd != "removeweapon")
+		return false;
+
+	if(vArgs.size() < 2)
 	{
-		CCharacterCore Core = pChar->GetCore();
-		Core.m_CollisionDisabled = !Core.m_CollisionDisabled;
-		pChar->SetCore(Core);
+		EchoPractice("usage: /%s <weapon-id>", Cmd.c_str());
 		return true;
 	}
 
-	if(Cmd == "hookcollision")
+	int WeaponId = 0;
+	if(!str_toint(vArgs[1].c_str(), &WeaponId) || WeaponId != ClampWeaponId(WeaponId))
 	{
-		CCharacterCore Core = pChar->GetCore();
-		Core.m_HookHitDisabled = !Core.m_HookHitDisabled;
-		pChar->SetCore(Core);
+		EchoPractice("invalid weapon id");
 		return true;
 	}
 
-	if(Cmd == "hitothers")
+	GivePracticeWeapon(pChar, WeaponId, Cmd == "removeweapon");
+	EnsureActiveWeaponIsValid(pChar);
+	WeaponsMutated = true;
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeMovementCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs)
+{
+	if(Cmd != "jetpack" && Cmd != "unjetpack" && Cmd != "infjump" && Cmd != "uninfjump" && Cmd != "endless" && Cmd != "unendless" && Cmd != "setjumps")
+		return false;
+
+	auto &State = m_aPracticeCommandState[LocalClientId];
+	CCharacterCore Core = pChar->GetCore();
+	if(Cmd == "jetpack")
+		Core.m_Jetpack = true;
+	else if(Cmd == "unjetpack")
+		Core.m_Jetpack = false;
+	else if(Cmd == "infjump")
 	{
-		if(vArgs.size() <= 1 || str_comp_nocase(vArgs[1].c_str(), "all") == 0)
+		Core.m_EndlessJump = true;
+		State.m_InvincibleAddedEndlessJump = false;
+	}
+	else if(Cmd == "uninfjump")
+	{
+		Core.m_EndlessJump = false;
+		State.m_InvincibleAddedEndlessJump = false;
+	}
+	else if(Cmd == "endless")
+		Core.m_EndlessHook = true;
+	else if(Cmd == "unendless")
+		Core.m_EndlessHook = false;
+	else if(Cmd == "setjumps")
+	{
+		if(vArgs.size() < 2)
 		{
-			CCharacterCore Core = pChar->GetCore();
-			const bool IsDisabled = Core.m_HammerHitDisabled && Core.m_ShotgunHitDisabled && Core.m_GrenadeHitDisabled && Core.m_LaserHitDisabled;
-			Core.m_HammerHitDisabled = !IsDisabled;
-			Core.m_ShotgunHitDisabled = !IsDisabled;
-			Core.m_GrenadeHitDisabled = !IsDisabled;
-			Core.m_LaserHitDisabled = !IsDisabled;
-			pChar->SetCore(Core);
+			EchoPractice("usage: /setjumps <count>");
 			return true;
 		}
+		int Jumps = 0;
+		if(!str_toint(vArgs[1].c_str(), &Jumps))
+		{
+			EchoPractice("invalid jumps value");
+			return true;
+		}
+		Core.m_Jumps = Jumps;
+		Core.m_Jumped = 0;
+		Core.m_JumpedTotal = 0;
+	}
 
-		std::string Arg = vArgs[1];
-		std::transform(Arg.begin(), Arg.end(), Arg.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-		if(Arg == "hammer")
-			ToggleHit(WEAPON_HAMMER);
-		else if(Arg == "shotgun")
-			ToggleHit(WEAPON_SHOTGUN);
-		else if(Arg == "grenade")
-			ToggleHit(WEAPON_GRENADE);
-		else if(Arg == "laser")
-			ToggleHit(WEAPON_LASER);
+	pChar->SetCore(Core);
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeInvincibleCommand(int LocalClientId, CCharacter *pChar, const std::vector<std::string> &vArgs)
+{
+	auto &State = m_aPracticeCommandState[LocalClientId];
+	bool Invincible = false;
+	CCharacterCore Core = pChar->GetCore();
+	if(vArgs.size() > 1)
+	{
+		int Value = 0;
+		if(!str_toint(vArgs[1].c_str(), &Value))
+		{
+			EchoPractice("invalid value, use 0 or 1");
+			return true;
+		}
+		Invincible = Value != 0;
+	}
+	else
+	{
+		Invincible = !Core.m_Invincible;
+	}
+
+	if(Invincible)
+	{
+		pChar->SetSuper(false);
+		Core = pChar->GetCore();
+		Core.m_DeepFrozen = false;
+		Core.m_LiveFrozen = false;
+		Core.m_IsInFreeze = false;
+		Core.m_FreezeEnd = 0;
+		if(!Core.m_EndlessJump)
+		{
+			Core.m_EndlessJump = true;
+			State.m_InvincibleAddedEndlessJump = true;
+		}
 		else
-			EchoPractice("unknown argument for /hitothers");
+		{
+			State.m_InvincibleAddedEndlessJump = false;
+		}
+		pChar->SetCore(Core);
+		pChar->Unfreeze();
+		pChar->m_FreezeTime = 0;
+	}
+
+	Core = pChar->GetCore();
+	if(!Invincible && State.m_InvincibleAddedEndlessJump)
+	{
+		Core.m_EndlessJump = false;
+		State.m_InvincibleAddedEndlessJump = false;
+	}
+	Core.m_Invincible = Invincible;
+	pChar->SetCore(Core);
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeCollisionCommand(CCharacter *pChar, const std::string &Cmd)
+{
+	if(Cmd != "collision" && Cmd != "hookcollision")
+		return false;
+
+	CCharacterCore Core = pChar->GetCore();
+	if(Cmd == "collision")
+		Core.m_CollisionDisabled = !Core.m_CollisionDisabled;
+	else
+		Core.m_HookHitDisabled = !Core.m_HookHitDisabled;
+	pChar->SetCore(Core);
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeHitOthersCommand(CCharacter *pChar, const std::vector<std::string> &vArgs)
+{
+	if(vArgs.size() <= 1 || str_comp_nocase(vArgs[1].c_str(), "all") == 0)
+	{
+		CCharacterCore Core = pChar->GetCore();
+		const bool IsDisabled = Core.m_HammerHitDisabled && Core.m_ShotgunHitDisabled && Core.m_GrenadeHitDisabled && Core.m_LaserHitDisabled;
+		Core.m_HammerHitDisabled = !IsDisabled;
+		Core.m_ShotgunHitDisabled = !IsDisabled;
+		Core.m_GrenadeHitDisabled = !IsDisabled;
+		Core.m_LaserHitDisabled = !IsDisabled;
+		pChar->SetCore(Core);
 		return true;
 	}
 
+	const std::string Arg = LowercaseCopy(vArgs[1]);
+	if(Arg == "hammer")
+		TogglePracticeHit(pChar, WEAPON_HAMMER);
+	else if(Arg == "shotgun")
+		TogglePracticeHit(pChar, WEAPON_SHOTGUN);
+	else if(Arg == "grenade")
+		TogglePracticeHit(pChar, WEAPON_GRENADE);
+	else if(Arg == "laser")
+		TogglePracticeHit(pChar, WEAPON_LASER);
+	else
+		EchoPractice("unknown argument for /hitothers");
+	return true;
+}
+
+bool CFastPractice::ExecutePracticeCommand(int Team, int LocalClientId, CCharacter *pChar, const std::vector<std::string> &vArgs, bool &WeaponsMutated)
+{
+	(void)Team;
+	WeaponsMutated = false;
+	if(vArgs.empty() || vArgs[0].size() < 2 || vArgs[0][0] != '/')
+		return false;
+
+	const std::string Cmd = LowercaseCopy(vArgs[0].substr(1));
+	if(ExecutePracticeMetaCommand(Cmd))
+		return true;
+	if(ExecutePracticeRescueCommand(LocalClientId, pChar, Cmd, vArgs))
+		return true;
+	if(ExecutePracticeTeleportCommand(LocalClientId, pChar, Cmd, vArgs))
+		return true;
+	if(ExecutePracticeStateCommand(pChar, Cmd))
+		return true;
+	if(ExecutePracticeWeaponCommand(LocalClientId, pChar, Cmd, vArgs, WeaponsMutated))
+		return true;
+	if(ExecutePracticeMovementCommand(LocalClientId, pChar, Cmd, vArgs))
+		return true;
+	if(Cmd == "invincible" || Cmd == "invisbl" || Cmd == "invinsbl")
+		return ExecutePracticeInvincibleCommand(LocalClientId, pChar, vArgs);
+	if(ExecutePracticeCollisionCommand(pChar, Cmd))
+		return true;
+	if(Cmd == "hitothers")
+		return ExecutePracticeHitOthersCommand(pChar, vArgs);
 	return false;
 }
 
@@ -2297,32 +2380,7 @@ bool CFastPractice::ConsumePracticeChatCommand(int Team, const char *pLine)
 		return true;
 	m_SuppressFireOnNextPredictTick = true;
 	m_InputSuppressTicks = std::max(m_InputSuppressTicks, 2);
-
-	if(WeaponsMutated)
-	{
-		NormalizeWeaponSelectionInput(pBaseChar);
-		if(m_RequireDummy && DummyClientId >= 0)
-			NormalizeWeaponSelectionInput(m_PracticeBaseWorld.GetCharacterById(DummyClientId));
-	}
-
-	GameClient()->m_PredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
-	GameClient()->m_PrevPredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
-	if(CCharacter *pPredChar = GameClient()->m_PredictedWorld.GetCharacterById(LocalClientId))
-	{
-		GameClient()->m_PredictedChar = pPredChar->GetCore();
-		GameClient()->m_PredictedPrevChar = pPredChar->GetCore();
-		GameClient()->m_aClients[LocalClientId].m_Predicted = pPredChar->GetCore();
-		GameClient()->m_aClients[LocalClientId].m_PrevPredicted = pPredChar->GetCore();
-	}
-	if(m_RequireDummy && DummyClientId >= 0)
-	{
-		if(CCharacter *pPredDummy = GameClient()->m_PredictedWorld.GetCharacterById(DummyClientId))
-		{
-			GameClient()->m_aClients[DummyClientId].m_Predicted = pPredDummy->GetCore();
-			GameClient()->m_aClients[DummyClientId].m_PrevPredicted = pPredDummy->GetCore();
-		}
-	}
-	GameClient()->m_PredictedTick = m_PracticeBaseWorld.GameTick();
+	SyncPredictedWorldAfterPracticeCommand(LocalClientId, DummyClientId, pBaseChar, WeaponsMutated);
 
 	if(m_RequireDummy && DummyClientId >= 0 && !m_PracticeBaseWorld.GetCharacterById(DummyClientId))
 	{

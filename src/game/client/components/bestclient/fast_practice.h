@@ -143,6 +143,12 @@ private:
 	void NormalizeCharacterAfterReset(CCharacter *pChar, bool KeepFreezeFlags) const;
 	void NormalizeWeaponSelectionInput(CCharacter *pChar) const;
 	void TeleportCharacter(CCharacter *pChar, const vec2 &Pos) const;
+	void SaveTeleportHistory(int ClientId, const vec2 &CurrentPos, const vec2 &TargetPos);
+	void ApplyPracticeTeleport(int ClientId, CCharacter *pChar, const vec2 &TargetPos);
+	void GivePracticeWeapon(CCharacter *pChar, int Weapon, bool Remove) const;
+	void EnsureActiveWeaponIsValid(CCharacter *pChar) const;
+	void TogglePracticeHit(CCharacter *pChar, int Weapon) const;
+	vec2 ClampToPracticePlayableBounds(const vec2 &Pos) const;
 	void StoreLastTeleport(int ClientId, const vec2 &Pos);
 	void StoreLastDeathPosition(int ClientId, const vec2 &Pos);
 	void CaptureServerLockedTargets();
@@ -150,7 +156,17 @@ private:
 	bool IsSafeRescuePosition(const vec2 &Pos, float ProximityRadius) const;
 	void TrackSafeRescuePosition(int ClientId, CCharacter *pChar);
 	bool FindNearestSafeRescuePosition(int ClientId, const vec2 &From, vec2 &OutPos) const;
+	bool ExecutePracticeMetaCommand(const std::string &Cmd);
+	bool ExecutePracticeRescueCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs);
+	bool ExecutePracticeTeleportCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs);
+	bool ExecutePracticeStateCommand(CCharacter *pChar, const std::string &Cmd);
+	bool ExecutePracticeWeaponCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs, bool &WeaponsMutated);
+	bool ExecutePracticeMovementCommand(int LocalClientId, CCharacter *pChar, const std::string &Cmd, const std::vector<std::string> &vArgs);
+	bool ExecutePracticeInvincibleCommand(int LocalClientId, CCharacter *pChar, const std::vector<std::string> &vArgs);
+	bool ExecutePracticeCollisionCommand(CCharacter *pChar, const std::string &Cmd);
+	bool ExecutePracticeHitOthersCommand(CCharacter *pChar, const std::vector<std::string> &vArgs);
 	bool ExecutePracticeCommand(int Team, int LocalClientId, CCharacter *pChar, const std::vector<std::string> &vArgs, bool &WeaponsMutated);
+	void SyncPredictedWorldAfterPracticeCommand(int LocalClientId, int DummyClientId, CCharacter *pBaseChar, bool WeaponsMutated);
 };
 
 #endif
