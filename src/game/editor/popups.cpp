@@ -505,6 +505,8 @@ CUi::EPopupMenuFunctionResult CEditor::PopupGroup(void *pContext, CUIRect View, 
 	{
 		if(pEditor->DoButton_Editor(&s_DeleteButton, "Delete group", 0, &Button, BUTTONFLAG_LEFT, "Delete the group."))
 		{
+			int DelGroup = pEditor->Map()->m_SelectedGroup;
+			pEditor->m_DuoSession.NotifyDelGroup(DelGroup);
 			pEditor->Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionGroup>(pEditor->Map(), pEditor->Map()->m_SelectedGroup, true));
 			pEditor->Map()->DeleteGroup(pEditor->Map()->m_SelectedGroup);
 			pEditor->Map()->m_SelectedGroup = maximum(0, pEditor->Map()->m_SelectedGroup - 1);
@@ -671,7 +673,10 @@ CUi::EPopupMenuFunctionResult CEditor::PopupGroup(void *pContext, CUIRect View, 
 		static CLineInput s_NameInput;
 		s_NameInput.SetBuffer(pEditor->Map()->m_vpGroups[pEditor->Map()->m_SelectedGroup]->m_aName, sizeof(pEditor->Map()->m_vpGroups[pEditor->Map()->m_SelectedGroup]->m_aName));
 		if(pEditor->DoEditBox(&s_NameInput, &Button, 10.0f))
+		{
 			pEditor->Map()->OnModify();
+			pEditor->m_DuoSession.NotifyRenameGroup(pEditor->Map()->m_SelectedGroup, pEditor->Map()->m_vpGroups[pEditor->Map()->m_SelectedGroup]->m_aName);
+		}
 	}
 
 	CProperty aProps[] = {
@@ -809,7 +814,10 @@ CUi::EPopupMenuFunctionResult CEditor::PopupLayer(void *pContext, CUIRect View, 
 		static CLineInput s_NameInput;
 		s_NameInput.SetBuffer(pCurrentLayer->m_aName, sizeof(pCurrentLayer->m_aName));
 		if(pEditor->DoEditBox(&s_NameInput, &EditBox, 10.0f))
+		{
 			pEditor->Map()->OnModify();
+			pEditor->m_DuoSession.NotifyRenameLayer(pEditor->Map()->m_SelectedGroup, pEditor->Map()->m_vSelectedLayers[0], pCurrentLayer->m_aName);
+		}
 	}
 
 	// spacing if any button was rendered

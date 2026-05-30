@@ -1,6 +1,7 @@
 #include "duo_session.h"
 
 #include <game/editor/editor.h>
+#include <game/editor/editor_actions.h>
 #include <game/editor/mapitems/layer_tiles.h>
 #include <game/editor/mapitems/image.h>
 #include <base/hash_ctxt.h>
@@ -504,6 +505,141 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		Reader.ReadBytes(reinterpret_cast<uint8_t *>(pTiles->m_pTiles + Row * Width), RowBytes);
 		break;
 	}
+	case PACKET_STRUCT_ADD_GROUP:
+	{
+		m_ApplyingRemote = true;
+		Editor()->AddGroup();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_DEL_GROUP:
+	{
+		if(!Reader.HasBytes(4))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		if(vGroups[GroupIdx] == Editor()->Map()->m_pGameGroup)
+			break;
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionGroup>(Editor()->Map(), GroupIdx, true));
+		Editor()->Map()->DeleteGroup(GroupIdx);
+		Editor()->Map()->m_SelectedGroup = maximum(0, GroupIdx - 1);
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_ADD_LAYER:
+	{
+		if(!Reader.HasBytes(9))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int LayerType = Reader.ReadU8();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_SelectedGroup = GroupIdx;
+		if(LayerType == LAYERTYPE_TILES)
+			Editor()->AddTileLayer();
+		else if(LayerType == LAYERTYPE_QUADS)
+			Editor()->AddQuadsLayer();
+		else if(LayerType == LAYERTYPE_SOUNDS)
+			Editor()->AddSoundLayer();
+		m_ApplyingRemote = false;
+		(void)LayerIdx;
+		break;
+	}
+	case PACKET_STRUCT_DEL_LAYER:
+	{
+		if(!Reader.HasBytes(8))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+			break;
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_SelectedGroup = GroupIdx;
+		Editor()->Map()->SelectLayer(LayerIdx);
+		Editor()->Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionDeleteLayer>(Editor()->Map(), GroupIdx, LayerIdx));
+		vGroups[GroupIdx]->DeleteLayer(LayerIdx);
+		Editor()->Map()->SelectPreviousLayer();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_SET_IMAGE:
+	{
+		if(!Reader.HasBytes(12))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int ImageIdx = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+			break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
+			break;
+		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
+		if(ImageIdx < -1 || ImageIdx >= (int)Editor()->Map()->m_vpImages.size())
+			break;
+		m_ApplyingRemote = true;
+		pTiles->m_Image = ImageIdx;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_RENAME_GROUP:
+	{
+		if(!Reader.HasBytes(6))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		uint16_t NameLen = Reader.ReadU16();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		if(!Reader.HasBytes(NameLen))
+			break;
+		char aName[128] = {};
+		int CopyLen = minimum((int)NameLen, (int)sizeof(aName) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aName), CopyLen);
+		m_ApplyingRemote = true;
+		str_copy(vGroups[GroupIdx]->m_aName, aName, sizeof(vGroups[GroupIdx]->m_aName));
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_RENAME_LAYER:
+	{
+		if(!Reader.HasBytes(10))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		uint16_t NameLen = Reader.ReadU16();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+			break;
+		if(!Reader.HasBytes(NameLen))
+			break;
+		char aName[128] = {};
+		int CopyLen = minimum((int)NameLen, (int)sizeof(aName) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aName), CopyLen);
+		m_ApplyingRemote = true;
+		str_copy(vLayers[LayerIdx]->m_aName, aName, sizeof(vLayers[LayerIdx]->m_aName));
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
 	default:
 		break;
 	}
@@ -562,6 +698,55 @@ void CDuoSession::NotifyFullSync()
 				SendSyncCheck(g, l);
 		}
 	}
+}
+
+void CDuoSession::NotifyAddGroup()
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructAddGroup();
+}
+
+void CDuoSession::NotifyDelGroup(int GroupIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructDelGroup(GroupIdx);
+}
+
+void CDuoSession::NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructAddLayer(GroupIdx, LayerIdx, LayerType, pName);
+}
+
+void CDuoSession::NotifyDelLayer(int GroupIdx, int LayerIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructDelLayer(GroupIdx, LayerIdx);
+}
+
+void CDuoSession::NotifySetImage(int GroupIdx, int LayerIdx, int ImageIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructSetImage(GroupIdx, LayerIdx, ImageIdx);
+}
+
+void CDuoSession::NotifyRenameGroup(int GroupIdx, const char *pName)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructRenameGroup(GroupIdx, pName);
+}
+
+void CDuoSession::NotifyRenameLayer(int GroupIdx, int LayerIdx, const char *pName)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructRenameLayer(GroupIdx, LayerIdx, pName);
 }
 
 void CDuoSession::SendSyncCheck(int GroupIdx, int LayerIdx)
@@ -631,6 +816,87 @@ void CDuoSession::SendSyncData(int GroupIdx, int LayerIdx)
 		if(m_Socket == nullptr)
 			return;
 	}
+}
+
+void CDuoSession::SendStructAddGroup()
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_ADD_GROUP);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructDelGroup(int GroupIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_DEL_GROUP);
+	WriteS32(vPacket, GroupIdx);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_ADD_LAYER);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	WriteU8(vPacket, (uint8_t)LayerType);
+	int NameLen = str_length(pName);
+	WriteString(vPacket, pName, NameLen);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructDelLayer(int GroupIdx, int LayerIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_DEL_LAYER);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructSetImage(int GroupIdx, int LayerIdx, int ImageIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_SET_IMAGE);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	WriteS32(vPacket, ImageIdx);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructRenameGroup(int GroupIdx, const char *pName)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_RENAME_GROUP);
+	WriteS32(vPacket, GroupIdx);
+	int NameLen = str_length(pName);
+	WriteString(vPacket, pName, NameLen);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructRenameLayer(int GroupIdx, int LayerIdx, const char *pName)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_RENAME_LAYER);
+	WriteS32(vPacket, GroupIdx);
+	WriteS32(vPacket, LayerIdx);
+	int NameLen = str_length(pName);
+	WriteString(vPacket, pName, NameLen);
+	SendFrame(vPacket);
 }
 
 // --- UI Popups ---

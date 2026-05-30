@@ -21,6 +21,13 @@ public:
 	void NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags);
 	void NotifyStrokeEnd(); // call when mouse button released after drawing
 	void NotifyFullSync();  // call after undo/redo — checks all tile layers
+	void NotifyAddGroup();
+	void NotifyDelGroup(int GroupIdx);
+	void NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName);
+	void NotifyDelLayer(int GroupIdx, int LayerIdx);
+	void NotifySetImage(int GroupIdx, int LayerIdx, int ImageIdx);
+	void NotifyRenameGroup(int GroupIdx, const char *pName);
+	void NotifyRenameLayer(int GroupIdx, int LayerIdx, const char *pName);
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
 	static CUi::EPopupMenuFunctionResult PopupDuoMain(void *pContext, CUIRect View, bool Active);
@@ -58,6 +65,9 @@ public:
 	std::vector<uint8_t> m_vRecvBuf;
 	int m_RecvBufLen = 0;
 
+	// set while applying a remote packet — prevents re-broadcasting back
+	bool m_ApplyingRemote = false;
+
 	struct STileEditEntry
 	{
 		int m_GroupIdx;
@@ -85,6 +95,13 @@ public:
 	void SendSyncCheck(int GroupIdx, int LayerIdx);
 	void SendSyncRequest(int GroupIdx, int LayerIdx);
 	void SendSyncData(int GroupIdx, int LayerIdx);
+	void SendStructAddGroup();
+	void SendStructDelGroup(int GroupIdx);
+	void SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName);
+	void SendStructDelLayer(int GroupIdx, int LayerIdx);
+	void SendStructSetImage(int GroupIdx, int LayerIdx, int ImageIdx);
+	void SendStructRenameGroup(int GroupIdx, const char *pName);
+	void SendStructRenameLayer(int GroupIdx, int LayerIdx, const char *pName);
 	void SendGoodbye();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);

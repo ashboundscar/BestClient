@@ -1136,6 +1136,8 @@ CUi::EPopupMenuFunctionResult CLayerTiles::RenderProperties(CUIRect *pToolBox)
 				m_Image = -1;
 			}
 		}
+		if(!Map()->m_vSelectedLayers.empty())
+			Editor()->m_DuoSession.NotifySetImage(Map()->m_SelectedGroup, Map()->m_vSelectedLayers[0], m_Image);
 	}
 	else if(Prop == ETilesProp::COLOR)
 	{
