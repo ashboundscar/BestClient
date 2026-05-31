@@ -4325,6 +4325,19 @@ void CEditor::RenderStatusbar(CUIRect View, CUIRect *pTooltipRect)
 		m_QuickActionHistory.Call();
 	}
 
+	View.VSplitRight(10.0f, &View, nullptr);
+	View.VSplitRight(110.0f, &View, &Button);
+	{
+		// highlight button when session is active
+		static SPopupMenuId s_DuoPopupId;
+		int Color = m_DuoSession.IsLive() ? 1 : (m_DuoSession.m_State == CDuoSession::STATE_WAITING || m_DuoSession.m_State == CDuoSession::STATE_CONNECTING ? 0 : 0);
+		static int s_DuoButton = 0;
+		if(DoButton_Editor(&s_DuoButton, "Duo Mapping", Color, &Button, BUTTONFLAG_LEFT, "Collaborate on a map in real-time."))
+		{
+			Ui()->DoPopupMenu(&s_DuoPopupId, Button.x, Button.y - 112.0f, 220.0f, 110.0f, this, CDuoSession::PopupDuo);
+		}
+	}
+
 	View.VSplitRight(10.0f, pTooltipRect, nullptr);
 }
 

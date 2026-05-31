@@ -35,6 +35,7 @@ public:
 	void NotifyExternImage(int ImageIdx);
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
+	static CUi::EPopupMenuFunctionResult PopupDuo(void *pContext, CUIRect View, bool Active);
 	static CUi::EPopupMenuFunctionResult PopupDuoMain(void *pContext, CUIRect View, bool Active);
 	static CUi::EPopupMenuFunctionResult PopupDuoCreate(void *pContext, CUIRect View, bool Active);
 	static CUi::EPopupMenuFunctionResult PopupDuoJoin(void *pContext, CUIRect View, bool Active);

@@ -1384,3 +1384,119 @@ CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoJoin(void *pContext, CUIRect 
 
 	return CUi::POPUP_KEEP_OPEN;
 }
+
+CUi::EPopupMenuFunctionResult CDuoSession::PopupDuo(void *pContext, CUIRect View, bool Active)
+{
+	CEditor *pEditor = static_cast<CEditor *>(pContext);
+	CDuoSession *pDuo = &pEditor->m_DuoSession;
+	CUIRect Slot;
+	static int64_t s_CopiedTime = 0;
+
+	View.Margin(6.0f, &View);
+
+	if(pDuo->m_State == STATE_IDLE || pDuo->m_State == STATE_ERROR)
+	{
+		// title
+		View.HSplitTop(14.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, "Duo Mapping", 11.0f, TEXTALIGN_MC);
+		View.HSplitTop(5.0f, nullptr, &View);
+
+		// create room
+		static int s_CreateButton = 0;
+		View.HSplitTop(16.0f, &Slot, &View);
+		if(pEditor->DoButton_Editor(&s_CreateButton, "Create room", 0, &Slot, BUTTONFLAG_LEFT, "Create a new collaboration room."))
+			pDuo->Connect(nullptr, true);
+
+		View.HSplitTop(5.0f, nullptr, &View);
+
+		// join room label
+		View.HSplitTop(12.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, "Join room:", 10.0f, TEXTALIGN_ML);
+		View.HSplitTop(2.0f, nullptr, &View);
+
+		// code input
+		View.HSplitTop(16.0f, &Slot, &View);
+		static CLineInput s_CodeInput;
+		s_CodeInput.SetBuffer(pDuo->m_aJoinCodeInput, sizeof(pDuo->m_aJoinCodeInput));
+		pEditor->DoEditBox(&s_CodeInput, &Slot, 10.0f);
+
+		View.HSplitTop(3.0f, nullptr, &View);
+
+		// connect
+		static int s_ConnectButton = 0;
+		View.HSplitTop(16.0f, &Slot, &View);
+		if(pEditor->DoButton_Editor(&s_ConnectButton, "Connect", 0, &Slot, BUTTONFLAG_LEFT, "Connect to the room."))
+		{
+			if(str_length(pDuo->m_aJoinCodeInput) == ROOM_CODE_LEN)
+				pDuo->Connect(pDuo->m_aJoinCodeInput, false);
+		}
+
+		if(pDuo->m_State == STATE_ERROR && pDuo->m_aErrorMsg[0])
+		{
+			View.HSplitTop(5.0f, nullptr, &View);
+			View.HSplitTop(12.0f, &Slot, &View);
+			pEditor->Ui()->DoLabel(&Slot, pDuo->m_aErrorMsg, 9.0f, TEXTALIGN_MC);
+			View.HSplitTop(3.0f, nullptr, &View);
+			static int s_RetryButton2 = 0;
+			View.HSplitTop(16.0f, &Slot, &View);
+			if(pEditor->DoButton_Editor(&s_RetryButton2, "Try again", 0, &Slot, BUTTONFLAG_LEFT, "Clear error and try again."))
+			{
+				pDuo->m_State = STATE_IDLE;
+				pDuo->m_aErrorMsg[0] = '\0';
+			}
+		}
+	}
+	else if(pDuo->m_State == STATE_CONNECTING)
+	{
+		View.HSplitTop(14.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, "Duo Mapping", 11.0f, TEXTALIGN_MC);
+		View.HSplitTop(8.0f, nullptr, &View);
+		View.HSplitTop(14.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, "Connecting...", 10.0f, TEXTALIGN_MC);
+		View.HSplitTop(6.0f, nullptr, &View);
+		static int s_CancelButton = 0;
+		View.HSplitTop(16.0f, &Slot, &View);
+		if(pEditor->DoButton_Editor(&s_CancelButton, "Cancel", 0, &Slot, BUTTONFLAG_LEFT, "Cancel connection."))
+			pDuo->Disconnect();
+	}
+	else if(pDuo->m_State == STATE_WAITING || pDuo->m_State == STATE_LIVE)
+	{
+		View.HSplitTop(14.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, "Duo Mapping", 11.0f, TEXTALIGN_MC);
+		View.HSplitTop(5.0f, nullptr, &View);
+
+		// room code row: label left, copy button right, same height
+		View.HSplitTop(16.0f, &Slot, &View);
+		CUIRect CodeRect, CopyRect;
+		Slot.VSplitRight(58.0f, &CodeRect, &CopyRect);
+		char aCodeLabel[32];
+		str_format(aCodeLabel, sizeof(aCodeLabel), "Room: %s", pDuo->m_aRoomCode);
+		pEditor->Ui()->DoLabel(&CodeRect, aCodeLabel, 10.0f, TEXTALIGN_ML);
+
+		static int s_CopyButton = 0;
+		bool bJustCopied = (time_get() - s_CopiedTime) < time_freq();
+		if(pEditor->DoButton_Editor(&s_CopyButton, bJustCopied ? "Copied!" : "Copy", bJustCopied ? 1 : 0, &CopyRect, BUTTONFLAG_LEFT, "Copy room code to clipboard."))
+		{
+			pEditor->Input()->SetClipboardText(pDuo->m_aRoomCode);
+			s_CopiedTime = time_get();
+		}
+
+		View.HSplitTop(4.0f, nullptr, &View);
+		char aPlayers[32];
+		str_format(aPlayers, sizeof(aPlayers), "Players: %d/2", pDuo->m_ParticipantCount);
+		View.HSplitTop(13.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, aPlayers, 10.0f, TEXTALIGN_ML);
+
+		View.HSplitTop(4.0f, nullptr, &View);
+		View.HSplitTop(13.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, pDuo->m_State == STATE_WAITING ? "Waiting for partner..." : "Connected!", 10.0f, TEXTALIGN_MC);
+
+		View.HSplitTop(5.0f, nullptr, &View);
+		static int s_DisconnectButton = 0;
+		View.HSplitTop(16.0f, &Slot, &View);
+		if(pEditor->DoButton_Editor(&s_DisconnectButton, "Disconnect", 0, &Slot, BUTTONFLAG_LEFT, "Disconnect from the room."))
+			pDuo->Disconnect();
+	}
+
+	return CUi::POPUP_KEEP_OPEN;
+}
