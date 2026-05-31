@@ -4,6 +4,8 @@
 #include "editor.h"
 #include "editor_actions.h"
 
+#include <engine/gfx/image_loader.h>
+
 #include <base/color.h>
 
 #include <engine/font_icons.h>
@@ -1753,6 +1755,10 @@ CUi::EPopupMenuFunctionResult CEditor::PopupImage(void *pContext, CUIRect View, 
 				pEditor->ShowFileDialogError("Embedding is not possible because the image could not be loaded.");
 				return CUi::POPUP_KEEP_OPEN;
 			}
+			int ImgIdx = pEditor->Map()->m_SelectedImage;
+			CByteBufferWriter PngWriter;
+			if(CImageLoader::SavePng(PngWriter, *pImg))
+				pEditor->m_DuoSession.NotifyEmbedImage(ImgIdx, PngWriter.Data(), (int)PngWriter.Size());
 			pImg->m_External = 0;
 			return CUi::POPUP_CLOSE_CURRENT;
 		}
@@ -1763,6 +1769,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupImage(void *pContext, CUIRect View, 
 	{
 		if(pEditor->DoButton_MenuItem(&s_ExternalButton, "Make external", 0, &Slot, BUTTONFLAG_LEFT, "Remove the image from the map file."))
 		{
+			pEditor->m_DuoSession.NotifyExternImage(pEditor->Map()->m_SelectedImage);
 			pImg->m_External = 1;
 			return CUi::POPUP_CLOSE_CURRENT;
 		}
@@ -1824,6 +1831,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupImage(void *pContext, CUIRect View, 
 		}
 		else
 		{
+			pEditor->m_DuoSession.NotifyDelImage(pEditor->Map()->m_SelectedImage);
 			pEditor->Map()->m_vpImages.erase(pEditor->Map()->m_vpImages.begin() + pEditor->Map()->m_SelectedImage);
 			pEditor->Map()->ModifyImageIndex(gs_ModifyIndexDeleted(pEditor->Map()->m_SelectedImage));
 		}
@@ -2226,6 +2234,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		}
 		else if(pEditor->m_PopupEventType == POPEVENT_REMOVE_USED_IMAGE)
 		{
+			pEditor->m_DuoSession.NotifyDelImage(pEditor->Map()->m_SelectedImage);
 			pEditor->Map()->m_vpImages.erase(pEditor->Map()->m_vpImages.begin() + pEditor->Map()->m_SelectedImage);
 			pEditor->Map()->ModifyImageIndex(gs_ModifyIndexDeleted(pEditor->Map()->m_SelectedImage));
 		}

@@ -5,6 +5,7 @@
 #include <game/editor/mapitems/layer_tiles.h>
 #include <game/editor/mapitems/image.h>
 #include <engine/gfx/image_loader.h>
+#include <engine/gfx/image_manipulation.h>
 #include <base/hash_ctxt.h>
 #include <game/client/lineinput.h>
 
@@ -203,11 +204,33 @@ void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
 {
 	if(m_Socket == nullptr)
 		return;
-	uint8_t aLen[2];
-	aLen[0] = (vPayload.size() >> 8) & 0xFF;
-	aLen[1] = vPayload.size() & 0xFF;
-	if(net_tcp_send(m_Socket, aLen, 2) < 0 ||
-		net_tcp_send(m_Socket, vPayload.data(), static_cast<int>(vPayload.size())) < 0)
+	uint32_t Size = (uint32_t)vPayload.size();
+	uint8_t aLen[4];
+	aLen[0] = (Size >> 24) & 0xFF;
+	aLen[1] = (Size >> 16) & 0xFF;
+	aLen[2] = (Size >> 8) & 0xFF;
+	aLen[3] = Size & 0xFF;
+
+	// switch to blocking for the duration of this send so large payloads
+	// don't get partial writes or WOULDBLOCK on a non-blocking socket
+	net_set_blocking(m_Socket);
+
+	auto SendAll = [&](const uint8_t *pData, int Len) -> bool {
+		int Sent = 0;
+		while(Sent < Len)
+		{
+			int Ret = net_tcp_send(m_Socket, pData + Sent, Len - Sent);
+			if(Ret <= 0)
+				return false;
+			Sent += Ret;
+		}
+		return true;
+	};
+
+	bool Ok = SendAll(aLen, 4) && SendAll(vPayload.data(), (int)vPayload.size());
+	net_set_non_blocking(m_Socket);
+
+	if(!Ok)
 	{
 		str_copy(m_aErrorMsg, "Connection lost");
 		m_State = STATE_ERROR;
@@ -332,18 +355,21 @@ void CDuoSession::ProcessNetwork()
 	// Bytes < 0: WOULDBLOCK — normal for non-blocking
 
 	int Offset = 0;
-	while(Offset + 2 <= m_RecvBufLen)
+	while(Offset + 4 <= m_RecvBufLen)
 	{
-		uint16_t MsgLen = (static_cast<uint16_t>(m_vRecvBuf[Offset]) << 8) | m_vRecvBuf[Offset + 1];
+		uint32_t MsgLen = (static_cast<uint32_t>(m_vRecvBuf[Offset]) << 24) |
+		                  (static_cast<uint32_t>(m_vRecvBuf[Offset + 1]) << 16) |
+		                  (static_cast<uint32_t>(m_vRecvBuf[Offset + 2]) << 8) |
+		                   static_cast<uint32_t>(m_vRecvBuf[Offset + 3]);
 		if(MsgLen == 0)
 		{
 			m_RecvBufLen = 0;
 			return;
 		}
-		if(Offset + 2 + MsgLen > m_RecvBufLen)
+		if(Offset + 4 + (int)MsgLen > m_RecvBufLen)
 			break; // wait for more data
-		HandleMessage(m_vRecvBuf.data() + Offset + 2, MsgLen);
-		Offset += 2 + MsgLen;
+		HandleMessage(m_vRecvBuf.data() + Offset + 4, (int)MsgLen);
+		Offset += 4 + (int)MsgLen;
 		if(m_Socket == nullptr)
 			break;
 	}
@@ -715,10 +741,25 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		}
 		if(External)
 		{
-			// external image — just add reference, no pixel data needed
+			// external image — load from local mapres/
 			auto pImg = std::make_shared<CEditorImage>(Editor()->Map());
 			str_copy(pImg->m_aName, aName, sizeof(pImg->m_aName));
 			pImg->m_External = 1;
+			char aBuf[IO_MAX_PATH_LENGTH];
+			str_format(aBuf, sizeof(aBuf), "mapres/%s.png", aName);
+			CImageInfo ImgInfo;
+			if(Editor()->Graphics()->LoadPng(ImgInfo, aBuf, IStorage::TYPE_ALL))
+			{
+				pImg->m_Width = ImgInfo.m_Width;
+				pImg->m_Height = ImgInfo.m_Height;
+				pImg->m_Format = ImgInfo.m_Format;
+				pImg->m_pData = ImgInfo.m_pData;
+				ConvertToRgba(*pImg);
+				int TexFlag = Editor()->Graphics()->Uses2DTextureArrays() ? IGraphics::TEXLOAD_TO_2D_ARRAY_TEXTURE : IGraphics::TEXLOAD_TO_3D_TEXTURE;
+				if(pImg->m_Width % 16 != 0 || pImg->m_Height % 16 != 0)
+					TexFlag = 0;
+				pImg->m_Texture = Editor()->Graphics()->LoadTextureRaw(*pImg, TexFlag, aBuf);
+			}
 			pImg->m_AutoMapper.Load(pImg->m_aName);
 			m_ApplyingRemote = true;
 			Editor()->Map()->m_vpImages.push_back(pImg);
@@ -740,6 +781,8 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 				pImg->m_pData = ImgInfo.m_pData;
 				pImg->m_External = 0;
 				str_copy(pImg->m_aName, aName, sizeof(pImg->m_aName));
+				ConvertToRgba(*pImg);
+				DilateImage(*pImg);
 				int TexFlag = Editor()->Graphics()->Uses2DTextureArrays() ? IGraphics::TEXLOAD_TO_2D_ARRAY_TEXTURE : IGraphics::TEXLOAD_TO_3D_TEXTURE;
 				if(pImg->m_Width % 16 != 0 || pImg->m_Height % 16 != 0)
 					TexFlag = 0;
@@ -752,6 +795,69 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			}
 		}
 		skip_add_image:;
+		break;
+	}
+	case PACKET_STRUCT_DEL_IMAGE:
+	{
+		if(!Reader.HasBytes(4))
+			break;
+		int ImageIdx = Reader.ReadS32();
+		if(ImageIdx < 0 || ImageIdx >= (int)Editor()->Map()->m_vpImages.size())
+			break;
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_vpImages.erase(Editor()->Map()->m_vpImages.begin() + ImageIdx);
+		Editor()->Map()->ModifyImageIndex([ImageIdx](int *pIndex) {
+			if(*pIndex == ImageIdx) *pIndex = -1;
+			else if(*pIndex > ImageIdx) *pIndex = *pIndex - 1;
+		});
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_EMBED_IMAGE:
+	{
+		if(!Reader.HasBytes(8))
+			break;
+		int ImageIdx = Reader.ReadS32();
+		int DataSize = Reader.ReadS32();
+		if(ImageIdx < 0 || ImageIdx >= (int)Editor()->Map()->m_vpImages.size())
+			break;
+		if(DataSize <= 0 || !Reader.HasBytes(DataSize))
+			break;
+		std::vector<uint8_t> vData(DataSize);
+		Reader.ReadBytes(vData.data(), DataSize);
+		auto pImg = Editor()->Map()->m_vpImages[ImageIdx];
+		CImageInfo ImgInfo;
+		if(Editor()->Graphics()->LoadPng(ImgInfo, vData.data(), (size_t)DataSize, pImg->m_aName))
+		{
+			pImg->CEditorImage::Free();
+			pImg->m_Width = ImgInfo.m_Width;
+			pImg->m_Height = ImgInfo.m_Height;
+			pImg->m_Format = ImgInfo.m_Format;
+			pImg->m_pData = ImgInfo.m_pData;
+			ConvertToRgba(*pImg);
+			DilateImage(*pImg);
+			int TexFlag = Editor()->Graphics()->Uses2DTextureArrays() ? IGraphics::TEXLOAD_TO_2D_ARRAY_TEXTURE : IGraphics::TEXLOAD_TO_3D_TEXTURE;
+			if(pImg->m_Width % 16 != 0 || pImg->m_Height % 16 != 0)
+				TexFlag = 0;
+			pImg->m_Texture = Editor()->Graphics()->LoadTextureRaw(*pImg, TexFlag, pImg->m_aName);
+			m_ApplyingRemote = true;
+			pImg->m_External = 0;
+			Editor()->Map()->OnModify();
+			m_ApplyingRemote = false;
+		}
+		break;
+	}
+	case PACKET_STRUCT_EXTERN_IMAGE:
+	{
+		if(!Reader.HasBytes(4))
+			break;
+		int ImageIdx = Reader.ReadS32();
+		if(ImageIdx < 0 || ImageIdx >= (int)Editor()->Map()->m_vpImages.size())
+			break;
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_vpImages[ImageIdx]->m_External = 1;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
 		break;
 	}
 	default:
@@ -915,7 +1021,7 @@ void CDuoSession::SendSyncData(int GroupIdx, int LayerIdx)
 	int H = pTiles->m_Height;
 	int RowBytes = W * (int)sizeof(CTile);
 
-	// send one row per frame to stay within uint16_t frame size limit
+	// send one row per frame to keep individual packets small
 	for(int row = 0; row < H; row++)
 	{
 		std::vector<uint8_t> vPacket;
@@ -1053,6 +1159,60 @@ void CDuoSession::NotifyAddImage(const char *pName, bool External, const uint8_t
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
 	SendStructAddImage(pName, External, pData, DataSize);
+}
+
+void CDuoSession::SendStructDelImage(int ImageIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_DEL_IMAGE);
+	WriteS32(vPacket, ImageIdx);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructEmbedImage(int ImageIdx, const uint8_t *pData, int DataSize)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_EMBED_IMAGE);
+	WriteS32(vPacket, ImageIdx);
+	WriteS32(vPacket, DataSize);
+	if(DataSize > 0 && pData)
+		WriteBytes(vPacket, pData, DataSize);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendStructExternImage(int ImageIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_STRUCT_EXTERN_IMAGE);
+	WriteS32(vPacket, ImageIdx);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::NotifyDelImage(int ImageIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructDelImage(ImageIdx);
+}
+
+void CDuoSession::NotifyEmbedImage(int ImageIdx, const uint8_t *pData, int DataSize)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructEmbedImage(ImageIdx, pData, DataSize);
+}
+
+void CDuoSession::NotifyExternImage(int ImageIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructExternImage(ImageIdx);
 }
 
 // --- UI Popups ---

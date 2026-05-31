@@ -41,6 +41,9 @@ enum EPacketType : uint8_t
 	PACKET_STRUCT_RENAME_LAYER = 21,// GroupIdx(4)+LayerIdx(4)+Name(2+N)
 	PACKET_STRUCT_LAYER_PROP = 22,  // GroupIdx(4)+LayerIdx(4)+PropId(1)+Value(4)
 	PACKET_STRUCT_ADD_IMAGE = 23,   // External(1)+Name(2+N)+RawData(4+N)
+	PACKET_STRUCT_DEL_IMAGE = 24,   // ImageIdx(4)
+	PACKET_STRUCT_EMBED_IMAGE = 25, // ImageIdx(4)+RawData(4+N)  (external→embedded)
+	PACKET_STRUCT_EXTERN_IMAGE = 26,// ImageIdx(4)               (embedded→external)
 };
 
 enum EErrorCode : uint8_t
