@@ -1073,6 +1073,32 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_ApplyingRemote = false;
 		break;
 	}
+	case PACKET_GROUP_PROP:
+	{
+		if(!Reader.HasBytes(9))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int PropId   = Reader.ReadU8();
+		int Value    = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+			break;
+		auto pGroup = vGroups[GroupIdx];
+		m_ApplyingRemote = true;
+		EGroupProp Prop = static_cast<EGroupProp>(PropId);
+		if(Prop == EGroupProp::POS_X)           pGroup->m_OffsetX = Value;
+		else if(Prop == EGroupProp::POS_Y)      pGroup->m_OffsetY = Value;
+		else if(Prop == EGroupProp::PARA_X)     pGroup->m_ParallaxX = Value;
+		else if(Prop == EGroupProp::PARA_Y)     pGroup->m_ParallaxY = Value;
+		else if(Prop == EGroupProp::USE_CLIPPING) pGroup->m_UseClipping = Value;
+		else if(Prop == EGroupProp::CLIP_X)     pGroup->m_ClipX = Value;
+		else if(Prop == EGroupProp::CLIP_Y)     pGroup->m_ClipY = Value;
+		else if(Prop == EGroupProp::CLIP_W)     pGroup->m_ClipW = Value;
+		else if(Prop == EGroupProp::CLIP_H)     pGroup->m_ClipH = Value;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
 	default:
 		break;
 	}
@@ -1552,6 +1578,22 @@ void CDuoSession::NotifyLayerFlags(int GroupIdx, int LayerIdx, int Flags)
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
 	SendLayerFlags(GroupIdx, LayerIdx, Flags);
+}
+
+void CDuoSession::SendGroupProp(int GroupIdx, int PropId, int Value)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_GROUP_PROP);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteU8(v, (uint8_t)PropId);
+	DuoProtocol::WriteS32(v, Value);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyGroupProp(int GroupIdx, int PropId, int Value)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendGroupProp(GroupIdx, PropId, Value);
 }
 
 CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect View, bool Active)

@@ -52,6 +52,7 @@ enum EPacketType : uint8_t
 	PACKET_QUAD_PROP       = 31,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+Prop(1)+Value(4)
 	PACKET_QUAD_POINT_PROP = 32,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+PointIdx(1)+Prop(1)+Value(4)
 	PACKET_LAYER_FLAGS     = 33,    // GroupIdx(4)+LayerIdx(4)+Flags(4)
+	PACKET_GROUP_PROP      = 34,    // GroupIdx(4)+PropId(1)+Value(4)
 };
 
 enum EErrorCode : uint8_t

@@ -41,6 +41,7 @@ public:
 	void NotifyQuadProp(int GroupIdx, int LayerIdx, int QuadIdx, int Prop, int Value);
 	void NotifyQuadPointProp(int GroupIdx, int LayerIdx, int QuadIdx, int PointIdx, int Prop, int Value);
 	void NotifyLayerFlags(int GroupIdx, int LayerIdx, int Flags);
+	void NotifyGroupProp(int GroupIdx, int PropId, int Value);
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
 	static CUi::EPopupMenuFunctionResult PopupDuo(void *pContext, CUIRect View, bool Active);
@@ -132,6 +133,7 @@ public:
 	void SendQuadProp(int GroupIdx, int LayerIdx, int QuadIdx, int Prop, int Value);
 	void SendQuadPointProp(int GroupIdx, int LayerIdx, int QuadIdx, int PointIdx, int Prop, int Value);
 	void SendLayerFlags(int GroupIdx, int LayerIdx, int Flags);
+	void SendGroupProp(int GroupIdx, int PropId, int Value);
 	void SendGoodbye();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);
