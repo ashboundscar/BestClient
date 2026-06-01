@@ -3718,6 +3718,7 @@ void CEditor::RenderLayers(CUIRect LayersBox)
 		{
 			s_PreviousOperation = OP_NONE;
 			Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionEditGroupProp>(Map(), Map()->m_SelectedGroup, EGroupProp::ORDER, s_InitialGroupIndex, Map()->m_SelectedGroup));
+			m_DuoSession.NotifyGroupProp(s_InitialGroupIndex, (int)EGroupProp::ORDER, Map()->m_SelectedGroup);
 		}
 		else if(s_PreviousOperation == OP_LAYER_DRAG)
 		{

@@ -597,7 +597,9 @@ int CLayerTilesCommonPropTracker::PropToValue(ETilesCommonProp Prop)
 void CLayerGroupPropTracker::OnEnd(EGroupProp Prop, int Value)
 {
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionEditGroupProp>(Map(), Map()->m_SelectedGroup, Prop, m_OriginalValue, Value));
-	if(Prop != EGroupProp::ORDER)
+	if(Prop == EGroupProp::ORDER)
+		Editor()->m_DuoSession.NotifyGroupProp(m_OriginalValue, (int)Prop, Value);
+	else
 		Editor()->m_DuoSession.NotifyGroupProp(Map()->m_SelectedGroup, (int)Prop, Value);
 }
 

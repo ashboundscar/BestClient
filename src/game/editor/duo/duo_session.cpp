@@ -633,6 +633,17 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_ApplyingRemote = true;
 		Editor()->Map()->m_SelectedGroup = GroupIdx;
 		Editor()->Map()->SelectLayer(LayerIdx);
+		// Reset special layer pointers before deletion to avoid dangling references
+		auto pLayer = vLayers[LayerIdx];
+		if(pLayer->m_Type == LAYERTYPE_TILES)
+		{
+			auto pTiles = std::static_pointer_cast<CLayerTiles>(pLayer);
+			if(pTiles->m_HasFront)        Editor()->Map()->m_pFrontLayer   = nullptr;
+			else if(pTiles->m_HasTele)    Editor()->Map()->m_pTeleLayer    = nullptr;
+			else if(pTiles->m_HasSpeedup) Editor()->Map()->m_pSpeedupLayer = nullptr;
+			else if(pTiles->m_HasSwitch)  Editor()->Map()->m_pSwitchLayer  = nullptr;
+			else if(pTiles->m_HasTune)    Editor()->Map()->m_pTuneLayer    = nullptr;
+		}
 		Editor()->Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionDeleteLayer>(Editor()->Map(), GroupIdx, LayerIdx));
 		vGroups[GroupIdx]->DeleteLayer(LayerIdx);
 		Editor()->Map()->SelectPreviousLayer();
@@ -1091,13 +1102,18 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		int GroupIdx = Reader.ReadS32();
 		int PropId   = Reader.ReadU8();
 		int Value    = Reader.ReadS32();
+		dbg_msg("duo", "RECV GroupProp group=%d prop=%d val=%d", GroupIdx, PropId, Value);
 		auto &vGroups = Editor()->Map()->m_vpGroups;
 		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
 			break;
 		auto pGroup = vGroups[GroupIdx];
 		m_ApplyingRemote = true;
 		EGroupProp Prop = static_cast<EGroupProp>(PropId);
-		if(Prop == EGroupProp::POS_X)           pGroup->m_OffsetX = Value;
+		if(Prop == EGroupProp::ORDER)
+		{
+			Editor()->Map()->m_SelectedGroup = Editor()->Map()->MoveGroup(GroupIdx, Value);
+		}
+		else if(Prop == EGroupProp::POS_X)           pGroup->m_OffsetX = Value;
 		else if(Prop == EGroupProp::POS_Y)      pGroup->m_OffsetY = Value;
 		else if(Prop == EGroupProp::PARA_X)     pGroup->m_ParallaxX = Value;
 		else if(Prop == EGroupProp::PARA_Y)     pGroup->m_ParallaxY = Value;
@@ -1604,6 +1620,7 @@ void CDuoSession::SendGroupProp(int GroupIdx, int PropId, int Value)
 
 void CDuoSession::NotifyGroupProp(int GroupIdx, int PropId, int Value)
 {
+	dbg_msg("duo", "NotifyGroupProp group=%d prop=%d val=%d state=%d remote=%d", GroupIdx, PropId, Value, m_State, (int)m_ApplyingRemote);
 	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
 	SendGroupProp(GroupIdx, PropId, Value);
 }
