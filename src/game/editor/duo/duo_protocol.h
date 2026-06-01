@@ -44,6 +44,14 @@ enum EPacketType : uint8_t
 	PACKET_STRUCT_DEL_IMAGE = 24,   // ImageIdx(4)
 	PACKET_STRUCT_EMBED_IMAGE = 25, // ImageIdx(4)+RawData(4+N)  (external→embedded)
 	PACKET_STRUCT_EXTERN_IMAGE = 26,// ImageIdx(4)               (embedded→external)
+	// Quad sync
+	PACKET_QUAD_ADD        = 27,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+QuadData(N)
+	PACKET_QUAD_DEL        = 28,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)
+	PACKET_QUAD_POINTS     = 29,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+Points(5*8)
+	PACKET_QUAD_COLORS     = 30,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+Colors(4*16)
+	PACKET_QUAD_PROP       = 31,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+Prop(1)+Value(4)
+	PACKET_QUAD_POINT_PROP = 32,    // GroupIdx(4)+LayerIdx(4)+QuadIdx(4)+PointIdx(1)+Prop(1)+Value(4)
+	PACKET_LAYER_FLAGS     = 33,    // GroupIdx(4)+LayerIdx(4)+Flags(4)
 };
 
 enum EErrorCode : uint8_t

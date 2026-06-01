@@ -1068,6 +1068,11 @@ CUi::EPopupMenuFunctionResult CEditor::PopupQuad(void *pContext, CUIRect View, b
 	if(Prop == EQuadProp::ORDER && pLayer)
 	{
 		const int QuadIndex = pLayer->SwapQuads(pEditor->Map()->m_vSelectedQuads[pQuadPopupContext->m_SelectedQuadIndex], NewVal);
+		pEditor->m_DuoSession.NotifyQuadProp(
+			pEditor->Map()->m_SelectedGroup,
+			pEditor->Map()->m_vSelectedLayers[0],
+			pEditor->Map()->m_vSelectedQuads[pQuadPopupContext->m_SelectedQuadIndex],
+			(int)EQuadProp::ORDER, NewVal);
 		pEditor->Map()->m_vSelectedQuads[pQuadPopupContext->m_SelectedQuadIndex] = QuadIndex;
 	}
 
@@ -1132,6 +1137,25 @@ CUi::EPopupMenuFunctionResult CEditor::PopupQuad(void *pContext, CUIRect View, b
 
 	if(Prop != EQuadProp::NONE && (State == EEditState::END || State == EEditState::ONE_GO))
 	{
+		const int GroupIdx = pEditor->Map()->m_SelectedGroup;
+		const int LayerIdx = pEditor->Map()->m_vSelectedLayers[0];
+		const auto &vSelQuads = pEditor->Map()->m_vSelectedQuads;
+		for(int k = 0; k < (int)vpQuads.size() && k < (int)vSelQuads.size(); k++)
+		{
+			int QuadIdx = vSelQuads[k];
+			CQuad *pQ = vpQuads[k];
+			if(Prop == EQuadProp::POS_X || Prop == EQuadProp::POS_Y)
+				pEditor->m_DuoSession.NotifyQuadPoints(GroupIdx, LayerIdx, QuadIdx, pQ->m_aPoints);
+			else if(Prop == EQuadProp::COLOR)
+				pEditor->m_DuoSession.NotifyQuadColors(GroupIdx, LayerIdx, QuadIdx, pQ->m_aColors);
+			else
+				pEditor->m_DuoSession.NotifyQuadProp(GroupIdx, LayerIdx, QuadIdx, (int)Prop, [&]() -> int {
+					if(Prop == EQuadProp::POS_ENV)        return pQ->m_PosEnv;
+					if(Prop == EQuadProp::POS_ENV_OFFSET) return pQ->m_PosEnvOffset;
+					if(Prop == EQuadProp::COLOR_ENV)      return pQ->m_ColorEnv;
+					return pQ->m_ColorEnvOffset;
+				}());
+		}
 		pEditor->Map()->m_QuadTracker.EndQuadPropTrack(Prop);
 		pEditor->Map()->OnModify();
 	}
@@ -1402,6 +1426,28 @@ CUi::EPopupMenuFunctionResult CEditor::PopupPoint(void *pContext, CUIRect View, 
 
 	if(Prop != EQuadPointProp::NONE && (State == EEditState::END || State == EEditState::ONE_GO))
 	{
+		const int GroupIdx = pEditor->Map()->m_SelectedGroup;
+		const int LayerIdx = pEditor->Map()->m_vSelectedLayers[0];
+		const auto &vSelQuads = pEditor->Map()->m_vSelectedQuads;
+		for(int k = 0; k < (int)vpQuads.size() && k < (int)vSelQuads.size(); k++)
+		{
+			int QuadIdx = vSelQuads[k];
+			CQuad *pQ = vpQuads[k];
+			if(Prop == EQuadPointProp::POS_X || Prop == EQuadPointProp::POS_Y)
+				pEditor->m_DuoSession.NotifyQuadPoints(GroupIdx, LayerIdx, QuadIdx, pQ->m_aPoints);
+			else if(Prop == EQuadPointProp::COLOR)
+				pEditor->m_DuoSession.NotifyQuadColors(GroupIdx, LayerIdx, QuadIdx, pQ->m_aColors);
+			else
+			{
+				for(int v = 0; v < 4; v++)
+				{
+					if(!pEditor->Map()->IsQuadCornerSelected(v))
+						continue;
+					int Val = (Prop == EQuadPointProp::TEX_U) ? pQ->m_aTexcoords[v].x : pQ->m_aTexcoords[v].y;
+					pEditor->m_DuoSession.NotifyQuadPointProp(GroupIdx, LayerIdx, QuadIdx, v, (int)Prop, Val);
+				}
+			}
+		}
 		pEditor->Map()->m_QuadTracker.EndQuadPointPropTrack(Prop);
 		pEditor->Map()->OnModify();
 	}

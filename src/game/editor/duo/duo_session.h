@@ -4,6 +4,7 @@
 #include <game/editor/component.h>
 #include <game/editor/duo/duo_protocol.h>
 #include <game/client/ui.h>
+#include <game/mapitems.h>
 #include <base/net.h>
 #include <base/system.h>
 #include <set>
@@ -33,6 +34,13 @@ public:
 	void NotifyDelImage(int ImageIdx);
 	void NotifyEmbedImage(int ImageIdx, const uint8_t *pData, int DataSize);
 	void NotifyExternImage(int ImageIdx);
+	void NotifyAddQuad(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad);
+	void NotifyDelQuad(int GroupIdx, int LayerIdx, int QuadIdx);
+	void NotifyQuadPoints(int GroupIdx, int LayerIdx, int QuadIdx, const CPoint *pPoints);
+	void NotifyQuadColors(int GroupIdx, int LayerIdx, int QuadIdx, const CColor *pColors);
+	void NotifyQuadProp(int GroupIdx, int LayerIdx, int QuadIdx, int Prop, int Value);
+	void NotifyQuadPointProp(int GroupIdx, int LayerIdx, int QuadIdx, int PointIdx, int Prop, int Value);
+	void NotifyLayerFlags(int GroupIdx, int LayerIdx, int Flags);
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
 	static CUi::EPopupMenuFunctionResult PopupDuo(void *pContext, CUIRect View, bool Active);
@@ -74,6 +82,10 @@ public:
 	// set while applying a remote packet — prevents re-broadcasting back
 	bool m_ApplyingRemote = false;
 
+	// debug counters
+	int m_DbgQuadSent = 0;
+	int m_DbgQuadRecv = 0;
+
 	struct STileEditEntry
 	{
 		int m_GroupIdx;
@@ -113,6 +125,13 @@ public:
 	void SendStructDelImage(int ImageIdx);
 	void SendStructEmbedImage(int ImageIdx, const uint8_t *pData, int DataSize);
 	void SendStructExternImage(int ImageIdx);
+	void SendQuadAdd(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad);
+	void SendQuadDel(int GroupIdx, int LayerIdx, int QuadIdx);
+	void SendQuadPoints(int GroupIdx, int LayerIdx, int QuadIdx, const CPoint *pPoints);
+	void SendQuadColors(int GroupIdx, int LayerIdx, int QuadIdx, const CColor *pColors);
+	void SendQuadProp(int GroupIdx, int LayerIdx, int QuadIdx, int Prop, int Value);
+	void SendQuadPointProp(int GroupIdx, int LayerIdx, int QuadIdx, int PointIdx, int Prop, int Value);
+	void SendLayerFlags(int GroupIdx, int LayerIdx, int Flags);
 	void SendGoodbye();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);

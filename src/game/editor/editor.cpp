@@ -4334,7 +4334,7 @@ void CEditor::RenderStatusbar(CUIRect View, CUIRect *pTooltipRect)
 		static int s_DuoButton = 0;
 		if(DoButton_Editor(&s_DuoButton, "Duo Mapping", Color, &Button, BUTTONFLAG_LEFT, "Collaborate on a map in real-time."))
 		{
-			Ui()->DoPopupMenu(&s_DuoPopupId, Button.x, Button.y - 112.0f, 220.0f, 110.0f, this, CDuoSession::PopupDuo);
+			Ui()->DoPopupMenu(&s_DuoPopupId, Button.x, Button.y - 128.0f, 220.0f, 126.0f, this, CDuoSession::PopupDuo);
 		}
 	}
 

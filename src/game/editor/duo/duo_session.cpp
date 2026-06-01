@@ -2,11 +2,14 @@
 
 #include <game/editor/editor.h>
 #include <game/editor/editor_actions.h>
+#include <game/editor/mapitems.h>
 #include <game/editor/mapitems/layer_tiles.h>
+#include <game/editor/mapitems/layer_quads.h>
 #include <game/editor/mapitems/image.h>
 #include <engine/gfx/image_loader.h>
 #include <engine/gfx/image_manipulation.h>
 #include <base/hash_ctxt.h>
+#include <base/math.h>
 #include <game/client/lineinput.h>
 
 using namespace DuoProtocol;
@@ -383,6 +386,29 @@ void CDuoSession::ProcessNetwork()
 		m_RecvBufLen = 0;
 }
 
+static void WriteQuad(std::vector<uint8_t> &v, const CQuad &q)
+{
+	for(int i = 0; i < 5; i++) { DuoProtocol::WriteS32(v, q.m_aPoints[i].x); DuoProtocol::WriteS32(v, q.m_aPoints[i].y); }
+	for(int i = 0; i < 4; i++) { DuoProtocol::WriteS32(v, q.m_aColors[i].r); DuoProtocol::WriteS32(v, q.m_aColors[i].g); DuoProtocol::WriteS32(v, q.m_aColors[i].b); DuoProtocol::WriteS32(v, q.m_aColors[i].a); }
+	for(int i = 0; i < 4; i++) { DuoProtocol::WriteS32(v, q.m_aTexcoords[i].x); DuoProtocol::WriteS32(v, q.m_aTexcoords[i].y); }
+	DuoProtocol::WriteS32(v, q.m_PosEnv);
+	DuoProtocol::WriteS32(v, q.m_PosEnvOffset);
+	DuoProtocol::WriteS32(v, q.m_ColorEnv);
+	DuoProtocol::WriteS32(v, q.m_ColorEnvOffset);
+}
+
+static bool ReadQuad(DuoProtocol::CPacketReader &r, CQuad &q)
+{
+	for(int i = 0; i < 5; i++) { q.m_aPoints[i].x = r.ReadS32(); q.m_aPoints[i].y = r.ReadS32(); }
+	for(int i = 0; i < 4; i++) { q.m_aColors[i].r = r.ReadS32(); q.m_aColors[i].g = r.ReadS32(); q.m_aColors[i].b = r.ReadS32(); q.m_aColors[i].a = r.ReadS32(); }
+	for(int i = 0; i < 4; i++) { q.m_aTexcoords[i].x = r.ReadS32(); q.m_aTexcoords[i].y = r.ReadS32(); }
+	q.m_PosEnv = r.ReadS32();
+	q.m_PosEnvOffset = r.ReadS32();
+	q.m_ColorEnv = r.ReadS32();
+	q.m_ColorEnvOffset = r.ReadS32();
+	return true;
+}
+
 void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 {
 	CPacketReader Reader(pData, Size);
@@ -391,6 +417,9 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		return;
 
 	m_LastServerPacketTime = time_get();
+
+	if(Type >= PACKET_QUAD_ADD && Type <= PACKET_LAYER_FLAGS)
+		m_DbgQuadRecv++;
 
 	switch(Type)
 	{
@@ -612,13 +641,13 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
 		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
 			break;
-		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
-			break;
-		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
 		if(ImageIdx < -1 || ImageIdx >= (int)Editor()->Map()->m_vpImages.size())
 			break;
 		m_ApplyingRemote = true;
-		pTiles->m_Image = ImageIdx;
+		if(vLayers[LayerIdx]->m_Type == LAYERTYPE_TILES)
+			std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx])->m_Image = ImageIdx;
+		else if(vLayers[LayerIdx]->m_Type == LAYERTYPE_QUADS)
+			std::static_pointer_cast<CLayerQuads>(vLayers[LayerIdx])->m_Image = ImageIdx;
 		Editor()->Map()->OnModify();
 		m_ApplyingRemote = false;
 		break;
@@ -856,6 +885,190 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			break;
 		m_ApplyingRemote = true;
 		Editor()->Map()->m_vpImages[ImageIdx]->m_External = 1;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_QUAD_ADD:
+	{
+		if(!Reader.HasBytes(12))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int QuadIdx  = Reader.ReadS32();
+		CQuad Quad = {};
+		if(!ReadQuad(Reader, Quad))
+			break;
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size() || vpLayers[LayerIdx]->m_Type != LAYERTYPE_QUADS)
+			break;
+		auto pLayerQuads = std::static_pointer_cast<CLayerQuads>(vpLayers[LayerIdx]);
+		m_ApplyingRemote = true;
+		int InsertIdx = maximum(0, minimum(QuadIdx, (int)pLayerQuads->m_vQuads.size()));
+		pLayerQuads->m_vQuads.insert(pLayerQuads->m_vQuads.begin() + InsertIdx, Quad);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_QUAD_DEL:
+	{
+		if(!Reader.HasBytes(12))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int QuadIdx  = Reader.ReadS32();
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size() || vpLayers[LayerIdx]->m_Type != LAYERTYPE_QUADS)
+			break;
+		auto pLayerQuads = std::static_pointer_cast<CLayerQuads>(vpLayers[LayerIdx]);
+		if(QuadIdx < 0 || QuadIdx >= (int)pLayerQuads->m_vQuads.size())
+			break;
+		m_ApplyingRemote = true;
+		pLayerQuads->m_vQuads.erase(pLayerQuads->m_vQuads.begin() + QuadIdx);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_QUAD_POINTS:
+	{
+		if(!Reader.HasBytes(12 + 5 * 8))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int QuadIdx  = Reader.ReadS32();
+		CPoint aPoints[5];
+		for(int i = 0; i < 5; i++) { aPoints[i].x = Reader.ReadS32(); aPoints[i].y = Reader.ReadS32(); }
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size() || vpLayers[LayerIdx]->m_Type != LAYERTYPE_QUADS)
+			break;
+		auto pLayerQuads = std::static_pointer_cast<CLayerQuads>(vpLayers[LayerIdx]);
+		if(QuadIdx < 0 || QuadIdx >= (int)pLayerQuads->m_vQuads.size())
+			break;
+		m_ApplyingRemote = true;
+		std::copy_n(aPoints, 5, pLayerQuads->m_vQuads[QuadIdx].m_aPoints);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_QUAD_COLORS:
+	{
+		if(!Reader.HasBytes(12 + 4 * 16))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int QuadIdx  = Reader.ReadS32();
+		CColor aColors[4];
+		for(int i = 0; i < 4; i++) { aColors[i].r = Reader.ReadS32(); aColors[i].g = Reader.ReadS32(); aColors[i].b = Reader.ReadS32(); aColors[i].a = Reader.ReadS32(); }
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size() || vpLayers[LayerIdx]->m_Type != LAYERTYPE_QUADS)
+			break;
+		auto pLayerQuads = std::static_pointer_cast<CLayerQuads>(vpLayers[LayerIdx]);
+		if(QuadIdx < 0 || QuadIdx >= (int)pLayerQuads->m_vQuads.size())
+			break;
+		m_ApplyingRemote = true;
+		std::copy_n(aColors, 4, pLayerQuads->m_vQuads[QuadIdx].m_aColors);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_QUAD_PROP:
+	{
+		if(!Reader.HasBytes(13 + 4))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int QuadIdx  = Reader.ReadS32();
+		int Prop     = Reader.ReadU8();
+		int Value    = Reader.ReadS32();
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size() || vpLayers[LayerIdx]->m_Type != LAYERTYPE_QUADS)
+			break;
+		auto pLayerQuads = std::static_pointer_cast<CLayerQuads>(vpLayers[LayerIdx]);
+		if(QuadIdx < 0 || QuadIdx >= (int)pLayerQuads->m_vQuads.size())
+			break;
+		m_ApplyingRemote = true;
+		if(Prop == (int)EQuadProp::ORDER)
+		{
+			pLayerQuads->SwapQuads(QuadIdx, Value);
+		}
+		else
+		{
+			CQuad &q = pLayerQuads->m_vQuads[QuadIdx];
+			if(Prop == (int)EQuadProp::POS_ENV)            q.m_PosEnv = Value;
+			else if(Prop == (int)EQuadProp::POS_ENV_OFFSET) q.m_PosEnvOffset = Value;
+			else if(Prop == (int)EQuadProp::COLOR_ENV)       q.m_ColorEnv = Value;
+			else if(Prop == (int)EQuadProp::COLOR_ENV_OFFSET) q.m_ColorEnvOffset = Value;
+		}
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_QUAD_POINT_PROP:
+	{
+		if(!Reader.HasBytes(12 + 2 + 4))
+			break;
+		int GroupIdx  = Reader.ReadS32();
+		int LayerIdx  = Reader.ReadS32();
+		int QuadIdx   = Reader.ReadS32();
+		int PointIdx  = Reader.ReadU8();
+		int Prop      = Reader.ReadU8();
+		int Value     = Reader.ReadS32();
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size() || vpLayers[LayerIdx]->m_Type != LAYERTYPE_QUADS)
+			break;
+		auto pLayerQuads = std::static_pointer_cast<CLayerQuads>(vpLayers[LayerIdx]);
+		if(QuadIdx < 0 || QuadIdx >= (int)pLayerQuads->m_vQuads.size())
+			break;
+		if(PointIdx < 0 || PointIdx > 3)
+			break;
+		m_ApplyingRemote = true;
+		CQuad &q = pLayerQuads->m_vQuads[QuadIdx];
+		if(Prop == (int)EQuadPointProp::COLOR)
+		{
+			const ColorRGBA ColorPick = ColorRGBA::UnpackAlphaLast<ColorRGBA>(Value);
+			q.m_aColors[PointIdx].r = (int)(ColorPick.r * 255.0f);
+			q.m_aColors[PointIdx].g = (int)(ColorPick.g * 255.0f);
+			q.m_aColors[PointIdx].b = (int)(ColorPick.b * 255.0f);
+			q.m_aColors[PointIdx].a = (int)(ColorPick.a * 255.0f);
+		}
+		else if(Prop == (int)EQuadPointProp::TEX_U)
+			q.m_aTexcoords[PointIdx].x = Value;
+		else if(Prop == (int)EQuadPointProp::TEX_V)
+			q.m_aTexcoords[PointIdx].y = Value;
+		else if(Prop == (int)EQuadPointProp::POS_X)
+			q.m_aPoints[PointIdx].x = Value;
+		else if(Prop == (int)EQuadPointProp::POS_Y)
+			q.m_aPoints[PointIdx].y = Value;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_LAYER_FLAGS:
+	{
+		if(!Reader.HasBytes(12))
+			break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int Flags    = Reader.ReadS32();
+		if(GroupIdx < 0 || GroupIdx >= (int)Editor()->Map()->m_vpGroups.size())
+			break;
+		auto &vpLayers = Editor()->Map()->m_vpGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vpLayers.size())
+			break;
+		m_ApplyingRemote = true;
+		vpLayers[LayerIdx]->m_Flags = Flags;
 		Editor()->Map()->OnModify();
 		m_ApplyingRemote = false;
 		break;
@@ -1215,7 +1428,131 @@ void CDuoSession::NotifyExternImage(int ImageIdx)
 	SendStructExternImage(ImageIdx);
 }
 
-// --- UI Popups ---
+void CDuoSession::SendQuadAdd(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_QUAD_ADD);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, QuadIdx);
+	WriteQuad(v, Quad);
+	SendFrame(v);
+}
+
+void CDuoSession::SendQuadDel(int GroupIdx, int LayerIdx, int QuadIdx)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_QUAD_DEL);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, QuadIdx);
+	SendFrame(v);
+}
+
+void CDuoSession::SendQuadPoints(int GroupIdx, int LayerIdx, int QuadIdx, const CPoint *pPoints)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_QUAD_POINTS);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, QuadIdx);
+	for(int i = 0; i < 5; i++) { DuoProtocol::WriteS32(v, pPoints[i].x); DuoProtocol::WriteS32(v, pPoints[i].y); }
+	SendFrame(v);
+}
+
+void CDuoSession::SendQuadColors(int GroupIdx, int LayerIdx, int QuadIdx, const CColor *pColors)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_QUAD_COLORS);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, QuadIdx);
+	for(int i = 0; i < 4; i++) { DuoProtocol::WriteS32(v, pColors[i].r); DuoProtocol::WriteS32(v, pColors[i].g); DuoProtocol::WriteS32(v, pColors[i].b); DuoProtocol::WriteS32(v, pColors[i].a); }
+	SendFrame(v);
+}
+
+void CDuoSession::SendQuadProp(int GroupIdx, int LayerIdx, int QuadIdx, int Prop, int Value)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_QUAD_PROP);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, QuadIdx);
+	DuoProtocol::WriteU8(v, (uint8_t)Prop);
+	DuoProtocol::WriteS32(v, Value);
+	SendFrame(v);
+}
+
+void CDuoSession::SendQuadPointProp(int GroupIdx, int LayerIdx, int QuadIdx, int PointIdx, int Prop, int Value)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_QUAD_POINT_PROP);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, QuadIdx);
+	DuoProtocol::WriteU8(v, (uint8_t)PointIdx);
+	DuoProtocol::WriteU8(v, (uint8_t)Prop);
+	DuoProtocol::WriteS32(v, Value);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyAddQuad(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	m_DbgQuadSent++;
+	SendQuadAdd(GroupIdx, LayerIdx, QuadIdx, Quad);
+}
+
+void CDuoSession::NotifyDelQuad(int GroupIdx, int LayerIdx, int QuadIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	m_DbgQuadSent++;
+	SendQuadDel(GroupIdx, LayerIdx, QuadIdx);
+}
+
+void CDuoSession::NotifyQuadPoints(int GroupIdx, int LayerIdx, int QuadIdx, const CPoint *pPoints)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	m_DbgQuadSent++;
+	SendQuadPoints(GroupIdx, LayerIdx, QuadIdx, pPoints);
+}
+
+void CDuoSession::NotifyQuadColors(int GroupIdx, int LayerIdx, int QuadIdx, const CColor *pColors)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	m_DbgQuadSent++;
+	SendQuadColors(GroupIdx, LayerIdx, QuadIdx, pColors);
+}
+
+void CDuoSession::NotifyQuadProp(int GroupIdx, int LayerIdx, int QuadIdx, int Prop, int Value)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	m_DbgQuadSent++;
+	SendQuadProp(GroupIdx, LayerIdx, QuadIdx, Prop, Value);
+}
+
+void CDuoSession::NotifyQuadPointProp(int GroupIdx, int LayerIdx, int QuadIdx, int PointIdx, int Prop, int Value)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	m_DbgQuadSent++;
+	SendQuadPointProp(GroupIdx, LayerIdx, QuadIdx, PointIdx, Prop, Value);
+}
+
+void CDuoSession::SendLayerFlags(int GroupIdx, int LayerIdx, int Flags)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_LAYER_FLAGS);
+	DuoProtocol::WriteS32(v, GroupIdx);
+	DuoProtocol::WriteS32(v, LayerIdx);
+	DuoProtocol::WriteS32(v, Flags);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyLayerFlags(int GroupIdx, int LayerIdx, int Flags)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendLayerFlags(GroupIdx, LayerIdx, Flags);
+}
 
 CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect View, bool Active)
 {
@@ -1263,6 +1600,13 @@ CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect 
 		View.HSplitTop(12.0f, &Slot, &View);
 		str_format(aBuf, sizeof(aBuf), "Players: %d / 2", pDuo->m_ParticipantCount);
 		pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_ML);
+
+		if(pDuo->m_State == STATE_LIVE)
+		{
+			View.HSplitTop(12.0f, &Slot, &View);
+			str_format(aBuf, sizeof(aBuf), "Q tx:%d rx:%d", pDuo->m_DbgQuadSent, pDuo->m_DbgQuadRecv);
+			pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_ML);
+		}
 	}
 
 	if(pDuo->m_State == STATE_CONNECTING || pDuo->m_State == STATE_WAITING || pDuo->m_State == STATE_LIVE)

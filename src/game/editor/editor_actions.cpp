@@ -259,7 +259,11 @@ void CEditorActionQuadPlace::Redo()
 {
 	std::shared_ptr<CLayerQuads> pLayerQuads = std::static_pointer_cast<CLayerQuads>(m_pLayer);
 	for(auto &Brush : m_vBrush)
+	{
 		pLayerQuads->m_vQuads.push_back(Brush);
+		int QuadIdx = (int)pLayerQuads->m_vQuads.size() - 1;
+		Editor()->m_DuoSession.NotifyAddQuad(m_GroupIndex, m_LayerIndex, QuadIdx, Brush);
+	}
 
 	Map()->OnModify();
 }
@@ -312,6 +316,7 @@ void CEditorActionDeleteQuad::Redo()
 
 	for(int i = 0; i < (int)vQuads.size(); ++i)
 	{
+		Editor()->m_DuoSession.NotifyDelQuad(m_GroupIndex, m_LayerIndex, vQuads[i]);
 		pLayerQuads->m_vQuads.erase(pLayerQuads->m_vQuads.begin() + vQuads[i]);
 		for(int j = i + 1; j < (int)vQuads.size(); ++j)
 			if(vQuads[j] > vQuads[i])
@@ -347,6 +352,7 @@ void CEditorActionEditQuadPoint::Apply(const std::vector<CPoint> &vValue)
 	CQuad &Quad = pLayerQuads->m_vQuads[m_QuadIndex];
 	dbg_assert(std::size(Quad.m_aPoints) == vValue.size(), "Expected %d values, got %d", (int)std::size(Quad.m_aPoints), (int)vValue.size());
 	std::copy_n(vValue.begin(), std::size(Quad.m_aPoints), Quad.m_aPoints);
+	Editor()->m_DuoSession.NotifyQuadPoints(m_GroupIndex, m_LayerIndex, m_QuadIndex, Quad.m_aPoints);
 }
 
 CEditorActionEditQuadColor::CEditorActionEditQuadColor(CEditorMap *pMap, int GroupIndex, int LayerIndex, int QuadIndex, std::vector<CColor> const &vPreviousColors, std::vector<CColor> const &vCurrentColors) :
@@ -371,6 +377,7 @@ void CEditorActionEditQuadColor::Apply(std::vector<CColor> &vValue)
 	CQuad &Quad = pLayerQuads->m_vQuads[m_QuadIndex];
 	dbg_assert(std::size(Quad.m_aColors) == vValue.size(), "Expected %d values, got %d", (int)std::size(Quad.m_aColors), (int)vValue.size());
 	std::copy_n(vValue.begin(), std::size(Quad.m_aColors), Quad.m_aColors);
+	Editor()->m_DuoSession.NotifyQuadColors(m_GroupIndex, m_LayerIndex, m_QuadIndex, Quad.m_aColors);
 }
 
 CEditorActionEditQuadProp::CEditorActionEditQuadProp(CEditorMap *pMap, int GroupIndex, int LayerIndex, int QuadIndex, EQuadProp Prop, int Previous, int Current) :
@@ -412,6 +419,7 @@ void CEditorActionEditQuadProp::Apply(int Value)
 		Quad.m_ColorEnv = Value;
 	else if(m_Prop == EQuadProp::COLOR_ENV_OFFSET)
 		Quad.m_ColorEnvOffset = Value;
+	Editor()->m_DuoSession.NotifyQuadProp(m_GroupIndex, m_LayerIndex, m_QuadIndex, (int)m_Prop, Value);
 }
 
 CEditorActionEditQuadPointProp::CEditorActionEditQuadPointProp(CEditorMap *pMap, int GroupIndex, int LayerIndex, int QuadIndex, int PointIndex, EQuadPointProp Prop, int Previous, int Current) :
@@ -463,6 +471,7 @@ void CEditorActionEditQuadPointProp::Apply(int Value)
 	{
 		Quad.m_aTexcoords[m_PointIndex].y = Value;
 	}
+	Editor()->m_DuoSession.NotifyQuadPointProp(m_GroupIndex, m_LayerIndex, m_QuadIndex, m_PointIndex, (int)m_Prop, Value);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -869,6 +878,8 @@ void CEditorActionEditLayerProp::Apply(int Value)
 	}
 
 	Map()->OnModify();
+	if(m_Prop == ELayerProp::HQ)
+		Editor()->m_DuoSession.NotifyLayerFlags(m_GroupIndex, m_LayerIndex, m_pLayer->m_Flags);
 }
 
 CEditorActionEditLayerTilesProp::CEditorActionEditLayerTilesProp(CEditorMap *pMap, int GroupIndex, int LayerIndex, ETilesProp Prop, int Previous, int Current) :
@@ -1132,6 +1143,7 @@ void CEditorActionEditLayerQuadsProp::Apply(int Value)
 	}
 
 	Map()->OnModify();
+	Editor()->m_DuoSession.NotifySetImage(m_GroupIndex, m_LayerIndex, pLayerQuads->m_Image);
 }
 
 // --------------------------------------------------------------
@@ -2064,6 +2076,8 @@ void CEditorActionNewEmptyQuad::Redo()
 	pLayerQuads->NewQuad(m_X, m_Y, Width, Height);
 
 	Map()->OnModify();
+	int QuadIdx = (int)pLayerQuads->m_vQuads.size() - 1;
+	Editor()->m_DuoSession.NotifyAddQuad(m_GroupIndex, m_LayerIndex, QuadIdx, pLayerQuads->m_vQuads[QuadIdx]);
 }
 
 // -------------
@@ -2087,6 +2101,8 @@ void CEditorActionNewQuad::Redo()
 {
 	std::shared_ptr<CLayerQuads> pLayerQuads = std::static_pointer_cast<CLayerQuads>(m_pLayer);
 	pLayerQuads->m_vQuads.emplace_back(m_Quad);
+	int QuadIdx = (int)pLayerQuads->m_vQuads.size() - 1;
+	Editor()->m_DuoSession.NotifyAddQuad(m_GroupIndex, m_LayerIndex, QuadIdx, m_Quad);
 }
 
 // --------------
