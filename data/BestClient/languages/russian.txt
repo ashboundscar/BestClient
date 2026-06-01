@@ -35,6 +35,9 @@ Discord
 Input
 == Ввод
 
+Graffiti
+== Граффити
+
 Amount
 == Кол.
 

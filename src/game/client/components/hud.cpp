@@ -1700,6 +1700,9 @@ void CHud::RenderTeambalanceWarning()
 
 void CHud::RenderCursor()
 {
+	if(GameClient()->m_Graffity.IsWheelActive())
+		return;
+
 	const float Scale = (float)g_Config.m_TcCursorScale / 100.0f;
 	if(Scale <= 0.0f)
 		return;
@@ -4096,6 +4099,7 @@ void CHud::OnRender()
 		GameClient()->m_VoiceChat.RenderHudTalkingIndicator(m_Width, m_Height);
 		GameClient()->m_BestClient.RenderHookCombo();
 	}
+	GameClient()->m_Graffity.RenderOverlayUi();
 	RenderCursor();
 }
 
