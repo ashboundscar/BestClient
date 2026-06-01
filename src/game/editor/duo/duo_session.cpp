@@ -1102,7 +1102,6 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		int GroupIdx = Reader.ReadS32();
 		int PropId   = Reader.ReadU8();
 		int Value    = Reader.ReadS32();
-		dbg_msg("duo", "RECV GroupProp group=%d prop=%d val=%d", GroupIdx, PropId, Value);
 		auto &vGroups = Editor()->Map()->m_vpGroups;
 		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
 			break;
@@ -1122,6 +1121,64 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		else if(Prop == EGroupProp::CLIP_Y)     pGroup->m_ClipY = Value;
 		else if(Prop == EGroupProp::CLIP_W)     pGroup->m_ClipW = Value;
 		else if(Prop == EGroupProp::CLIP_H)     pGroup->m_ClipH = Value;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_SETTING_ADD:
+	{
+		if(!Reader.HasBytes(2)) break;
+		int Len = Reader.ReadU16();
+		if(!Reader.HasBytes(Len)) break;
+		char aCmd[256] = {};
+		int CopyLen = minimum(Len, (int)sizeof(aCmd) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aCmd), CopyLen);
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_vSettings.emplace_back(aCmd);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_SETTING_DEL:
+	{
+		if(!Reader.HasBytes(4)) break;
+		int CmdIdx = Reader.ReadS32();
+		auto &vSettings = Editor()->Map()->m_vSettings;
+		if(CmdIdx < 0 || CmdIdx >= (int)vSettings.size()) break;
+		m_ApplyingRemote = true;
+		vSettings.erase(vSettings.begin() + CmdIdx);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_SETTING_EDIT:
+	{
+		if(!Reader.HasBytes(6)) break;
+		int CmdIdx = Reader.ReadS32();
+		int Len = Reader.ReadU16();
+		if(!Reader.HasBytes(Len)) break;
+		auto &vSettings = Editor()->Map()->m_vSettings;
+		if(CmdIdx < 0 || CmdIdx >= (int)vSettings.size()) break;
+		char aCmd[256] = {};
+		int CopyLen = minimum(Len, (int)sizeof(aCmd) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aCmd), CopyLen);
+		m_ApplyingRemote = true;
+		str_copy(vSettings[CmdIdx].m_aCommand, aCmd);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_SETTING_MOVE:
+	{
+		if(!Reader.HasBytes(8)) break;
+		int CmdIdx = Reader.ReadS32();
+		int Direction = Reader.ReadS32();
+		auto &vSettings = Editor()->Map()->m_vSettings;
+		int Other = CmdIdx + Direction;
+		if(CmdIdx < 0 || CmdIdx >= (int)vSettings.size()) break;
+		if(Other < 0 || Other >= (int)vSettings.size()) break;
+		m_ApplyingRemote = true;
+		std::swap(vSettings[CmdIdx], vSettings[Other]);
 		Editor()->Map()->OnModify();
 		m_ApplyingRemote = false;
 		break;
@@ -1620,9 +1677,66 @@ void CDuoSession::SendGroupProp(int GroupIdx, int PropId, int Value)
 
 void CDuoSession::NotifyGroupProp(int GroupIdx, int PropId, int Value)
 {
-	dbg_msg("duo", "NotifyGroupProp group=%d prop=%d val=%d state=%d remote=%d", GroupIdx, PropId, Value, m_State, (int)m_ApplyingRemote);
 	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
 	SendGroupProp(GroupIdx, PropId, Value);
+}
+
+void CDuoSession::SendSettingAdd(const char *pCmd)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_SETTING_ADD);
+	DuoProtocol::WriteString(v, pCmd, str_length(pCmd));
+	SendFrame(v);
+}
+
+void CDuoSession::SendSettingDel(int CmdIdx)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_SETTING_DEL);
+	DuoProtocol::WriteS32(v, CmdIdx);
+	SendFrame(v);
+}
+
+void CDuoSession::SendSettingEdit(int CmdIdx, const char *pCmd)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_SETTING_EDIT);
+	DuoProtocol::WriteS32(v, CmdIdx);
+	DuoProtocol::WriteString(v, pCmd, str_length(pCmd));
+	SendFrame(v);
+}
+
+void CDuoSession::SendSettingMove(int CmdIdx, int Direction)
+{
+	std::vector<uint8_t> v;
+	DuoProtocol::WriteHeader(v, DuoProtocol::PACKET_SETTING_MOVE);
+	DuoProtocol::WriteS32(v, CmdIdx);
+	DuoProtocol::WriteS32(v, Direction);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifySettingAdd(const char *pCmd)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendSettingAdd(pCmd);
+}
+
+void CDuoSession::NotifySettingDel(int CmdIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendSettingDel(CmdIdx);
+}
+
+void CDuoSession::NotifySettingEdit(int CmdIdx, const char *pCmd)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendSettingEdit(CmdIdx, pCmd);
+}
+
+void CDuoSession::NotifySettingMove(int CmdIdx, int Direction)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendSettingMove(CmdIdx, Direction);
 }
 
 CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect View, bool Active)
