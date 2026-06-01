@@ -36,6 +36,7 @@
 #include "components/bestclient/clientindicator/client_indicator.h"
 #include "components/bestclient/fast_actions.h"
 #include "components/bestclient/fast_practice.h"
+#include "components/bestclient/graffity/graffity.h"
 #include "components/bestclient/hud_editor.h"
 #include "components/bestclient/magic_particles.h"
 #include "components/bestclient/music_player.h"
@@ -235,6 +236,7 @@ public:
 	CAdminPanel m_AdminPanel;
 	CFastActions m_FastActions;
 	CFastPractice m_FastPractice;
+	CGraffity m_Graffity;
 	CBestClient m_BestClient;
 	CVoiceChat m_VoiceChat;
 

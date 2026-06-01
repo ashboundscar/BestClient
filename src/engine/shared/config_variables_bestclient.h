@@ -158,8 +158,8 @@ MACRO_CONFIG_INT(BcMusicPlayerVisualizer, bc_music_player_visualizer, 1, 0, 1, C
 MACRO_CONFIG_INT(BcMusicPlayerVisualizerMode, bc_music_player_visualizer_mode, 1, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer mode (0=bottom, 1=center, 2=up)")
 MACRO_CONFIG_INT(BcMusicPlayerVisualizerSensitivity, bc_music_player_visualizer_sensitivity, 300, 50, 300, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer sensitivity in percent (higher catches quieter audio)")
 MACRO_CONFIG_INT(BcMusicPlayerVisualizerSmoothing, bc_music_player_visualizer_smoothing, 50, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer smoothing (0-100)")
-MACRO_CONFIG_INT(BcMusicPlayerVisualizerRounding, bc_music_player_visualizer_rounding, 0, 0, 400, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer rounding in percent")
-MACRO_CONFIG_INT(BcMusicPlayerVisualizerColumns, bc_music_player_visualizer_columns, 5, 5, 10, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer bar count")
+MACRO_CONFIG_INT(BcMusicPlayerVisualizerRounding, bc_music_player_visualizer_rounding, 100, 0, 400, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer rounding in percent")
+MACRO_CONFIG_INT(BcMusicPlayerVisualizerColumns, bc_music_player_visualizer_columns, 5, 2, 12, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer bar count")
 MACRO_CONFIG_INT(BcMusicPlayerVisualizerColumnWidth, bc_music_player_visualizer_column_width, 100, 50, 250, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer column width in percent")
 MACRO_CONFIG_INT(BcMusicPlayerVisualizerGap, bc_music_player_visualizer_gap, 100, 0, 250, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player visualizer gap in percent")
 MACRO_CONFIG_INT(BcMusicPlayerColorMode, bc_music_player_color_mode, 3, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Music player color mode (0=static color, 1=cover accent color, 2=dominant cover color, 3=translucent)")
@@ -213,6 +213,9 @@ MACRO_CONFIG_STR(BcVoiceChatNameVolumes, bc_voice_chat_name_volumes, 512, "", CF
 
 MACRO_CONFIG_INT(BcMenuSfx, bc_menu_sfx, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable BestClient menu sound effects")
 MACRO_CONFIG_INT(BcMenuSfxVolume, bc_menu_sfx_volume, 70, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BestClient menu sound effects volume")
+MACRO_CONFIG_INT(BcGraffityEnabled, bc_graffity_enabled, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable graffiti rendering and placement")
+MACRO_CONFIG_INT(BcGraffitySize, bc_graffity_size, 1, 1, 6, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffiti size multiplier")
+MACRO_CONFIG_INT(BcGraffitySoundVolume, bc_graffity_sound_volume, 130, 0, 200, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffiti spray sound volume")
 
 // Media background
 MACRO_CONFIG_INT(BcMenuMediaBackground, bc_menu_media_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable custom media background in offline menus")
@@ -279,6 +282,7 @@ MACRO_CONFIG_STR(BcClientIndicatorBrowserUrl, bc_client_indicator_browser_url, 2
 MACRO_CONFIG_STR(BcClientIndicatorTokenUrl, bc_client_indicator_token_url, 256, "https://150.241.70.188:8779/token.json", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator token bootstrap URL")
 MACRO_CONFIG_STR(BcClientIndicatorSharedToken, bc_client_indicator_shared_token, 256, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator shared token for signed UDP packets")
 MACRO_CONFIG_STR(BcClientIndicatorSecretKey, bc_client_indicator_secret_key, 256, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator developer secret key")
+MACRO_CONFIG_STR(BcGraffityServerAddress, bc_graffity_server_address, 256, "127.0.0.1:48365", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffity TCP server address")
 MACRO_CONFIG_INT(BrFilterBestclient, br_filter_bestclient, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Filter out servers with no BestClient users")
 
 // Magic particles

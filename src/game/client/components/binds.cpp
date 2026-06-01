@@ -302,7 +302,7 @@ void CBinds::SetDefaults()
 	Bind(KEY_F2, "toggle_remote_console");
 	Bind(KEY_TAB, "+scoreboard");
 	Bind(KEY_EQUALS, "+statboard");
-	Bind(KEY_F10, "screenshot");
+		Bind(KEY_F10, "screenshot");
 
 	Bind(KEY_A, "+left");
 	Bind(KEY_D, "+right");
@@ -334,10 +334,11 @@ void CBinds::SetDefaults()
 	Bind(KEY_F3, "vote yes");
 	Bind(KEY_F4, "vote no");
 
-	Bind(KEY_K, "kill");
-	Bind(KEY_J, "toggle_admin_panel");
-	Bind(KEY_Q, "say /spec");
-	Bind(KEY_P, "say /pause");
+		Bind(KEY_K, "kill");
+		Bind(KEY_G, "+graffity");
+		Bind(KEY_J, "toggle_admin_panel");
+		Bind(KEY_Q, "say /spec");
+		Bind(KEY_P, "say /pause");
 
 	g_Config.m_ClDDRaceBindsSet = 0;
 	SetDDRaceBinds(false);
