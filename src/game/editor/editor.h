@@ -367,6 +367,7 @@ public:
 	 * File which is pending to be loaded by @link POPEVENT_LOADDROP @endlink.
 	 */
 	char m_aFilenamePendingLoad[IO_MAX_PATH_LENGTH] = "";
+	int m_PendingLoadStorageType = 0;
 
 	enum
 	{
@@ -389,6 +390,8 @@ public:
 		POPEVENT_REMOVE_USED_SOUND,
 		POPEVENT_RESTART_SERVER,
 		POPEVENT_RESTARTING_SERVER,
+		POPEVENT_DUO_LOAD,
+		POPEVENT_DUO_NOT_OWNER,
 	};
 
 	int m_PopupEventType;

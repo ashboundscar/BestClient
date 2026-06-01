@@ -2176,6 +2176,16 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 			return CUi::POPUP_CLOSE_CURRENT;
 		}
 	}
+	else if(pEditor->m_PopupEventType == POPEVENT_DUO_LOAD)
+	{
+		pTitle = "Duo session active";
+		pMessage = "You are in a duo mapping session. Loading a new map will disconnect you from the session.\n\nContinue anyway?";
+	}
+	else if(pEditor->m_PopupEventType == POPEVENT_DUO_NOT_OWNER)
+	{
+		pTitle = "Duo session active";
+		pMessage = "You are in a duo mapping session as a joiner.\nOnly the owner can load maps.\n\nDisconnect from the session to load a map yourself.";
+	}
 	else
 	{
 		dbg_assert_failed("m_PopupEventType invalid");
@@ -2207,7 +2217,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		static int s_CancelButton = 0;
 		if(pEditor->DoButton_Editor(&s_CancelButton, "Cancel", 0, &Button, BUTTONFLAG_LEFT, nullptr))
 		{
-			if(pEditor->m_PopupEventType == POPEVENT_LOADDROP)
+			if(pEditor->m_PopupEventType == POPEVENT_LOADDROP || pEditor->m_PopupEventType == POPEVENT_DUO_LOAD)
 				pEditor->m_aFilenamePendingLoad[0] = 0;
 
 			else if(pEditor->m_PopupEventType == POPEVENT_TILE_ART_BIG_IMAGE || pEditor->m_PopupEventType == POPEVENT_TILE_ART_MANY_COLORS)
@@ -2223,6 +2233,20 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 
 	if(pEditor->m_PopupEventType == POPEVENT_RESTARTING_SERVER)
 		return CUi::POPUP_KEEP_OPEN;
+
+	// POPEVENT_DUO_NOT_OWNER: custom buttons — Cancel / Disconnect
+	if(pEditor->m_PopupEventType == POPEVENT_DUO_NOT_OWNER)
+	{
+		ButtonBar.VSplitRight(110.0f, &ButtonBar, &Button);
+		static int s_DisconnectButton = 0;
+		if(pEditor->DoButton_Editor(&s_DisconnectButton, "Disconnect", 0, &Button, BUTTONFLAG_LEFT, nullptr))
+		{
+			pEditor->m_DuoSession.Disconnect();
+			pEditor->m_PopupEventWasActivated = false;
+			return CUi::POPUP_CLOSE_CURRENT;
+		}
+		return CUi::POPUP_KEEP_OPEN;
+	}
 
 	ButtonBar.VSplitRight(110.0f, &ButtonBar, &Button);
 	static int s_ConfirmButton = 0;
@@ -2286,6 +2310,14 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 			pGameClient->m_LocalServer.KillServer();
 			pEditor->m_PopupEventType = CEditor::POPEVENT_RESTARTING_SERVER;
 			pEditor->m_PopupEventActivated = true;
+		}
+		else if(pEditor->m_PopupEventType == POPEVENT_DUO_LOAD)
+		{
+			pEditor->m_DuoSession.Disconnect();
+			int Result = pEditor->Load(pEditor->m_aFilenamePendingLoad, pEditor->m_PendingLoadStorageType);
+			if(Result)
+				pEditor->Map()->m_ValidSaveFilename = pEditor->m_PendingLoadStorageType == IStorage::TYPE_SAVE && pEditor->m_FileBrowser.IsValidSaveFilename();
+			pEditor->m_aFilenamePendingLoad[0] = 0;
 		}
 		pEditor->m_PopupEventWasActivated = false;
 		return CUi::POPUP_CLOSE_CURRENT;

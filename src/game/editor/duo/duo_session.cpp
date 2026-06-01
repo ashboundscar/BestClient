@@ -11,6 +11,7 @@
 #include <base/hash_ctxt.h>
 #include <base/math.h>
 #include <game/client/lineinput.h>
+#include <cstdio>
 
 using namespace DuoProtocol;
 
@@ -35,7 +36,9 @@ void CDuoSession::OnInit(CEditor *pEditor)
 
 void CDuoSession::OnReset()
 {
-	Disconnect();
+	// Don't disconnect if we're applying a remote map transfer or owner is loading a new map
+	if(!m_ApplyingRemote && !m_OwnerLoadingMap)
+		Disconnect();
 }
 
 void CDuoSession::OnUpdate()
@@ -447,6 +450,8 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	case PACKET_START:
 	{
 		m_State = STATE_LIVE;
+		if(m_IsCreator)
+			StartMapTransfer();
 		break;
 	}
 	case PACKET_CURSOR_RELAY:
@@ -1183,6 +1188,60 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_ApplyingRemote = false;
 		break;
 	}
+	case PACKET_MAP_START:
+	{
+		if(!Reader.HasBytes(6)) break;
+		int TotalSize = Reader.ReadS32();
+		int NameLen = Reader.ReadU16();
+		if(!Reader.HasBytes(NameLen)) break;
+		if(TotalSize <= 0 || TotalSize > 50 * 1024 * 1024) break;
+		char aName[256] = {};
+		int CopyLen = minimum(NameLen, (int)sizeof(aName) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aName), CopyLen);
+		m_MapTransferActive = true;
+		m_MapTransferTotal = TotalSize;
+		m_MapTransferReceived = 0;
+		str_copy(m_aMapTransferName, aName);
+		m_vMapTransferBuf.clear();
+		m_vMapTransferBuf.resize(TotalSize, 0);
+		dbg_msg("duo", "MAP_START: '%s' %d bytes", aName, TotalSize);
+		break;
+	}
+	case PACKET_MAP_CHUNK:
+	{
+		if(!m_MapTransferActive) break;
+		if(!Reader.HasBytes(6)) break;
+		int Offset = Reader.ReadS32();
+		int DataLen = Reader.ReadU16();
+		if(!Reader.HasBytes(DataLen)) break;
+		if(Offset < 0 || Offset + DataLen > m_MapTransferTotal) break;
+		Reader.ReadBytes(m_vMapTransferBuf.data() + Offset, DataLen);
+		m_MapTransferReceived = minimum(m_MapTransferReceived + DataLen, m_MapTransferTotal);
+		break;
+	}
+	case PACKET_MAP_END:
+	{
+		if(!m_MapTransferActive) break;
+		m_MapTransferActive = false;
+		dbg_msg("duo", "MAP_END: received %d / %d bytes", m_MapTransferReceived, m_MapTransferTotal);
+		if(m_MapTransferReceived < m_MapTransferTotal) break;
+
+		// Save to temp file and load
+		char aTmpPath[512];
+		str_format(aTmpPath, sizeof(aTmpPath), "maps/duo_recv_%s", m_aMapTransferName);
+		IOHANDLE File = Editor()->Storage()->OpenFile(aTmpPath, IOFLAG_WRITE, IStorage::TYPE_SAVE);
+		if(!File) break;
+		io_write(File, m_vMapTransferBuf.data(), m_vMapTransferBuf.size());
+		io_close(File);
+		m_vMapTransferBuf.clear();
+
+		m_ApplyingRemote = true;
+		Editor()->Load(aTmpPath, IStorage::TYPE_SAVE);
+		m_ApplyingRemote = false;
+		m_State = STATE_LIVE;
+		dbg_msg("duo", "MAP_END: loaded '%s'", aTmpPath);
+		break;
+	}
 	default:
 		break;
 	}
@@ -1739,6 +1798,79 @@ void CDuoSession::NotifySettingMove(int CmdIdx, int Direction)
 	SendSettingMove(CmdIdx, Direction);
 }
 
+void CDuoSession::SendMapStart(const char *pName, int TotalSize)
+{
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_MAP_START);
+	WriteS32(v, TotalSize);
+	WriteString(v, pName, str_length(pName));
+	SendFrame(v);
+}
+
+void CDuoSession::SendMapChunk(int Offset, const uint8_t *pData, int DataLen)
+{
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_MAP_CHUNK);
+	WriteS32(v, Offset);
+	WriteU16(v, (uint16_t)DataLen);
+	v.insert(v.end(), pData, pData + DataLen);
+	SendFrame(v);
+}
+
+void CDuoSession::SendMapEnd()
+{
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_MAP_END);
+	SendFrame(v);
+}
+
+void CDuoSession::StartMapTransfer()
+{
+	if(m_State != STATE_LIVE || !m_IsCreator)
+		return;
+	const char *pFilename = Editor()->Map()->m_aFilename;
+	if(!pFilename[0])
+		return;
+
+	// Read the file via storage
+	IOHANDLE File = Editor()->Storage()->OpenFile(pFilename, IOFLAG_READ, IStorage::TYPE_ALL_OR_ABSOLUTE);
+	if(!File)
+	{
+		dbg_msg("duo", "StartMapTransfer: failed to open '%s'", pFilename);
+		return;
+	}
+
+	// Read entire file into memory
+	std::vector<uint8_t> vData;
+	uint8_t aBuf[32768];
+	int Read;
+	while((Read = io_read(File, aBuf, sizeof(aBuf))) > 0)
+		vData.insert(vData.end(), aBuf, aBuf + Read);
+	io_close(File);
+
+	if(vData.empty())
+		return;
+
+	// Extract just the filename without path
+	const char *pBaseName = pFilename;
+	for(const char *p = pFilename; *p; p++)
+		if(*p == '/' || *p == '\\')
+			pBaseName = p + 1;
+
+	dbg_msg("duo", "StartMapTransfer: sending '%s' (%d bytes)", pBaseName, (int)vData.size());
+
+	SendMapStart(pBaseName, (int)vData.size());
+
+	const int ChunkSize = 32768;
+	for(int Offset = 0; Offset < (int)vData.size(); Offset += ChunkSize)
+	{
+		int Len = minimum(ChunkSize, (int)vData.size() - Offset);
+		SendMapChunk(Offset, vData.data() + Offset, Len);
+	}
+
+	SendMapEnd();
+}
+
 CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect View, bool Active)
 {
 	CEditor *pEditor = static_cast<CEditor *>(pContext);
@@ -2016,9 +2148,41 @@ CUi::EPopupMenuFunctionResult CDuoSession::PopupDuo(void *pContext, CUIRect View
 		View.HSplitTop(13.0f, &Slot, &View);
 		pEditor->Ui()->DoLabel(&Slot, aPlayers, 10.0f, TEXTALIGN_ML);
 
+		View.HSplitTop(2.0f, nullptr, &View);
+		View.HSplitTop(13.0f, &Slot, &View);
+		pEditor->Ui()->DoLabel(&Slot, pDuo->m_IsCreator ? "Role: Owner" : "Role: Joiner", 10.0f, TEXTALIGN_ML);
+
 		View.HSplitTop(4.0f, nullptr, &View);
 		View.HSplitTop(13.0f, &Slot, &View);
 		pEditor->Ui()->DoLabel(&Slot, pDuo->m_State == STATE_WAITING ? "Waiting for partner..." : "Connected!", 10.0f, TEXTALIGN_MC);
+
+		if(pDuo->m_MapTransferActive && pDuo->m_MapTransferTotal > 0)
+		{
+			View.HSplitTop(4.0f, nullptr, &View);
+			View.HSplitTop(13.0f, &Slot, &View);
+			char aProgress[64];
+			int Pct = (int)(100.0f * pDuo->m_MapTransferReceived / pDuo->m_MapTransferTotal);
+			str_format(aProgress, sizeof(aProgress), "Receiving map... %d%%", Pct);
+			pEditor->Ui()->DoLabel(&Slot, aProgress, 9.0f, TEXTALIGN_MC);
+
+			View.HSplitTop(3.0f, nullptr, &View);
+			View.HSplitTop(8.0f, &Slot, &View);
+			CUIRect BarBg = Slot;
+			CUIRect BarFill = Slot;
+			BarFill.w = Slot.w * (float)pDuo->m_MapTransferReceived / pDuo->m_MapTransferTotal;
+			pEditor->Graphics()->TextureClear();
+			pEditor->Graphics()->QuadsBegin();
+			pEditor->Graphics()->SetColor(0.2f, 0.2f, 0.2f, 0.8f);
+			IGraphics::CQuadItem BgItem(BarBg.x, BarBg.y, BarBg.w, BarBg.h);
+			pEditor->Graphics()->QuadsDrawTL(&BgItem, 1);
+			pEditor->Graphics()->SetColor(0.2f, 0.7f, 0.3f, 0.9f);
+			if(BarFill.w > 0.0f)
+			{
+				IGraphics::CQuadItem FillItem(BarFill.x, BarFill.y, BarFill.w, BarFill.h);
+				pEditor->Graphics()->QuadsDrawTL(&FillItem, 1);
+			}
+			pEditor->Graphics()->QuadsEnd();
+		}
 
 		View.HSplitTop(5.0f, nullptr, &View);
 		static int s_DisconnectButton = 0;

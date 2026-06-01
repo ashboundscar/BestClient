@@ -56,7 +56,10 @@ enum EPacketType : uint8_t
 	PACKET_SETTING_ADD     = 35,    // Command(2+N)
 	PACKET_SETTING_DEL     = 36,    // CmdIdx(4)
 	PACKET_SETTING_EDIT    = 37,    // CmdIdx(4)+Command(2+N)
-	PACKET_SETTING_MOVE    = 38,    // CmdIdx(4)+Direction(1)  [1=down, -1=up]
+	PACKET_SETTING_MOVE    = 38,    // CmdIdx(4)+Direction(4)
+	PACKET_MAP_START       = 39,    // TotalSize(4)+NameLen(2)+Name(N)
+	PACKET_MAP_CHUNK       = 40,    // Offset(4)+DataLen(2)+Data(N)
+	PACKET_MAP_END         = 41,    // no payload
 };
 
 enum EErrorCode : uint8_t

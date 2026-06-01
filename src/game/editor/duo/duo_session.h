@@ -46,6 +46,7 @@ public:
 	void NotifySettingDel(int CmdIdx);
 	void NotifySettingEdit(int CmdIdx, const char *pCmd);
 	void NotifySettingMove(int CmdIdx, int Direction);
+	void StartMapTransfer(); // called when STATE_LIVE and we are creator
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
 	static CUi::EPopupMenuFunctionResult PopupDuo(void *pContext, CUIRect View, bool Active);
@@ -86,10 +87,19 @@ public:
 
 	// set while applying a remote packet — prevents re-broadcasting back
 	bool m_ApplyingRemote = false;
+	// set while owner is loading a new map to transfer — prevents OnReset from disconnecting
+	bool m_OwnerLoadingMap = false;
 
 	// debug counters
 	int m_DbgQuadSent = 0;
 	int m_DbgQuadRecv = 0;
+
+	// map transfer — receiver side
+	bool m_MapTransferActive = false;
+	int m_MapTransferTotal = 0;
+	int m_MapTransferReceived = 0;
+	char m_aMapTransferName[256] = {};
+	std::vector<uint8_t> m_vMapTransferBuf;
 
 	struct STileEditEntry
 	{
@@ -143,6 +153,9 @@ public:
 	void SendSettingEdit(int CmdIdx, const char *pCmd);
 	void SendSettingMove(int CmdIdx, int Direction);
 	void SendGoodbye();
+	void SendMapStart(const char *pName, int TotalSize);
+	void SendMapChunk(int Offset, const uint8_t *pData, int DataLen);
+	void SendMapEnd();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);
 	void AppendAuth(std::vector<uint8_t> &vPacket) const;

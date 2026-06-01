@@ -92,13 +92,39 @@ void CEditor::EnvelopeEval(int TimeOffsetMillis, int EnvelopeIndex, ColorRGBA &R
 bool CEditor::CallbackOpenMap(const char *pFilename, int StorageType, void *pUser)
 {
 	CEditor *pEditor = (CEditor *)pUser;
+	auto &Duo = pEditor->m_DuoSession;
+
+	if(Duo.m_State >= CDuoSession::STATE_CONNECTING)
+	{
+		if(!Duo.m_IsCreator)
+		{
+			// Joiner can't load maps — show warning with Disconnect option
+			if(pEditor->m_Dialog == DIALOG_FILE)
+				pEditor->OnDialogClose();
+			pEditor->m_PopupEventType = POPEVENT_DUO_NOT_OWNER;
+			pEditor->m_PopupEventActivated = true;
+			return true;
+		}
+
+		// Owner: load the map, then push it to the partner
+		if(pEditor->m_Dialog == DIALOG_FILE)
+			pEditor->OnDialogClose();
+		Duo.m_OwnerLoadingMap = true;
+		bool Loaded = pEditor->Load(pFilename, StorageType);
+		Duo.m_OwnerLoadingMap = false;
+		if(Loaded)
+		{
+			pEditor->Map()->m_ValidSaveFilename = StorageType == IStorage::TYPE_SAVE && pEditor->m_FileBrowser.IsValidSaveFilename();
+			Duo.StartMapTransfer();
+		}
+		return true;
+	}
+
 	if(pEditor->Load(pFilename, StorageType))
 	{
 		pEditor->Map()->m_ValidSaveFilename = StorageType == IStorage::TYPE_SAVE && pEditor->m_FileBrowser.IsValidSaveFilename();
 		if(pEditor->m_Dialog == DIALOG_FILE)
-		{
 			pEditor->OnDialogClose();
-		}
 		return true;
 	}
 	else
