@@ -32,7 +32,7 @@ enum EPacketType : uint8_t
 	PACKET_SYNC_CHECK = 12,         // sender → relay → receiver: GroupIdx(4)+LayerIdx(4)+CRC32(4)
 	PACKET_SYNC_REQUEST = 13,       // receiver → relay → sender: GroupIdx(4)+LayerIdx(4)
 	PACKET_SYNC_DATA = 14,          // sender → relay → receiver: GroupIdx(4)+LayerIdx(4)+W(4)+H(4)+Row(4)+tiles(W*4)
-	PACKET_STRUCT_ADD_GROUP = 15,   // no payload
+	PACKET_STRUCT_ADD_GROUP = 15,   // InsertIdx(4): -1 = append, else insert at index
 	PACKET_STRUCT_DEL_GROUP = 16,   // GroupIdx(4)
 	PACKET_STRUCT_ADD_LAYER = 17,   // GroupIdx(4)+LayerIdx(4)+Type(1)+Name(2+N)
 	PACKET_STRUCT_DEL_LAYER = 18,   // GroupIdx(4)+LayerIdx(4)

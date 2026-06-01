@@ -22,10 +22,11 @@ public:
 	void NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags);
 	void NotifyStrokeEnd(); // call when mouse button released after drawing
 	void NotifyFullSync();  // call after undo/redo — checks all tile layers
-	void NotifyAddGroup();
+	void NotifyAddGroup(int InsertIdx = -1);
 	void NotifyDelGroup(int GroupIdx);
 	void NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName, int SubType = 0);
 	void NotifyDelLayer(int GroupIdx, int LayerIdx);
+	void SyncLayerContents(int GroupIdx, int LayerIdx); // send image + quads/tiles after layer restore
 	void NotifySetImage(int GroupIdx, int LayerIdx, int ImageIdx);
 	void NotifyRenameGroup(int GroupIdx, const char *pName);
 	void NotifyRenameLayer(int GroupIdx, int LayerIdx, const char *pName);
@@ -128,7 +129,7 @@ public:
 	void SendSyncCheck(int GroupIdx, int LayerIdx);
 	void SendSyncRequest(int GroupIdx, int LayerIdx);
 	void SendSyncData(int GroupIdx, int LayerIdx);
-	void SendStructAddGroup();
+	void SendStructAddGroup(int InsertIdx);
 	void SendStructDelGroup(int GroupIdx);
 	void SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName, int SubType = 0);
 	void SendStructDelLayer(int GroupIdx, int LayerIdx);

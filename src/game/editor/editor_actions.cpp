@@ -12,6 +12,19 @@
 #include <game/editor/mapitems/layer_sounds.h>
 #include <game/editor/mapitems/map.h>
 
+static int GetLayerSubType(const std::shared_ptr<CLayer> &pLayer)
+{
+	if(pLayer->m_Type != LAYERTYPE_TILES)
+		return 0;
+	auto pTiles = std::static_pointer_cast<CLayerTiles>(pLayer);
+	if(pTiles->m_HasFront)   return 1;
+	if(pTiles->m_HasTele)    return 2;
+	if(pTiles->m_HasSpeedup) return 3;
+	if(pTiles->m_HasSwitch)  return 4;
+	if(pTiles->m_HasTune)    return 5;
+	return 0;
+}
+
 CEditorBrushDrawAction::CEditorBrushDrawAction(CEditorMap *pMap, int Group) :
 	IEditorAction(pMap), m_Group(Group)
 {
@@ -608,6 +621,7 @@ void CEditorActionAddLayer::Undo()
 	if(m_LayerIndex >= (int)vLayers.size())
 		Map()->SelectLayer(vLayers.size() - 1, m_GroupIndex);
 
+	Editor()->m_DuoSession.NotifyDelLayer(m_GroupIndex, m_LayerIndex);
 	Map()->OnModify();
 }
 
@@ -635,6 +649,8 @@ void CEditorActionAddLayer::Redo()
 
 	Map()->m_vpGroups[m_GroupIndex]->m_Collapse = false;
 	Map()->SelectLayer(m_LayerIndex, m_GroupIndex);
+	Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, m_LayerIndex, m_pLayer->m_Type, m_pLayer->m_aName, GetLayerSubType(m_pLayer));
+	Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, m_LayerIndex);
 	Map()->OnModify();
 }
 
@@ -664,6 +680,7 @@ void CEditorActionDeleteLayer::Redo()
 			Map()->m_pTuneLayer = nullptr;
 	}
 
+	Editor()->m_DuoSession.NotifyDelLayer(m_GroupIndex, m_LayerIndex);
 	Map()->m_vpGroups[m_GroupIndex]->DeleteLayer(m_LayerIndex);
 
 	Map()->m_vpGroups[m_GroupIndex]->m_Collapse = false;
@@ -697,6 +714,8 @@ void CEditorActionDeleteLayer::Undo()
 
 	Map()->m_vpGroups[m_GroupIndex]->m_Collapse = false;
 	Map()->SelectLayer(m_LayerIndex, m_GroupIndex);
+	Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, m_LayerIndex, m_pLayer->m_Type, m_pLayer->m_aName, GetLayerSubType(m_pLayer));
+	Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, m_LayerIndex);
 	Map()->OnModify();
 }
 
@@ -718,10 +737,19 @@ void CEditorActionGroup::Undo()
 		Map()->m_vpGroups.insert(Map()->m_vpGroups.begin() + m_GroupIndex, m_pGroup);
 		Map()->m_SelectedGroup = m_GroupIndex;
 		Map()->OnModify();
+		// Notify: recreate group and all its layers on the remote client
+		Editor()->m_DuoSession.NotifyAddGroup(m_GroupIndex);
+		for(int l = 0; l < (int)m_pGroup->m_vpLayers.size(); l++)
+		{
+			auto &pLayer = m_pGroup->m_vpLayers[l];
+			Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, l, pLayer->m_Type, pLayer->m_aName, GetLayerSubType(pLayer));
+			Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, l);
+		}
 	}
 	else
 	{
 		// Undo: delete the group
+		Editor()->m_DuoSession.NotifyDelGroup(m_GroupIndex);
 		Map()->DeleteGroup(m_GroupIndex);
 		Map()->m_SelectedGroup = maximum(0, m_GroupIndex - 1);
 	}
@@ -736,10 +764,18 @@ void CEditorActionGroup::Redo()
 		// Redo: add back the group
 		Map()->m_vpGroups.insert(Map()->m_vpGroups.begin() + m_GroupIndex, m_pGroup);
 		Map()->m_SelectedGroup = m_GroupIndex;
+		Editor()->m_DuoSession.NotifyAddGroup(m_GroupIndex);
+		for(int l = 0; l < (int)m_pGroup->m_vpLayers.size(); l++)
+		{
+			auto &pLayer = m_pGroup->m_vpLayers[l];
+			Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, l, pLayer->m_Type, pLayer->m_aName, GetLayerSubType(pLayer));
+			Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, l);
+		}
 	}
 	else
 	{
 		// Redo: delete the group
+		Editor()->m_DuoSession.NotifyDelGroup(m_GroupIndex);
 		Map()->DeleteGroup(m_GroupIndex);
 		Map()->m_SelectedGroup = maximum(0, m_GroupIndex - 1);
 	}

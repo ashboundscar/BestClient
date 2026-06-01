@@ -568,8 +568,15 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	}
 	case PACKET_STRUCT_ADD_GROUP:
 	{
+		if(!Reader.HasBytes(4))
+			break;
+		int InsertIdx = Reader.ReadS32();
 		m_ApplyingRemote = true;
-		Editor()->AddGroup();
+		Editor()->Map()->NewGroup();
+		int NewIdx = (int)Editor()->Map()->m_vpGroups.size() - 1;
+		if(InsertIdx >= 0 && InsertIdx < NewIdx)
+			Editor()->Map()->MoveGroup(NewIdx, InsertIdx);
+		Editor()->Map()->m_SelectedGroup = InsertIdx >= 0 ? InsertIdx : NewIdx;
 		m_ApplyingRemote = false;
 		break;
 	}
@@ -1302,11 +1309,11 @@ void CDuoSession::NotifyFullSync()
 	}
 }
 
-void CDuoSession::NotifyAddGroup()
+void CDuoSession::NotifyAddGroup(int InsertIdx)
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
-	SendStructAddGroup();
+	SendStructAddGroup(InsertIdx);
 }
 
 void CDuoSession::NotifyDelGroup(int GroupIdx)
@@ -1328,6 +1335,36 @@ void CDuoSession::NotifyDelLayer(int GroupIdx, int LayerIdx)
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
 	SendStructDelLayer(GroupIdx, LayerIdx);
+}
+
+void CDuoSession::SyncLayerContents(int GroupIdx, int LayerIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	auto &vGroups = Editor()->Map()->m_vpGroups;
+	if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
+		return;
+	auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+	if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
+		return;
+	auto &pLayer = vLayers[LayerIdx];
+
+	if(pLayer->m_Type == LAYERTYPE_TILES)
+	{
+		auto pTiles = std::static_pointer_cast<CLayerTiles>(pLayer);
+		if(pTiles->m_Image >= 0)
+			SendStructSetImage(GroupIdx, LayerIdx, pTiles->m_Image);
+		// tiles will be synced by NotifyFullSync CRC check
+		SendSyncCheck(GroupIdx, LayerIdx);
+	}
+	else if(pLayer->m_Type == LAYERTYPE_QUADS)
+	{
+		auto pQuads = std::static_pointer_cast<CLayerQuads>(pLayer);
+		if(pQuads->m_Image >= 0)
+			SendStructSetImage(GroupIdx, LayerIdx, pQuads->m_Image);
+		for(int i = 0; i < (int)pQuads->m_vQuads.size(); i++)
+			SendQuadAdd(GroupIdx, LayerIdx, i, pQuads->m_vQuads[i]);
+	}
 }
 
 void CDuoSession::NotifySetImage(int GroupIdx, int LayerIdx, int ImageIdx)
@@ -1420,12 +1457,13 @@ void CDuoSession::SendSyncData(int GroupIdx, int LayerIdx)
 	}
 }
 
-void CDuoSession::SendStructAddGroup()
+void CDuoSession::SendStructAddGroup(int InsertIdx)
 {
 	if(m_Socket == nullptr)
 		return;
 	std::vector<uint8_t> vPacket;
 	WriteHeader(vPacket, PACKET_STRUCT_ADD_GROUP);
+	WriteS32(vPacket, InsertIdx);
 	SendFrame(vPacket);
 }
 
