@@ -587,18 +587,29 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	}
 	case PACKET_STRUCT_ADD_LAYER:
 	{
-		if(!Reader.HasBytes(9))
+		if(!Reader.HasBytes(10))
 			break;
-		int GroupIdx = Reader.ReadS32();
-		int LayerIdx = Reader.ReadS32();
+		int GroupIdx  = Reader.ReadS32();
+		int LayerIdx  = Reader.ReadS32();
 		int LayerType = Reader.ReadU8();
+		int SubType   = Reader.ReadU8();
 		auto &vGroups = Editor()->Map()->m_vpGroups;
 		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
 			break;
 		m_ApplyingRemote = true;
 		Editor()->Map()->m_SelectedGroup = GroupIdx;
 		if(LayerType == LAYERTYPE_TILES)
-			Editor()->AddTileLayer();
+		{
+			switch(SubType)
+			{
+			case 1: Editor()->AddFrontLayer();   break;
+			case 2: Editor()->AddTeleLayer();    break;
+			case 3: Editor()->AddSpeedupLayer(); break;
+			case 4: Editor()->AddSwitchLayer();  break;
+			case 5: Editor()->AddTuneLayer();    break;
+			default: Editor()->AddTileLayer();   break;
+			}
+		}
 		else if(LayerType == LAYERTYPE_QUADS)
 			Editor()->AddQuadsLayer();
 		else if(LayerType == LAYERTYPE_SOUNDS)
@@ -1173,11 +1184,11 @@ void CDuoSession::NotifyDelGroup(int GroupIdx)
 	SendStructDelGroup(GroupIdx);
 }
 
-void CDuoSession::NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName)
+void CDuoSession::NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName, int SubType)
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
-	SendStructAddLayer(GroupIdx, LayerIdx, LayerType, pName);
+	SendStructAddLayer(GroupIdx, LayerIdx, LayerType, pName, SubType);
 }
 
 void CDuoSession::NotifyDelLayer(int GroupIdx, int LayerIdx)
@@ -1296,7 +1307,7 @@ void CDuoSession::SendStructDelGroup(int GroupIdx)
 	SendFrame(vPacket);
 }
 
-void CDuoSession::SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName)
+void CDuoSession::SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName, int SubType)
 {
 	if(m_Socket == nullptr)
 		return;
@@ -1305,6 +1316,7 @@ void CDuoSession::SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, 
 	WriteS32(vPacket, GroupIdx);
 	WriteS32(vPacket, LayerIdx);
 	WriteU8(vPacket, (uint8_t)LayerType);
+	WriteU8(vPacket, (uint8_t)SubType);
 	int NameLen = str_length(pName);
 	WriteString(vPacket, pName, NameLen);
 	SendFrame(vPacket);

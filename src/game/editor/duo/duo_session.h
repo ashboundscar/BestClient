@@ -24,7 +24,7 @@ public:
 	void NotifyFullSync();  // call after undo/redo — checks all tile layers
 	void NotifyAddGroup();
 	void NotifyDelGroup(int GroupIdx);
-	void NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName);
+	void NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName, int SubType = 0);
 	void NotifyDelLayer(int GroupIdx, int LayerIdx);
 	void NotifySetImage(int GroupIdx, int LayerIdx, int ImageIdx);
 	void NotifyRenameGroup(int GroupIdx, const char *pName);
@@ -116,7 +116,7 @@ public:
 	void SendSyncData(int GroupIdx, int LayerIdx);
 	void SendStructAddGroup();
 	void SendStructDelGroup(int GroupIdx);
-	void SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName);
+	void SendStructAddLayer(int GroupIdx, int LayerIdx, int LayerType, const char *pName, int SubType = 0);
 	void SendStructDelLayer(int GroupIdx, int LayerIdx);
 	void SendStructSetImage(int GroupIdx, int LayerIdx, int ImageIdx);
 	void SendStructRenameGroup(int GroupIdx, const char *pName);

@@ -97,6 +97,7 @@ void CEditor::AddSwitchLayer()
 	Map()->SelectLayer(LayerIndex);
 	m_pBrush->Clear();
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionAddLayer>(Map(), Map()->m_SelectedGroup, LayerIndex));
+	m_DuoSession.NotifyAddLayer(Map()->m_SelectedGroup, LayerIndex, LAYERTYPE_TILES, pSwitchLayer->m_aName, 4);
 }
 
 void CEditor::AddFrontLayer()
@@ -108,6 +109,7 @@ void CEditor::AddFrontLayer()
 	Map()->SelectLayer(LayerIndex);
 	m_pBrush->Clear();
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionAddLayer>(Map(), Map()->m_SelectedGroup, LayerIndex));
+	m_DuoSession.NotifyAddLayer(Map()->m_SelectedGroup, LayerIndex, LAYERTYPE_TILES, pFrontLayer->m_aName, 1);
 }
 
 void CEditor::AddTuneLayer()
@@ -119,6 +121,7 @@ void CEditor::AddTuneLayer()
 	Map()->SelectLayer(LayerIndex);
 	m_pBrush->Clear();
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionAddLayer>(Map(), Map()->m_SelectedGroup, LayerIndex));
+	m_DuoSession.NotifyAddLayer(Map()->m_SelectedGroup, LayerIndex, LAYERTYPE_TILES, pTuneLayer->m_aName, 5);
 }
 
 void CEditor::AddSpeedupLayer()
@@ -130,6 +133,7 @@ void CEditor::AddSpeedupLayer()
 	Map()->SelectLayer(LayerIndex);
 	m_pBrush->Clear();
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionAddLayer>(Map(), Map()->m_SelectedGroup, LayerIndex));
+	m_DuoSession.NotifyAddLayer(Map()->m_SelectedGroup, LayerIndex, LAYERTYPE_TILES, pSpeedupLayer->m_aName, 3);
 }
 
 void CEditor::AddTeleLayer()
@@ -141,8 +145,8 @@ void CEditor::AddTeleLayer()
 	Map()->SelectLayer(LayerIndex);
 	m_pBrush->Clear();
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionAddLayer>(Map(), Map()->m_SelectedGroup, LayerIndex));
+	m_DuoSession.NotifyAddLayer(Map()->m_SelectedGroup, LayerIndex, LAYERTYPE_TILES, pTeleLayer->m_aName, 2);
 }
-
 bool CEditor::IsNonGameTileLayerSelected() const
 {
 	std::shared_ptr<CLayer> pLayer = Map()->SelectedLayer(0);
