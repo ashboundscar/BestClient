@@ -1602,6 +1602,7 @@ void CHud::RenderTextInfo()
 
 		int NumInTeam = 0;
 		int NumFrozen = 0;
+		int NumUnfreezing = 0;
 		int LocalTeamID = 0;
 		if(GameClient()->m_Snap.m_LocalClientId >= 0 && GameClient()->m_Snap.m_SpecInfo.m_SpectatorId >= 0)
 		{
@@ -1619,14 +1620,18 @@ void CHud::RenderTextInfo()
 			{
 				NumInTeam++;
 				if(GameClient()->m_aClients[i].m_FreezeEnd > 0 || GameClient()->m_aClients[i].m_DeepFrozen)
+				{
 					NumFrozen++;
+					if(!GameClient()->m_aClients[i].m_RegularPredicted.m_IsInFreeze)
+						NumUnfreezing++;
+				}
 			}
 		}
 
 		// Notify when last
 		if(g_Config.m_TcNotifyWhenLast)
 		{
-			if(NumInTeam > 1 && NumInTeam - NumFrozen == 1)
+			if(NumInTeam > 1 && NumInTeam - NumFrozen == 1 && NumUnfreezing == 0)
 			{
 				TextRender()->TextColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_TcNotifyWhenLastColor)));
 				float FontSize = g_Config.m_TcNotifyWhenLastSize;
