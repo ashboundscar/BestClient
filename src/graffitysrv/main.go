@@ -15,10 +15,31 @@ import (
 )
 
 const (
-	defaultBindAddress = "127.0.0.1:48365"
+	defaultBindAddress = "0.0.0.0:8781"
 	defaultStateFile   = "graffity_state.json"
 	maxPerIP           = 3
 	graffitySize       = 32
+	maxLineBytes       = 4 * 1024
+	maxServerAddrLen   = 128
+	maxOwnerIDLen      = 64
+	maxGraffityIDLen   = 64
+	maxEntityIDLen     = 64
+	maxActiveConnPerIP = 6
+	maxAbsCoordinate   = 1 << 20
+
+	helloTimeout = 8 * time.Second
+	idleTimeout  = 45 * time.Second
+	writeTimeout = 5 * time.Second
+	ipStateTTL   = 10 * time.Minute
+
+	connectRatePerSecond = 2.0
+	connectBurst         = 8.0
+	messageRatePerSecond = 20.0
+	messageBurst         = 40.0
+	placeRatePerSecond   = 0.75
+	placeBurst           = 3.0
+	removeRatePerSecond  = 2.0
+	removeBurst          = 6.0
 )
 
 var allowedGraffityIDs = map[string]struct{}{
@@ -94,7 +115,22 @@ type clientConn struct {
 func (c *clientConn) send(v any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	return json.NewEncoder(c.conn).Encode(v)
+}
+
+type tokenBucket struct {
+	Tokens float64
+	Last   time.Time
+}
+
+type ipState struct {
+	ActiveConns    int
+	LastSeen       time.Time
+	ConnectLimiter tokenBucket
+	MessageLimiter tokenBucket
+	PlaceLimiter   tokenBucket
+	RemoveLimiter  tokenBucket
 }
 
 type serverState struct {
@@ -103,6 +139,7 @@ type serverState struct {
 	stateFile  string
 	clients    map[*clientConn]struct{}
 	graffities map[string]*graffity
+	ipStates   map[string]*ipState
 }
 
 func newServerState(stateFile string) *serverState {
@@ -110,6 +147,7 @@ func newServerState(stateFile string) *serverState {
 		stateFile:  stateFile,
 		clients:    make(map[*clientConn]struct{}),
 		graffities: make(map[string]*graffity),
+		ipStates:   make(map[string]*ipState),
 	}
 }
 
@@ -138,6 +176,8 @@ func (s *serverState) removeClient(c *clientConn) {
 	for serverAddress, clients := range recipients {
 		s.broadcastSnapshot(serverAddress, clients)
 	}
+
+	s.releaseConnection(c.remoteIP)
 }
 
 func (s *serverState) handleHello(c *clientConn, msg inboundMessage) {
@@ -146,9 +186,17 @@ func (s *serverState) handleHello(c *clientConn, msg inboundMessage) {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: server_address is required"})
 		return
 	}
+	if len(serverAddress) > maxServerAddrLen {
+		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: server_address too long"})
+		return
+	}
 	ownerID := strings.TrimSpace(msg.OwnerID)
 	if ownerID == "" {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: owner_id is required"})
+		return
+	}
+	if len(ownerID) > maxOwnerIDLen {
+		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: owner_id too long"})
 		return
 	}
 
@@ -183,8 +231,16 @@ func (s *serverState) handlePlace(c *clientConn, msg inboundMessage) {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: hello required before place"})
 		return
 	}
+	if len(msg.GraffityID) == 0 || len(msg.GraffityID) > maxGraffityIDLen {
+		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: invalid graffity_id"})
+		return
+	}
 	if _, ok := allowedGraffityIDs[msg.GraffityID]; !ok {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: unknown graffity_id"})
+		return
+	}
+	if msg.X < -maxAbsCoordinate || msg.X > maxAbsCoordinate || msg.Y < -maxAbsCoordinate || msg.Y > maxAbsCoordinate {
+		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: coordinates out of range"})
 		return
 	}
 
@@ -232,6 +288,10 @@ func (s *serverState) handlePlace(c *clientConn, msg inboundMessage) {
 func (s *serverState) handleRemove(c *clientConn, msg inboundMessage) {
 	if msg.ID == "" {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: id is required"})
+		return
+	}
+	if len(msg.ID) > maxEntityIDLen {
+		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: invalid id"})
 		return
 	}
 
@@ -357,6 +417,94 @@ func overlaps(ax, ay, asize, bx, by, bsize int) bool {
 	return dx <= halfExtent && dy <= halfExtent
 }
 
+func consumeBucket(Bucket *tokenBucket, Rate, Burst float64, Now time.Time, Cost float64) bool {
+	if Bucket.Last.IsZero() {
+		Bucket.Last = Now
+		Bucket.Tokens = Burst
+	}
+	Delta := Now.Sub(Bucket.Last).Seconds()
+	if Delta > 0 {
+		Bucket.Tokens += Delta * Rate
+		if Bucket.Tokens > Burst {
+			Bucket.Tokens = Burst
+		}
+		Bucket.Last = Now
+	}
+	if Bucket.Tokens < Cost {
+		return false
+	}
+	Bucket.Tokens -= Cost
+	return true
+}
+
+func (s *serverState) ipStateLocked(IP string, Now time.Time) *ipState {
+	State := s.ipStates[IP]
+	if State == nil {
+		State = &ipState{}
+		s.ipStates[IP] = State
+	}
+	State.LastSeen = Now
+	return State
+}
+
+func (s *serverState) pruneIPStatesLocked(Now time.Time) {
+	for IP, State := range s.ipStates {
+		if State.ActiveConns == 0 && Now.Sub(State.LastSeen) > ipStateTTL {
+			delete(s.ipStates, IP)
+		}
+	}
+}
+
+func (s *serverState) tryAcceptConnection(IP string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	Now := time.Now()
+	s.pruneIPStatesLocked(Now)
+	State := s.ipStateLocked(IP, Now)
+	if State.ActiveConns >= maxActiveConnPerIP {
+		return false
+	}
+	if !consumeBucket(&State.ConnectLimiter, connectRatePerSecond, connectBurst, Now, 1) {
+		return false
+	}
+	State.ActiveConns++
+	return true
+}
+
+func (s *serverState) releaseConnection(IP string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	Now := time.Now()
+	if State := s.ipStates[IP]; State != nil {
+		if State.ActiveConns > 0 {
+			State.ActiveConns--
+		}
+		State.LastSeen = Now
+	}
+	s.pruneIPStatesLocked(Now)
+}
+
+func (s *serverState) allowMessage(IP string, MsgType string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	Now := time.Now()
+	State := s.ipStateLocked(IP, Now)
+	if !consumeBucket(&State.MessageLimiter, messageRatePerSecond, messageBurst, Now, 1) {
+		return false
+	}
+	switch MsgType {
+	case "place":
+		return consumeBucket(&State.PlaceLimiter, placeRatePerSecond, placeBurst, Now, 1)
+	case "remove":
+		return consumeBucket(&State.RemoveLimiter, removeRatePerSecond, removeBurst, Now, 1)
+	default:
+		return true
+	}
+}
+
 func remoteIP(addr net.Addr) string {
 	host, _, err := net.SplitHostPort(addr.String())
 	if err != nil {
@@ -376,28 +524,52 @@ func handleClient(s *serverState, conn net.Conn) {
 	defer s.removeClient(client)
 
 	scanner := bufio.NewScanner(conn)
-	scanner.Buffer(make([]byte, 0, 4096), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 512), maxLineBytes)
+	_ = conn.SetReadDeadline(time.Now().Add(helloTimeout))
+	helloSeen := false
 	for scanner.Scan() {
 		var msg inboundMessage
 		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
 			_ = client.send(outboundMessage{Type: "error", Message: "Graffity: invalid JSON"})
 			continue
 		}
+		msg.Type = strings.TrimSpace(msg.Type)
+		if msg.Type == "" {
+			_ = client.send(outboundMessage{Type: "error", Message: "Graffity: type is required"})
+			continue
+		}
+		if !helloSeen && msg.Type != "hello" {
+			_ = client.send(outboundMessage{Type: "error", Message: "Graffity: hello must be first"})
+			return
+		}
+		if !s.allowMessage(client.remoteIP, msg.Type) {
+			log.Printf("rate limit: ip=%s type=%s", client.remoteIP, msg.Type)
+			_ = client.send(outboundMessage{Type: "error", Message: "Graffity: rate limit exceeded"})
+			return
+		}
 
 		switch msg.Type {
 		case "hello":
 			s.handleHello(client, msg)
+			helloSeen = true
+			_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
 		case "place":
 			s.handlePlace(client, msg)
+			_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
 		case "remove":
 			s.handleRemove(client, msg)
+			_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
 		default:
 			_ = client.send(outboundMessage{Type: "error", Message: "Graffity: unknown message type"})
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("client %s scanner error: %v", client.remoteIP, err)
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			log.Printf("client %s timeout", client.remoteIP)
+		} else {
+			log.Printf("client %s scanner error: %v", client.remoteIP, err)
+		}
 	}
 }
 
@@ -430,6 +602,11 @@ func main() {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("accept: %v", err)
+			continue
+		}
+		if !state.tryAcceptConnection(remoteIP(conn.RemoteAddr())) {
+			log.Printf("rejecting connection from %s", remoteIP(conn.RemoteAddr()))
+			_ = conn.Close()
 			continue
 		}
 		go handleClient(state, conn)
