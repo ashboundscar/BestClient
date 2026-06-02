@@ -9,6 +9,7 @@
 #include <engine/gfx/image_loader.h>
 #include <engine/gfx/image_manipulation.h>
 #include <engine/shared/config.h>
+#include <engine/keys.h>
 #include <base/hash_ctxt.h>
 #include <base/math.h>
 #include <game/client/lineinput.h>
@@ -100,6 +101,22 @@ void CDuoSession::OnUpdate()
 				}
 				SendMapEnd();
 			}
+		}
+	}
+
+	// Envelope sync: detect changes and send map transfer when mouse released
+	if(m_State == STATE_LIVE && !m_ApplyingRemote)
+	{
+		int CurEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
+		if(CurEnvUndoSize != m_LastEnvUndoSize)
+		{
+			m_LastEnvUndoSize = CurEnvUndoSize;
+			m_EnvDirty = true;
+		}
+		if(m_EnvDirty && !Editor()->Input()->KeyIsPressed(KEY_MOUSE_1))
+		{
+			m_EnvDirty = false;
+			StartMapTransfer();
 		}
 	}
 
@@ -498,7 +515,11 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_ParticipantCount = Reader.ReadU8();
 		uint8_t Live = Reader.ReadU8();
 		if(Live)
+		{
 			m_State = STATE_LIVE;
+			m_LastEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
+			m_EnvDirty = false;
+		}
 		if(m_ParticipantCount < 2)
 			m_HasRemoteCursor = false;
 		break;
@@ -506,6 +527,8 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	case PACKET_START:
 	{
 		m_State = STATE_LIVE;
+		m_LastEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
+		m_EnvDirty = false;
 		if(m_IsCreator)
 			StartMapTransfer();
 		break;
@@ -1302,6 +1325,8 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		Editor()->Load(aTmpPath, IStorage::TYPE_SAVE);
 		m_ApplyingRemote = false;
 		m_State = STATE_LIVE;
+		m_LastEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
+		m_EnvDirty = false;
 		dbg_msg("duo", "MAP_END: loaded '%s'", aTmpPath);
 		break;
 	}
@@ -1995,7 +2020,7 @@ void CDuoSession::SendEditorSettings()
 
 void CDuoSession::StartMapTransfer()
 {
-	if(m_State != STATE_LIVE || !m_IsCreator)
+	if(m_State != STATE_LIVE)
 		return;
 
 	static const char *s_pTmpPath = "duo_transfer_tmp.map";

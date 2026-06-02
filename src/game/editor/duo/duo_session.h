@@ -95,6 +95,9 @@ public:
 	bool m_PendingMapNew = false;
 	// set when map transfer should happen after save completes
 	bool m_PendingMapTransfer = false;
+	// envelope sync: track undo stack size to detect changes
+	int m_LastEnvUndoSize = 0;
+	bool m_EnvDirty = false;
 
 	// debug counters
 	int m_DbgQuadSent = 0;
