@@ -638,9 +638,7 @@ void CGameClient::OnConsoleInit()
 					      &m_Outlines, // TClient
 					      &m_Mumble, // TClient
 					      &m_Pet, // TClient
-					      &m_MagicParticles,
-					      &m_OrbitAura,
-					      &m_ChatBubbles,
+							      &m_ChatBubbles,
 					      &m_ClientIndicator,
 					      &m_Particles.m_RenderExplosions,
 					      &m_NamePlates,

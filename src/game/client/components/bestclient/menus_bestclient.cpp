@@ -2812,12 +2812,9 @@ struct SBestClientComponentEntry
 static const SBestClientComponentEntry gs_aBestClientComponentEntries[] = {
 	{CBestClient::COMPONENT_VISUALS_CAMERA_DRIFT, "Camera Drift", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_JELLY_TEE, "Jelly Tee", COMPONENTS_GROUP_VISUALS},
-	{CBestClient::COMPONENT_VISUALS_MAGIC_PARTICLES, "Magic Particles", COMPONENTS_GROUP_VISUALS},
-	{CBestClient::COMPONENT_VISUALS_ORBIT_AURA, "Orbit Aura", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_3D_PARTICLES, "3D Particles", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_DYNAMIC_FOV, "Dynamic FOV", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_AFTERIMAGE, "Afterimage", COMPONENTS_GROUP_VISUALS},
-	{CBestClient::COMPONENT_VISUALS_CRYSTAL_LASER, "Crystal Laser", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_GRAFFITI, "Graffiti", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_MUSIC_PLAYER, "Music Player", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_KEYSTROKES, "Keystrokes", COMPONENTS_GROUP_VISUALS},
@@ -3338,94 +3335,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 
-		// Orbit aura (left column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_ORBIT_AURA))
-		{
-			static float s_OrbitAuraPhase = 0.0f;
-			static float s_OrbitAuraIdlePhase = 0.0f;
-			static CButtonContainer s_OrbitAuraResetButton;
-			const bool OrbitEnabled = g_Config.m_BcOrbitAura != 0;
-			const bool OrbitIdleEnabled = OrbitEnabled && g_Config.m_BcOrbitAuraIdle != 0;
-			const float Dt = Client()->RenderFrameTime();
-			if(ModuleUiRevealAnimationsEnabled())
-				BCUiAnimations::UpdatePhase(s_OrbitAuraPhase, OrbitEnabled ? 1.0f : 0.0f, Dt, ModuleUiRevealAnimationDuration());
-			else
-				s_OrbitAuraPhase = OrbitEnabled ? 1.0f : 0.0f;
-			if(BCUiAnimations::Enabled())
-				BCUiAnimations::UpdatePhase(s_OrbitAuraIdlePhase, OrbitIdleEnabled ? 1.0f : 0.0f, Dt, 0.16f);
-			else
-				s_OrbitAuraIdlePhase = OrbitIdleEnabled ? 1.0f : 0.0f;
-
-			const float OrbitIdleTargetHeight = 1.0f * LineSize;
-			const float OrbitBaseTargetHeight = 5.0f * LineSize;
-			const float OrbitExtraTargetHeight = OrbitBaseTargetHeight + OrbitIdleTargetHeight * s_OrbitAuraIdlePhase;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + OrbitExtraTargetHeight * s_OrbitAuraPhase;
-			CUIRect Content, Label, Row, Visible;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
-			ResetHitbox = ResetButton;
-			const bool OrbitAuraResetClicked = Ui()->DoButton_FontIcon(&s_OrbitAuraResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(&s_OrbitAuraResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
-			if(OrbitAuraResetClicked)
-			{
-				g_Config.m_BcOrbitAuraRadius = DefaultConfig::BcOrbitAuraRadius;
-				g_Config.m_BcOrbitAuraParticles = DefaultConfig::BcOrbitAuraParticles;
-				g_Config.m_BcOrbitAuraAlpha = DefaultConfig::BcOrbitAuraAlpha;
-				g_Config.m_BcOrbitAuraSpeed = DefaultConfig::BcOrbitAuraSpeed;
-				g_Config.m_BcOrbitAuraIdle = DefaultConfig::BcOrbitAuraIdle;
-				g_Config.m_BcOrbitAuraIdleTimer = DefaultConfig::BcOrbitAuraIdleTimer;
-			}
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Orbit Aura"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcOrbitAura, BCLocalize("Orbit Aura"), &g_Config.m_BcOrbitAura, &Content, LineSize);
-
-			const float OrbitExtraHeight = OrbitExtraTargetHeight * s_OrbitAuraPhase;
-			if(!OrbitAuraResetClicked && OrbitExtraHeight > 0.0f)
-			{
-				Content.HSplitTop(OrbitExtraHeight, &Visible, &Content);
-				Ui()->ClipEnable(&Visible);
-				struct SScopedClip
-				{
-					CUi *m_pUi;
-					~SScopedClip() { m_pUi->ClipDisable(); }
-				} ClipGuard{Ui()};
-
-				CUIRect Expand = {Visible.x, Visible.y, Visible.w, OrbitExtraTargetHeight};
-
-				DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcOrbitAuraIdle, BCLocalize("Enable in idle mode"), &g_Config.m_BcOrbitAuraIdle, &Expand, LineSize);
-
-				const float OrbitIdleHeight = OrbitIdleTargetHeight * s_OrbitAuraIdlePhase;
-				if(OrbitIdleHeight > 0.0f)
-				{
-					CUIRect IdleVisible;
-					Expand.HSplitTop(OrbitIdleHeight, &IdleVisible, &Expand);
-					Ui()->ClipEnable(&IdleVisible);
-					SScopedClip IdleClipGuard{Ui()};
-
-					CUIRect IdleExpand = {IdleVisible.x, IdleVisible.y, IdleVisible.w, OrbitIdleTargetHeight};
-					IdleExpand.HSplitTop(LineSize, &Row, &IdleExpand);
-					Ui()->DoScrollbarOption(&g_Config.m_BcOrbitAuraIdleTimer, &g_Config.m_BcOrbitAuraIdleTimer, &Row, BCLocalize("Idle delay"), 1, 30);
-				}
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcOrbitAuraRadius, &g_Config.m_BcOrbitAuraRadius, &Row, BCLocalize("Aura radius"), 8, 200);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcOrbitAuraParticles, &g_Config.m_BcOrbitAuraParticles, &Row, BCLocalize("Particles"), 2, 120);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcOrbitAuraAlpha, &g_Config.m_BcOrbitAuraAlpha, &Row, BCLocalize("Aura alpha"), 0, 100);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcOrbitAuraSpeed, &g_Config.m_BcOrbitAuraSpeed, &Row, BCLocalize("Aura speed"), 10, 200);
-			}
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
 		// Media background (left column block)
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_MEDIA_BACKGROUND))
 		{
@@ -3600,34 +3509,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			}
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
-
-		// Sweat Weapon (left column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_CRYSTAL_LASER))
-		{
-			const float ContentHeight = LineSize + MarginSmall + LineSize + MarginSmall + LineSize + 58.0f + MarginSmall + LineSize + 58.0f;
-			CUIRect Content, Label, PreviewLabel, PreviewRect;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			Ui()->DoLabel(&Label, BCLocalize("Sweat Weapon"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcCrystalLaser, BCLocalize("Enable"), &g_Config.m_BcCrystalLaser, &Content, LineSize);
-
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			Content.HSplitTop(LineSize, &PreviewLabel, &Content);
-			Ui()->DoLabel(&PreviewLabel, BCLocalize("Crystal Laser"), 14.0f, TEXTALIGN_ML);
-			Content.HSplitTop(58.0f, &PreviewRect, &Content);
-			DoLaserPreview(&PreviewRect, ColorHSLA(g_Config.m_ClLaserRifleOutlineColor), ColorHSLA(g_Config.m_ClLaserRifleInnerColor), LASERTYPE_RIFLE);
-
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			Content.HSplitTop(LineSize, &PreviewLabel, &Content);
-			Ui()->DoLabel(&PreviewLabel, BCLocalize("Sand Shotgun"), 14.0f, TEXTALIGN_ML);
-			Content.HSplitTop(58.0f, &PreviewRect, &Content);
-			DoLaserPreview(&PreviewRect, ColorHSLA(g_Config.m_ClLaserShotgunOutlineColor), ColorHSLA(g_Config.m_ClLaserShotgunInnerColor), LASERTYPE_SHOTGUN);
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_GRAFFITI))
 		{
 			const float KeyReaderLineSize = LineSize;
@@ -3860,81 +3741,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 				Expand.HSplitTop(LineSize, &Row, &Expand);
 				Ui()->DoScrollbarOption(&g_Config.m_BcAfterimageSpacing, &g_Config.m_BcAfterimageSpacing, &Row, BCLocalize("Afterimage spacing"), 1, 64);
-			}
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
-		// Magic particles (left column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_MAGIC_PARTICLES))
-		{
-			static float s_MagicParticlesPhase = 0.0f;
-			static CButtonContainer s_MagicParticlesResetButton;
-			const bool MagicParticlesEnabled = g_Config.m_BcMagicParticles != 0;
-			UpdateRevealPhase(s_MagicParticlesPhase, MagicParticlesEnabled);
-			const float ExpandedTargetHeight = 5.0f * LineSize;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + ExpandedTargetHeight * s_MagicParticlesPhase;
-			CUIRect Content, Label, Row, Visible;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
-			ResetHitbox = ResetButton;
-			const bool MagicParticlesResetClicked = Ui()->DoButton_FontIcon(&s_MagicParticlesResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(&s_MagicParticlesResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
-			if(MagicParticlesResetClicked)
-			{
-				g_Config.m_BcMagicParticlesCount = DefaultConfig::BcMagicParticlesCount;
-				g_Config.m_BcMagicParticlesRadius = DefaultConfig::BcMagicParticlesRadius;
-				g_Config.m_BcMagicParticlesSize = DefaultConfig::BcMagicParticlesSize;
-				g_Config.m_BcMagicParticlesAlphaDelay = DefaultConfig::BcMagicParticlesAlphaDelay;
-				g_Config.m_BcMagicParticlesType = DefaultConfig::BcMagicParticlesType;
-			}
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Magic Particles"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMagicParticles, BCLocalize("Magic Particles"), &g_Config.m_BcMagicParticles, &Content, LineSize);
-
-			const float ExpandedHeight = ExpandedTargetHeight * s_MagicParticlesPhase;
-			if(!MagicParticlesResetClicked && ExpandedHeight > 0.0f)
-			{
-				Content.HSplitTop(ExpandedHeight, &Visible, &Content);
-				Ui()->ClipEnable(&Visible);
-				struct SScopedClip
-				{
-					CUi *m_pUi;
-					~SScopedClip() { m_pUi->ClipDisable(); }
-				} ClipGuard{Ui()};
-
-				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExpandedTargetHeight};
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesCount, &g_Config.m_BcMagicParticlesCount, &Row, BCLocalize("Particles count"), 1, 100);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesRadius, &g_Config.m_BcMagicParticlesRadius, &Row, BCLocalize("Radius"), 1, 1000);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesSize, &g_Config.m_BcMagicParticlesSize, &Row, BCLocalize("Size"), 1, 50);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcMagicParticlesAlphaDelay, &g_Config.m_BcMagicParticlesAlphaDelay, &Row, BCLocalize("Alpha delay"), 1, 100);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				CUIRect TypeLabel, TypeSelect;
-				Row.VSplitLeft(150.0f, &TypeLabel, &TypeSelect);
-				Ui()->DoLabel(&TypeLabel, BCLocalize("Particle type"), 14.0f, TEXTALIGN_ML);
-
-				static CUi::SDropDownState s_MagicParticlesTypeState;
-				static CScrollRegion s_MagicParticlesTypeScrollRegion;
-				s_MagicParticlesTypeState.m_SelectionPopupContext.m_pScrollRegion = &s_MagicParticlesTypeScrollRegion;
-				const char *apMagicParticleTypes[4] = {
-					BCLocalize("Slice"),
-					BCLocalize("Ball"),
-					BCLocalize("Smoke"),
-					BCLocalize("Shell"),
-				};
-				g_Config.m_BcMagicParticlesType = Ui()->DoDropDown(&TypeSelect, g_Config.m_BcMagicParticlesType - 1, apMagicParticleTypes, (int)std::size(apMagicParticleTypes), s_MagicParticlesTypeState) + 1;
 			}
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}

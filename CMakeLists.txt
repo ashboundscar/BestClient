@@ -2818,14 +2818,10 @@ if(CLIENT)
     components/bestclient/graffity/graffity.h
     components/bestclient/hud_editor.cpp
     components/bestclient/hud_editor.h
-    components/bestclient/magic_particles.cpp
-    components/bestclient/magic_particles.h
     components/bestclient/menus_bestclient.cpp
     components/bestclient/menus_bestclient_shop.cpp
     components/bestclient/music_player.cpp
     components/bestclient/music_player.h
-    components/bestclient/orbit_aura.cpp
-    components/bestclient/orbit_aura.h
     components/bestclient/r_jelly.cpp
     components/bestclient/r_jelly.h
     components/bestclient/r_trail.cpp
