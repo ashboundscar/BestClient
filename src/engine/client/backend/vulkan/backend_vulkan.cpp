@@ -2523,6 +2523,11 @@ protected:
 
 		vkWaitForFences(m_VKDevice, 1, &m_vQueueSubmitFences[m_CurImageIndex], VK_TRUE, std::numeric_limits<uint64_t>::max());
 
+		if(IsFrameBlendEnabled() && m_LastPresentedSwapChainImageIndex != std::numeric_limits<decltype(m_LastPresentedSwapChainImageIndex)>::max() && m_LastPresentedSwapChainImageIndex != m_CurImageIndex)
+		{
+			vkWaitForFences(m_VKDevice, 1, &m_vQueueSubmitFences[m_LastPresentedSwapChainImageIndex], VK_TRUE, std::numeric_limits<uint64_t>::max());
+		}
+
 		// next frame
 		m_CurFrame++;
 		m_vImageLastFrameCheck[m_CurImageIndex] = m_CurFrame;
