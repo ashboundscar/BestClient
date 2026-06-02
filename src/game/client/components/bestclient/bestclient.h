@@ -44,6 +44,7 @@ class CBestClient : public CComponent
 	static void ConToggleDeepfly(IConsole::IResult *pResult, void *pUserData);
 	static void ConToggleCinematicCamera(IConsole::IResult *pResult, void *pUserData);
 	static void ConSaveRollback(IConsole::IResult *pResult, void *pUserData);
+	static void ConToggleReShadeEffects(IConsole::IResult *pResult, void *pUserData);
 
 	int m_45degreestoggle = 0;
 	int m_45degreestogglelastinput = 0;
@@ -140,6 +141,7 @@ public:
 	void OnReset() override;
 	void OnStateChange(int NewState, int OldState) override;
 	void OnRender() override;
+	bool OnInput(const IInput::CEvent &Event) override;
 	void OnConsoleInit() override;
 	bool IsStreamerModeEnabled() const;
 	bool HasStreamerFlag(int Flag) const;

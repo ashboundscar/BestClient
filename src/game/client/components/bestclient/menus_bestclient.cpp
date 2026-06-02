@@ -173,6 +173,14 @@ static std::unordered_set<std::string> BestClientBuildTrackedReShadeEffectSet(co
 
 static SBestClientReShadeUiCache gs_BestClientReShadeUiCache;
 
+static bool gs_ReShadeEffectsMuted = false;
+static bool gs_ReShadeTogglePending = false;
+
+void BestClientTriggerReShadeToggle()
+{
+	gs_ReShadeTogglePending = true;
+}
+
 static std::string BestClientTrimString(std::string Text)
 {
 	const auto IsWhitespace = [](unsigned char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
@@ -921,6 +929,38 @@ static bool BestClientSaveReShadeBridgeState(IStorage *pStorage, const SBestClie
 	if(ErrorSize > 0)
 		pError[0] = '\0';
 	return true;
+}
+
+static uint64_t gs_ReShadeToggleRevision = 0;
+
+void BestClientProcessReShadeToggle(IStorage *pStorage)
+{
+	if(!gs_ReShadeTogglePending)
+		return;
+	gs_ReShadeTogglePending = false;
+
+	SBestClientReShadePresetState PresetState;
+	char aError[192];
+	if(!BestClientLoadReShadePreset(pStorage, PresetState, aError, sizeof(aError)))
+		return;
+
+	if(!gs_ReShadeEffectsMuted)
+	{
+		PresetState.m_EnabledTokens.clear();
+		gs_ReShadeEffectsMuted = true;
+	}
+	else
+	{
+		for(const std::string &Token : PresetState.m_vTechniqueSorting)
+			PresetState.m_EnabledTokens.insert(Token);
+		gs_ReShadeEffectsMuted = false;
+	}
+
+	BestClientSaveReShadePreset(pStorage, PresetState, aError, sizeof(aError));
+	BestClientSaveReShadeSettings(pStorage, PresetState, aError, sizeof(aError));
+	BestClientSaveReShadeBridgeState(pStorage, PresetState, ++gs_ReShadeToggleRevision, aError, sizeof(aError));
+
+	gs_BestClientReShadeUiCache.m_HasPresetCache = false;
 }
 
 static std::string BestClientBuildTechniqueToken(const std::string &TechniqueName, const std::string &EffectName)
@@ -1778,7 +1818,7 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 	MainView.VSplitMid(&LeftColumn, &RightColumn, MarginLarge);
 
 	CUIRect ControlsPanel, AvailablePanel;
-	LeftColumn.HSplitTop(122.0f, &ControlsPanel, &LeftColumn);
+	LeftColumn.HSplitTop(148.0f, &ControlsPanel, &LeftColumn);
 	LeftColumn.HSplitTop(MarginMedium, nullptr, &LeftColumn);
 	AvailablePanel = LeftColumn;
 
@@ -1819,7 +1859,7 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		Inner.VMargin(10.0f, &Inner);
 		Inner.HMargin(10.0f, &Inner);
 
-		CUIRect TitleRow, RuntimeRow, AutoAcceptRow, FilterRow;
+		CUIRect TitleRow, RuntimeRow, AutoAcceptRow, FilterRow, BindRow;
 		Inner.HSplitTop(HeaderLineSize, &TitleRow, &Inner);
 		Inner.HSplitTop(MarginSmall, nullptr, &Inner);
 		Inner.HSplitTop(ControlsLineSize, &RuntimeRow, &Inner);
@@ -1827,6 +1867,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		Inner.HSplitTop(ControlsLineSize, &AutoAcceptRow, &Inner);
 		Inner.HSplitTop(MarginSmall, nullptr, &Inner);
 		Inner.HSplitTop(ControlsLineSize, &FilterRow, &Inner);
+		Inner.HSplitTop(MarginSmall, nullptr, &Inner);
+		Inner.HSplitTop(ControlsLineSize, &BindRow, &Inner);
 
 		pUi->DoLabel(&TitleRow, BCLocalize("ReShade controls"), 18.0f, TEXTALIGN_ML);
 
@@ -1848,6 +1890,37 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 
 		pMenus->DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcReshadeAutoAccept, BCLocalize("Auto accept"), &g_Config.m_BcReshadeAutoAccept, &AutoAcceptRow, ControlsLineSize);
 		pMenus->DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcReshadeShowOnlyEnabled, BCLocalize("Show only enabled on the right"), &g_Config.m_BcReshadeShowOnlyEnabled, &FilterRow, ControlsLineSize);
+
+		{
+			static CButtonContainer s_ToggleBindReaderButton;
+			static CButtonContainer s_ToggleBindClearButton;
+			const float BindLabelWidth = 120.0f;
+			CUIRect BindLabel, BindReader;
+			BindRow.VSplitLeft(BindLabelWidth, &BindLabel, &BindRow);
+			BindRow.VSplitLeft(MarginSmall, nullptr, &BindRow);
+			BindRow.VSplitLeft(minimum(120.0f, BindRow.w), &BindReader, &BindRow);
+
+			pUi->DoLabel(&BindLabel, BCLocalize("Toggle effects bind"), 13.0f, TEXTALIGN_ML);
+
+			const CBindSlot ToggleBind = [&]() -> CBindSlot {
+				for(int Mod = KeyModifier::NONE; Mod < KeyModifier::COMBINATION_COUNT; Mod++)
+					for(int Key = KEY_FIRST; Key < KEY_LAST; Key++)
+						if(str_comp(pMenus->MenuGameClient()->m_Binds.Get(Key, Mod), "BC_reshade_toggle_effects") == 0)
+							return CBindSlot(Key, Mod);
+				return EMPTY_BIND_SLOT;
+			}();
+
+			const CKeyBinder::CKeyReaderResult BindResult = pMenus->MenuGameClient()->m_KeyBinder.DoKeyReader(
+				&s_ToggleBindReaderButton, &s_ToggleBindClearButton, &BindReader, ToggleBind, false);
+
+			if(BindResult.m_Bind != ToggleBind && !BindResult.m_Aborted)
+			{
+				if(ToggleBind != EMPTY_BIND_SLOT)
+					pMenus->MenuGameClient()->m_Binds.Bind(ToggleBind.m_Key, "", false, ToggleBind.m_ModifierMask);
+				if(BindResult.m_Bind != EMPTY_BIND_SLOT)
+					pMenus->MenuGameClient()->m_Binds.Bind(BindResult.m_Bind.m_Key, "BC_reshade_toggle_effects", false, BindResult.m_Bind.m_ModifierMask);
+			}
+		}
 	}
 
 	if(!HasReShadeRuntimeFiles)

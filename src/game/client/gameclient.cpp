@@ -695,6 +695,7 @@ void CGameClient::OnConsoleInit()
 						  &m_Emoticon,
 						  &m_ImportantAlert,
 						  &m_AdminPanel,
+						  &m_BestClient,
 						  &m_Menus,
 						  &m_Controls,
 						  &m_TouchControls,
