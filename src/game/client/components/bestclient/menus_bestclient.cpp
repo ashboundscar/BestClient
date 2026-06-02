@@ -3511,44 +3511,82 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		}
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_GRAFFITI))
 		{
+			static float s_GraffityPhase = 0.0f;
+			const bool GraffityExpanded = g_Config.m_BcGraffityEnabled != 0;
+			UpdateRevealPhase(s_GraffityPhase, GraffityExpanded);
 			const float KeyReaderLineSize = LineSize;
 			const float GraffityLabelFontSize = 12.0f;
 			const float GraffityEditBoxFontSize = 10.0f;
-			const float ContentHeight = LineSize + MarginSmall + LineSize * 5.0f + KeyReaderLineSize + MarginSmall * 5.0f;
-			CUIRect Content, Label, Button, Row;
+			const float ExtraTargetHeight = MarginSmall + LineSize * 4.0f + KeyReaderLineSize + MarginSmall * 4.0f + LineSize;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_GraffityPhase;
+			CUIRect Content, Label, Button, Row, Visible;
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
-			Ui()->DoLabel(&Label, BCLocalize("Graffiti"), HeadlineFontSize, TEXTALIGN_ML);
+			{
+				const float BadgeWidth = 52.0f;
+				const float BadgeSpacing = 4.0f;
+				CUIRect TitleLabel, BadgeNew, BadgeBeta;
+				Label.VSplitLeft(TextRender()->TextWidth(HeadlineFontSize, BCLocalize("Graffiti")) + BadgeSpacing, &TitleLabel, &Label);
+				Label.VSplitLeft(BadgeWidth, &BadgeNew, &Label);
+				Label.VSplitLeft(BadgeSpacing, nullptr, &Label);
+				Label.VSplitLeft(BadgeWidth, &BadgeBeta, &Label);
+				Ui()->DoLabel(&TitleLabel, BCLocalize("Graffiti"), HeadlineFontSize, TEXTALIGN_ML);
+				BadgeNew.HMargin(1.5f, &BadgeNew);
+				Graphics()->DrawRect4(BadgeNew.x, BadgeNew.y, BadgeNew.w, BadgeNew.h,
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					IGraphics::CORNER_ALL, 5.0f);
+				Ui()->DoLabel(&BadgeNew, "NEW", 11.0f, TEXTALIGN_MC);
+				BadgeBeta.HMargin(1.5f, &BadgeBeta);
+				Graphics()->DrawRect4(BadgeBeta.x, BadgeBeta.y, BadgeBeta.w, BadgeBeta.h,
+					ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f), ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
+					ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f), ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
+					IGraphics::CORNER_ALL, 5.0f);
+				Ui()->DoLabel(&BadgeBeta, "BETA", 11.0f, TEXTALIGN_MC);
+			}
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcGraffityEnabled, BCLocalize("Enable graffiti"), &g_Config.m_BcGraffityEnabled, &Content, LineSize);
 
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			Content.HSplitTop(LineSize, &Row, &Content);
-			Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySize, &g_Config.m_BcGraffitySize, &Row, BCLocalize("Graffiti size"), 1, 6);
+			if(ExtraTargetHeight * s_GraffityPhase > 0.0f)
+			{
+				Content.HSplitTop(ExtraTargetHeight * s_GraffityPhase, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClip
+				{
+					CUi *m_pUi;
+					~SScopedClip() { m_pUi->ClipDisable(); }
+				} ClipGuard{Ui()};
 
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			Content.HSplitTop(LineSize, &Row, &Content);
-			Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySoundVolume, &g_Config.m_BcGraffitySoundVolume, &Row, BCLocalize("Graffiti spray volume"), 0, 200, &CUi::ms_LogarithmicScrollbarScale, 0u, "%");
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExtraTargetHeight};
 
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcGraffityHoldWheel, BCLocalize("Hold key for graffiti wheel"), &g_Config.m_BcGraffityHoldWheel, &Content, LineSize);
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySize, &g_Config.m_BcGraffitySize, &Row, BCLocalize("Graffiti size"), 1, 6);
 
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			Content.HSplitTop(LineSize, &Label, &Content);
-			static CButtonContainer s_GraffityReaderButton;
-			static CButtonContainer s_GraffityClearButton;
-			DoLine_KeyReader(Label, s_GraffityReaderButton, s_GraffityClearButton, BCLocalize("Graffiti wheel key"), "+graffity");
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
+				Expand.HSplitTop(LineSize, &Row, &Expand);
+				Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySoundVolume, &g_Config.m_BcGraffitySoundVolume, &Row, BCLocalize("Graffiti spray volume"), 0, 200, &CUi::ms_LogarithmicScrollbarScale, 0u, "%");
 
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-			Content.HSplitTop(LineSize, &Button, &Content);
-			Button.VSplitLeft(150.0f, &Label, &Button);
-			Ui()->DoLabel(&Label, BCLocalize("Server address:"), GraffityLabelFontSize, TEXTALIGN_ML);
-			static CLineInput s_GraffityServerAddressInput;
-			s_GraffityServerAddressInput.SetBuffer(g_Config.m_BcGraffityServerAddress, sizeof(g_Config.m_BcGraffityServerAddress));
-			s_GraffityServerAddressInput.SetEmptyText(BCLocalize("host:port"));
-			Ui()->DoEditBox(&s_GraffityServerAddressInput, &Button, GraffityEditBoxFontSize);
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
+				DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcGraffityHoldWheel, BCLocalize("Hold key for graffiti wheel"), &g_Config.m_BcGraffityHoldWheel, &Expand, LineSize);
+
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
+				Expand.HSplitTop(KeyReaderLineSize, &Label, &Expand);
+				static CButtonContainer s_GraffityReaderButton;
+				static CButtonContainer s_GraffityClearButton;
+				DoLine_KeyReader(Label, s_GraffityReaderButton, s_GraffityClearButton, BCLocalize("Graffiti wheel key"), "+graffity");
+
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
+				Expand.HSplitTop(LineSize, &Button, &Expand);
+				Button.VSplitLeft(150.0f, &Label, &Button);
+				Ui()->DoLabel(&Label, BCLocalize("Server address:"), GraffityLabelFontSize, TEXTALIGN_ML);
+				static CLineInput s_GraffityServerAddressInput;
+				s_GraffityServerAddressInput.SetBuffer(g_Config.m_BcGraffityServerAddress, sizeof(g_Config.m_BcGraffityServerAddress));
+				s_GraffityServerAddressInput.SetEmptyText(BCLocalize("host:port"));
+				Ui()->DoEditBox(&s_GraffityServerAddressInput, &Button, GraffityEditBoxFontSize);
+			}
 
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
