@@ -2883,8 +2883,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BESTCLIENT_TAB_GAMEPLAY,
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
-		BESTCLIENT_TAB_FUN,
-		BESTCLIENT_TAB_SHOP,
 		BESTCLIENT_TAB_EDITORS,
 		BESTCLIENT_TAB_INFO,
 		NUM_BESTCLIENT_TABS,
@@ -2915,8 +2913,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BCLocalize("Gameplay"),
 		BCLocalize("Others"),
 		BCLocalize("ReShade"),
-		BCLocalize("Fun"),
-		BCLocalize("Shop"),
 		BCLocalize("Editors"),
 		BCLocalize("Info"),
 	};
@@ -2926,8 +2922,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
 		BESTCLIENT_TAB_EDITORS,
-		BESTCLIENT_TAB_FUN,
-		BESTCLIENT_TAB_SHOP,
 		BESTCLIENT_TAB_INFO,
 	};
 
@@ -2974,7 +2968,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 	}
 
 	MainView.HSplitTop(10.0f, nullptr, &MainView);
-	SetBestClientShopVisible(s_CurTab == BESTCLIENT_TAB_SHOP);
+	SetBestClientShopVisible(false);
 
 	if(s_CurTab == BESTCLIENT_TAB_VISUALS)
 	{
@@ -5757,10 +5751,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		RenderSettingsBestClientReShadeUnsupported(Ui(), MainView);
 #endif
 	}
-	else if(s_CurTab == BESTCLIENT_TAB_FUN)
-	{
-		RenderSettingsBestClientFun(MainView);
-	}
 	else if(s_CurTab == BESTCLIENT_TAB_OTHERS)
 	{
 		const float LineSize = 20.0f;
@@ -6130,10 +6120,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		s_BestClientOthersScrollRegion.AddRect(ScrollRegion);
 		s_BestClientOthersScrollRegion.End();
 	}
-	else if(s_CurTab == BESTCLIENT_TAB_SHOP)
-	{
-		RenderSettingsBestClientShop(MainView);
-	}
 	else if(s_CurTab == BESTCLIENT_TAB_INFO)
 	{
 		RenderSettingsBestClientInfo(MainView);
@@ -6424,18 +6410,58 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BESTCLIENT_TAB_GAMEPLAY,
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
-		BESTCLIENT_TAB_FUN,
-		BESTCLIENT_TAB_SHOP,
 		BESTCLIENT_TAB_EDITORS,
 		BESTCLIENT_TAB_INFO,
 		NUM_BESTCLIENT_TABS,
 	};
+
+	enum
+	{
+		INFO_SUBTAB_FUN = 0,
+		INFO_SUBTAB_SHOP,
+		INFO_SUBTAB_INFO,
+		NUM_INFO_SUBTABS,
+	};
+
+	static int s_CurSubTab = INFO_SUBTAB_FUN;
+	static CButtonContainer s_aSubTabButtons[NUM_INFO_SUBTABS] = {};
 
 	const float LineSize = 20.0f;
 	const float MarginSmall = 5.0f;
 	const float MarginBetweenViews = 30.0f;
 	const float HeadlineFontSize = 20.0f;
 	const float HeadlineHeight = HeadlineFontSize;
+
+	// Sub-tab bar
+	CUIRect SubTabBar, SubTabButton;
+	MainView.HSplitTop(24.0f, &SubTabBar, &MainView);
+	const char *apSubTabNames[NUM_INFO_SUBTABS] = {
+		BCLocalize("Fun"),
+		BCLocalize("Shop"),
+		BCLocalize("Info"),
+	};
+	const float SubTabWidth = SubTabBar.w / (float)NUM_INFO_SUBTABS;
+	for(int i = 0; i < NUM_INFO_SUBTABS; i++)
+	{
+		SubTabBar.VSplitLeft(SubTabWidth, &SubTabButton, &SubTabBar);
+		const int Corners = i == 0 ? IGraphics::CORNER_L : (i == NUM_INFO_SUBTABS - 1 ? IGraphics::CORNER_R : IGraphics::CORNER_NONE);
+		if(DoButton_MenuTab(&s_aSubTabButtons[i], apSubTabNames[i], s_CurSubTab == i, &SubTabButton, Corners, nullptr, nullptr, nullptr, nullptr, 4.0f))
+			s_CurSubTab = i;
+	}
+	MainView.HSplitTop(10.0f, nullptr, &MainView);
+
+	SetBestClientShopVisible(s_CurSubTab == INFO_SUBTAB_SHOP);
+
+	if(s_CurSubTab == INFO_SUBTAB_FUN)
+	{
+		RenderSettingsBestClientFun(MainView);
+		return;
+	}
+	if(s_CurSubTab == INFO_SUBTAB_SHOP)
+	{
+		RenderSettingsBestClientShop(MainView);
+		return;
+	}
 
 	CUIRect LeftView, RightView, Button, Label, LowerLeftView;
 	MainView.HSplitTop(MarginSmall, nullptr, &MainView);
@@ -6600,8 +6626,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BCLocalize("Gameplay"),
 		BCLocalize("Others"),
 		BCLocalize("ReShade"),
-		BCLocalize("Fun"),
-		BCLocalize("Shop"),
 		BCLocalize("Editors"),
 		BCLocalize("Info"),
 	};
@@ -6611,8 +6635,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
 		BESTCLIENT_TAB_EDITORS,
-		BESTCLIENT_TAB_FUN,
-		BESTCLIENT_TAB_SHOP,
 		BESTCLIENT_TAB_INFO,
 	};
 
