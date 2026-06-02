@@ -2804,6 +2804,7 @@ static const SBestClientComponentEntry gs_aBestClientComponentEntries[] = {
 	{CBestClient::COMPONENT_VISUALS_DYNAMIC_FOV, "Dynamic FOV", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_AFTERIMAGE, "Afterimage", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_CRYSTAL_LASER, "Crystal Laser", COMPONENTS_GROUP_VISUALS},
+	{CBestClient::COMPONENT_VISUALS_GRAFFITI, "Graffiti", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_MUSIC_PLAYER, "Music Player", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_KEYSTROKES, "Keystrokes", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_MEDIA_BACKGROUND, "Media Background", COMPONENTS_GROUP_VISUALS},
@@ -3622,6 +3623,50 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Ui()->DoLabel(&PreviewLabel, BCLocalize("Sand Shotgun"), 14.0f, TEXTALIGN_ML);
 			Content.HSplitTop(58.0f, &PreviewRect, &Content);
 			DoLaserPreview(&PreviewRect, ColorHSLA(g_Config.m_ClLaserShotgunOutlineColor), ColorHSLA(g_Config.m_ClLaserShotgunInnerColor), LASERTYPE_SHOTGUN);
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
+		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_GRAFFITI))
+		{
+			const float KeyReaderLineSize = LineSize;
+			const float GraffityLabelFontSize = 12.0f;
+			const float GraffityEditBoxFontSize = 10.0f;
+			const float ContentHeight = LineSize + MarginSmall + LineSize * 5.0f + KeyReaderLineSize + MarginSmall * 5.0f;
+			CUIRect Content, Label, Button, Row;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			Ui()->DoLabel(&Label, BCLocalize("Graffiti"), HeadlineFontSize, TEXTALIGN_ML);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcGraffityEnabled, BCLocalize("Enable graffiti"), &g_Config.m_BcGraffityEnabled, &Content, LineSize);
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			Content.HSplitTop(LineSize, &Row, &Content);
+			Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySize, &g_Config.m_BcGraffitySize, &Row, BCLocalize("Graffiti size"), 1, 6);
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			Content.HSplitTop(LineSize, &Row, &Content);
+			Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySoundVolume, &g_Config.m_BcGraffitySoundVolume, &Row, BCLocalize("Graffiti spray volume"), 0, 200, &CUi::ms_LogarithmicScrollbarScale, 0u, "%");
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcGraffityHoldWheel, BCLocalize("Hold key for graffiti wheel"), &g_Config.m_BcGraffityHoldWheel, &Content, LineSize);
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			Content.HSplitTop(LineSize, &Label, &Content);
+			static CButtonContainer s_GraffityReaderButton;
+			static CButtonContainer s_GraffityClearButton;
+			DoLine_KeyReader(Label, s_GraffityReaderButton, s_GraffityClearButton, BCLocalize("Graffiti wheel key"), "+graffity");
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			Content.HSplitTop(LineSize, &Button, &Content);
+			Button.VSplitLeft(150.0f, &Label, &Button);
+			Ui()->DoLabel(&Label, BCLocalize("Server address:"), GraffityLabelFontSize, TEXTALIGN_ML);
+			static CLineInput s_GraffityServerAddressInput;
+			s_GraffityServerAddressInput.SetBuffer(g_Config.m_BcGraffityServerAddress, sizeof(g_Config.m_BcGraffityServerAddress));
+			s_GraffityServerAddressInput.SetEmptyText(BCLocalize("host:port"));
+			Ui()->DoEditBox(&s_GraffityServerAddressInput, &Button, GraffityEditBoxFontSize);
+
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 

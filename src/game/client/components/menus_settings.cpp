@@ -1454,12 +1454,6 @@ void CMenus::RenderSettingsSound(CUIRect MainView)
 		Ui()->DoScrollbarOption(&g_Config.m_BcMenuSfxVolume, &g_Config.m_BcMenuSfxVolume, &Button, Localize("SFX sound volume"), 0, 100, &CUi::ms_LogarithmicScrollbarScale, 0u, "%");
 	}
 
-	{
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-		MainView.HSplitTop(20.0f, &Button, &MainView);
-		Ui()->DoScrollbarOption(&g_Config.m_BcGraffitySoundVolume, &g_Config.m_BcGraffitySoundVolume, &Button, Localize("Graffiti spray volume"), 0, 200, &CUi::ms_LogarithmicScrollbarScale, 0u, "%");
-	}
-
 	// volume slider
 	{
 		MainView.HSplitTop(5.0f, nullptr, &MainView);

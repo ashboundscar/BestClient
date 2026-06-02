@@ -39,8 +39,6 @@ namespace
 	constexpr float WHEEL_CIRCLE_RADIUS = 138.0f;
 	constexpr float GRAFFITY_FADE_IN_TIME = 0.18f;
 	constexpr int DEFAULT_GRAFFITY_SERVER_PORT = 8781;
-	constexpr float BOTTOM_CONTROLS_WIDTH = 320.0f;
-	constexpr float BOTTOM_CONTROLS_HEIGHT = 88.0f;
 
 	float EaseInOutQuad(float t)
 	{
@@ -112,9 +110,19 @@ CGraffity::~CGraffity()
 void CGraffity::ConGraffity(IConsole::IResult *pResult, void *pUserData)
 {
 	CGraffity *pSelf = static_cast<CGraffity *>(pUserData);
-	if((pResult->GetInteger(0) == 0) || pSelf->GameClient()->m_Scoreboard.IsActive())
+	const bool Pressed = pResult->GetInteger(0) != 0;
+	if(!Pressed)
+	{
+		if(g_Config.m_BcGraffityHoldWheel)
+			pSelf->CloseWheel();
 		return;
-	pSelf->ToggleWheel();
+	}
+	if(pSelf->GameClient()->m_Scoreboard.IsActive())
+		return;
+	if(g_Config.m_BcGraffityHoldWheel)
+		pSelf->OpenWheel();
+	else
+		pSelf->ToggleWheel();
 }
 
 void CGraffity::OnConsoleInit()
@@ -195,8 +203,7 @@ bool CGraffity::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
 
 	Ui()->ConvertMouseMove(&x, &y, CursorType);
 	m_SelectorMouse += vec2(x, y);
-	if(length(m_SelectorMouse) > WHEEL_MAX_CURSOR_RADIUS)
-		m_SelectorMouse = normalize(m_SelectorMouse) * WHEEL_MAX_CURSOR_RADIUS;
+	ClampSelectorMouseToCircle();
 	return true;
 }
 
@@ -242,8 +249,6 @@ bool CGraffity::OnInput(const IInput::CEvent &Event)
 	{
 		const CUIRect Screen = *Ui()->Screen();
 		const vec2 CursorPos = Screen.Center() + m_SelectorMouse;
-		if(HandleWheelUiClick(Screen, CursorPos))
-			return true;
 		for(const SOwnedPreviewRect &OwnedRect : BuildOwnedPreviewRects(Screen))
 		{
 			if(OwnedRect.m_Rect.Inside(CursorPos))
@@ -316,26 +321,22 @@ void CGraffity::OnRender()
 			m_aHoverAnimation[i] = maximum(m_aHoverAnimation[i] - HoverDelta, 0.0f);
 	}
 
-	if(length(m_SelectorMouse) > WHEEL_MAX_CURSOR_RADIUS)
-		m_SelectorMouse = normalize(m_SelectorMouse) * WHEEL_MAX_CURSOR_RADIUS;
+	ClampSelectorMouseToCircle();
 
 	if(m_WheelActive)
 	{
 		m_SelectedIndex = -1;
 		const CUIRect Screen = *Ui()->Screen();
-		bool CursorInUiControls = BuildBottomControlsLayout(Screen).m_Panel.Inside(Screen.Center() + m_SelectorMouse);
-		if(!CursorInUiControls)
+		bool CursorInOwnedPreview = false;
+		for(const SOwnedPreviewRect &OwnedRect : BuildOwnedPreviewRects(Screen))
 		{
-			for(const SOwnedPreviewRect &OwnedRect : BuildOwnedPreviewRects(Screen))
+			if(OwnedRect.m_Rect.Inside(Screen.Center() + m_SelectorMouse))
 			{
-				if(OwnedRect.m_Rect.Inside(Screen.Center() + m_SelectorMouse))
-				{
-					CursorInUiControls = true;
-					break;
-				}
+				CursorInOwnedPreview = true;
+				break;
 			}
 		}
-		if(!CursorInUiControls && length(m_SelectorMouse) > WHEEL_SELECT_RADIUS)
+		if(!CursorInOwnedPreview && length(m_SelectorMouse) > WHEEL_SELECT_RADIUS)
 		{
 			const float SelectorAngle = angle(m_SelectorMouse);
 			m_SelectedIndex = PositiveMod(std::round(SelectorAngle / (2.0f * pi) * (float)NUM_GRAFFITIES), NUM_GRAFFITIES);
@@ -511,7 +512,7 @@ void CGraffity::PlaySprayApplySound()
 	Sound()->Play(CSounds::CHN_GUI, m_aSpraySoundIds[SPRAY_SOUND_APPLY], 0, Volume);
 }
 
-void CGraffity::ToggleWheel()
+void CGraffity::OpenWheel()
 {
 	if(Client()->State() != IClient::STATE_ONLINE || GameClient()->m_Snap.m_SpecInfo.m_Active || !GameClient()->m_Snap.m_pLocalCharacter)
 		return;
@@ -521,6 +522,15 @@ void CGraffity::ToggleWheel()
 		return;
 	}
 
+	GameClient()->m_Emoticon.OnRelease();
+	GameClient()->m_BindWheel.OnRelease();
+	m_WheelActive = true;
+	m_SelectorMouse = vec2(0.0f, 0.0f);
+	PlaySprayOpenSound();
+}
+
+void CGraffity::ToggleWheel()
+{
 	if(m_PlacementActive)
 	{
 		CancelPlacement();
@@ -533,17 +543,20 @@ void CGraffity::ToggleWheel()
 		return;
 	}
 
-	GameClient()->m_Emoticon.OnRelease();
-	GameClient()->m_BindWheel.OnRelease();
-	m_WheelActive = true;
-	m_SelectorMouse = vec2(0.0f, 0.0f);
-	PlaySprayOpenSound();
+	OpenWheel();
 }
 
 void CGraffity::CloseWheel()
 {
 	m_WheelActive = false;
 	m_SelectedIndex = -1;
+}
+
+void CGraffity::ClampSelectorMouseToCircle()
+{
+	const float Distance = length(m_SelectorMouse);
+	if(Distance > WHEEL_MAX_CURSOR_RADIUS && Distance > 0.0f)
+		m_SelectorMouse *= WHEEL_MAX_CURSOR_RADIUS / Distance;
 }
 
 void CGraffity::CancelPlacement()
@@ -603,6 +616,11 @@ void CGraffity::EnsureNetworkConnection()
 	{
 		StopNetwork();
 		m_ActiveGameServerAddress = aServerAddr;
+	}
+	if(m_ActiveGraffityServerAddress != g_Config.m_BcGraffityServerAddress)
+	{
+		StopNetwork();
+		m_ActiveGraffityServerAddress = g_Config.m_BcGraffityServerAddress;
 	}
 
 	const int64_t ReconnectDelayTicks = time_freq() * 2;
@@ -980,25 +998,6 @@ std::vector<CGraffity::SOwnedPreviewRect> CGraffity::BuildOwnedPreviewRects(cons
 	return vRects;
 }
 
-CGraffity::SBottomControlsLayout CGraffity::BuildBottomControlsLayout(const CUIRect &Screen) const
-{
-	SBottomControlsLayout Layout;
-	Layout.m_Panel.w = BOTTOM_CONTROLS_WIDTH;
-	Layout.m_Panel.h = BOTTOM_CONTROLS_HEIGHT;
-	Layout.m_Panel.x = Screen.Center().x - Layout.m_Panel.w * 0.5f;
-	Layout.m_Panel.y = minimum(Screen.h - Layout.m_Panel.h - 18.0f, Screen.Center().y + WHEEL_CIRCLE_RADIUS + 24.0f);
-
-	CUIRect Inner = Layout.m_Panel;
-	Inner.Margin(12.0f, &Inner);
-	Inner.HSplitTop(24.0f, nullptr, &Inner);
-	Inner.HSplitTop(12.0f, &Layout.m_SliderRect, &Inner);
-	Inner.HSplitTop(10.0f, nullptr, &Inner);
-	Inner.HSplitTop(22.0f, &Layout.m_CheckboxHitRect, nullptr);
-	Layout.m_CheckboxRect = Layout.m_CheckboxHitRect;
-	Layout.m_CheckboxRect.VSplitLeft(18.0f, &Layout.m_CheckboxRect, nullptr);
-	return Layout;
-}
-
 const CGraffity::SGraffityDef *CGraffity::FindDefinitionById(const char *pId) const
 {
 	if(!pId)
@@ -1056,25 +1055,6 @@ bool CGraffity::IntersectsExisting(const vec2 &Pos, int SizeStep, const char *pI
 		if(absolute(Graffity.m_Pos.x - Pos.x) <= HalfSize + OtherHalfSize &&
 			absolute(Graffity.m_Pos.y - Pos.y) <= HalfSize + OtherHalfSize)
 			return true;
-	}
-	return false;
-}
-
-bool CGraffity::HandleWheelUiClick(const CUIRect &Screen, vec2 CursorPos)
-{
-	const SBottomControlsLayout Layout = BuildBottomControlsLayout(Screen);
-	if(Layout.m_CheckboxHitRect.Inside(CursorPos))
-	{
-		g_Config.m_BcGraffityEnabled ^= 1;
-		if(!GraffityEnabled())
-			CancelPlacement();
-		return true;
-	}
-	if(Layout.m_SliderRect.Inside(CursorPos))
-	{
-		const float Relative = std::clamp((CursorPos.x - Layout.m_SliderRect.x) / Layout.m_SliderRect.w, 0.0f, 1.0f);
-		g_Config.m_BcGraffitySize = MIN_GRAFFITY_SIZE_STEP + round_to_int(Relative * (MAX_GRAFFITY_SIZE_STEP - MIN_GRAFFITY_SIZE_STEP));
-		return true;
 	}
 	return false;
 }
@@ -1186,50 +1166,7 @@ void CGraffity::RenderWheelUi()
 		RenderGraffityQuad(*pDefinition, OwnedRect.m_Rect.Center(), OwnedRect.m_Rect.w, ColorRGBA(1.0f, 1.0f, 1.0f, OpenPhase));
 	}
 
-	RenderBottomControls(Screen, OpenPhase);
 	RenderTools()->RenderCursor(ScreenCenter + m_SelectorMouse, 24.0f, OpenPhase);
-}
-
-void CGraffity::RenderBottomControls(const CUIRect &Screen, float OpenPhase)
-{
-	const SBottomControlsLayout Layout = BuildBottomControlsLayout(Screen);
-	CUIRect Title = Layout.m_Panel;
-	Title.HSplitTop(22.0f, &Title, nullptr);
-
-	char aSizeLabel[64];
-	const int SizeStep = GraffitySizeStep();
-	str_format(aSizeLabel, sizeof(aSizeLabel), "Graffiti size: %dx%d", SizeStep, SizeStep);
-
-	CUIRect Panel = Layout.m_Panel;
-	Panel.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.28f * OpenPhase), IGraphics::CORNER_ALL, 8.0f);
-	Ui()->DoLabel(&Title, aSizeLabel, 12.0f, TEXTALIGN_MC);
-
-	Graphics()->TextureClear();
-	Graphics()->DrawRect(Layout.m_SliderRect.x, Layout.m_SliderRect.y + Layout.m_SliderRect.h * 0.35f, Layout.m_SliderRect.w, Layout.m_SliderRect.h * 0.3f, ColorRGBA(1.0f, 1.0f, 1.0f, 0.20f * OpenPhase), IGraphics::CORNER_ALL, Layout.m_SliderRect.h * 0.5f);
-
-	for(int i = 0; i < MAX_GRAFFITY_SIZE_STEP; ++i)
-	{
-		const float Anchor = MAX_GRAFFITY_SIZE_STEP <= 1 ? 0.0f : (float)i / (float)(MAX_GRAFFITY_SIZE_STEP - 1);
-		const float X = Layout.m_SliderRect.x + Layout.m_SliderRect.w * Anchor;
-		const float TickHeight = i + 1 == SizeStep ? 12.0f : 8.0f;
-		Graphics()->DrawRect(X - 1.0f, Layout.m_SliderRect.y + Layout.m_SliderRect.h * 0.5f - TickHeight * 0.5f, 2.0f, TickHeight, ColorRGBA(1.0f, 1.0f, 1.0f, 0.45f * OpenPhase), IGraphics::CORNER_ALL, 1.0f);
-	}
-
-	const float KnobRelative = MAX_GRAFFITY_SIZE_STEP <= 1 ? 0.0f : (float)(SizeStep - 1) / (float)(MAX_GRAFFITY_SIZE_STEP - 1);
-	const float KnobX = Layout.m_SliderRect.x + Layout.m_SliderRect.w * KnobRelative;
-	Graphics()->DrawRect(KnobX - 7.0f, Layout.m_SliderRect.y, 14.0f, Layout.m_SliderRect.h, ColorRGBA(1.0f, 0.82f, 0.82f, 0.95f * OpenPhase), IGraphics::CORNER_ALL, 4.0f);
-
-	CUIRect Checkbox = Layout.m_CheckboxRect;
-	Checkbox.Draw(GraffityEnabled() ? ColorRGBA(0.95f, 0.95f, 0.95f, 0.95f * OpenPhase) : ColorRGBA(0.10f, 0.10f, 0.10f, 0.95f * OpenPhase), IGraphics::CORNER_ALL, 3.0f);
-	if(GraffityEnabled())
-	{
-		CUIRect Inner = Checkbox;
-		Inner.Margin(4.0f, &Inner);
-		Inner.Draw(ColorRGBA(0.15f, 0.15f, 0.15f, 0.95f * OpenPhase), IGraphics::CORNER_ALL, 2.0f);
-	}
-	CUIRect CheckboxLabel = Layout.m_CheckboxHitRect;
-	CheckboxLabel.VSplitLeft(26.0f, nullptr, &CheckboxLabel);
-	Ui()->DoLabel(&CheckboxLabel, Localize("Enable graffiti"), 11.0f, TEXTALIGN_ML);
 }
 
 void CGraffity::RenderGraffityQuad(const SGraffityDef &Definition, vec2 Pos, float Size, ColorRGBA Color) const

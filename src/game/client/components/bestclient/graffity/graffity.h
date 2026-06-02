@@ -89,14 +89,6 @@ private:
 		std::string m_GraffityId;
 	};
 
-	struct SBottomControlsLayout
-	{
-		CUIRect m_Panel;
-		CUIRect m_SliderRect;
-		CUIRect m_CheckboxRect;
-		CUIRect m_CheckboxHitRect;
-	};
-
 	static void ConGraffity(IConsole::IResult *pResult, void *pUserData);
 
 	void LoadTextures();
@@ -106,8 +98,10 @@ private:
 	void PlaySprayOpenSound();
 	void PlaySpraySelectSound();
 	void PlaySprayApplySound();
+	void OpenWheel();
 	void ToggleWheel();
 	void CloseWheel();
+	void ClampSelectorMouseToCircle();
 	void CancelPlacement();
 	void BeginPlacement(int Index);
 	void QueueOutbound(std::string Line);
@@ -123,7 +117,6 @@ private:
 	void SendPlace(const SPlacementPreview &Preview);
 	SPlacementPreview BuildPlacementPreview() const;
 	std::vector<SOwnedPreviewRect> BuildOwnedPreviewRects(const CUIRect &Screen) const;
-	SBottomControlsLayout BuildBottomControlsLayout(const CUIRect &Screen) const;
 	const SGraffityDef *FindDefinitionById(const char *pId) const;
 	const SGraffityDef *FindDefinitionById(const std::string &Id) const;
 	bool GraffityEnabled() const;
@@ -131,14 +124,12 @@ private:
 	bool IsLocalhostGameServer() const;
 	bool CellHasSurface(int TileX, int TileY) const;
 	bool IntersectsExisting(const vec2 &Pos, int SizeStep, const char *pIgnoreId = nullptr) const;
-	bool HandleWheelUiClick(const CUIRect &Screen, vec2 CursorPos);
 	void MapGameScreen() const;
 	float GraffityWorldSize(int SizeStep) const;
 	float PlacementSelectionZoomScale() const;
 	void RenderWorldGraffities(bool AirOnly) const;
 	void RenderPlacementPreview(const SPlacementPreview &Preview, bool OverlayPass) const;
 	void RenderWheelUi();
-	void RenderBottomControls(const CUIRect &Screen, float OpenPhase);
 	void RenderGraffityQuad(const SGraffityDef &Definition, vec2 Pos, float Size, ColorRGBA Color) const;
 	void EchoPlacementError(EPlacementError Error);
 
@@ -179,6 +170,7 @@ private:
 	std::vector<std::string> m_vOutboundLines;
 	std::vector<std::string> m_vInboundLines;
 	std::string m_ActiveGameServerAddress;
+	std::string m_ActiveGraffityServerAddress;
 	char m_aLastError[256] = "";
 	int64_t m_LastConnectAttempt = 0;
 	int64_t m_LastPlacementErrorTick = 0;

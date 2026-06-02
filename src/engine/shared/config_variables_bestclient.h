@@ -216,6 +216,7 @@ MACRO_CONFIG_INT(BcMenuSfxVolume, bc_menu_sfx_volume, 70, 0, 100, CFGFLAG_CLIENT
 MACRO_CONFIG_INT(BcGraffityEnabled, bc_graffity_enabled, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable graffiti rendering and placement")
 MACRO_CONFIG_INT(BcGraffitySize, bc_graffity_size, 1, 1, 6, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffiti size multiplier")
 MACRO_CONFIG_INT(BcGraffitySoundVolume, bc_graffity_sound_volume, 130, 0, 200, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffiti spray sound volume")
+MACRO_CONFIG_INT(BcGraffityHoldWheel, bc_graffity_hold_wheel, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Open graffiti wheel only while the key is held")
 
 // Media background
 MACRO_CONFIG_INT(BcMenuMediaBackground, bc_menu_media_background, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable custom media background in offline menus")
