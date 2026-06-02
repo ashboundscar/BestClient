@@ -1870,7 +1870,21 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		Inner.HSplitTop(MarginSmall, nullptr, &Inner);
 		Inner.HSplitTop(ControlsLineSize, &BindRow, &Inner);
 
-		pUi->DoLabel(&TitleRow, BCLocalize("ReShade controls"), 18.0f, TEXTALIGN_ML);
+		{
+			CUIRect TitleLabel, BadgeSlot, Badge;
+			TitleRow.VSplitLeft(pTextRender->TextWidth(18.0f, BCLocalize("ReShade controls")) + 8.0f, &TitleLabel, &BadgeSlot);
+			pUi->DoLabel(&TitleLabel, BCLocalize("ReShade controls"), 18.0f, TEXTALIGN_ML);
+			BadgeSlot.VSplitLeft(52.0f, &BadgeSlot, nullptr);
+			BadgeSlot.HMargin(1.5f, &Badge);
+			pGraphics->DrawRect4(
+				Badge.x, Badge.y, Badge.w, Badge.h,
+				ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f),
+				ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
+				ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f),
+				ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
+				IGraphics::CORNER_ALL, 5.0f);
+			pUi->DoLabel(&Badge, "BETA", 11.0f, TEXTALIGN_MC);
+		}
 
 		int RuntimeValue = ReShadeConfiguredEnabled ? 1 : 0;
 		if(pMenus->DoButton_CheckBox(&s_RuntimeEnabledToggle, BCLocalize("Enable ReShade on startup (restart required)"), RuntimeValue, &RuntimeRow))
@@ -3557,30 +3571,14 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 			Content.HSplitTop(LineSize, &Label, &Content);
 			const float ResetButtonWidth = LineSize + 8.0f;
-			const float BadgeWidth = 56.0f;
-			const float HeaderSpacing = 4.0f;
-			CUIRect TitleLabel, HeaderRight, BadgeSlot, ResetButton, ResetHitbox, Badge;
-			Label.VSplitRight(BadgeWidth + HeaderSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
-			HeaderRight.VSplitLeft(BadgeWidth, &BadgeSlot, &HeaderRight);
-			HeaderRight.VSplitLeft(HeaderSpacing, nullptr, &HeaderRight);
-			ResetButton = HeaderRight;
+			CUIRect TitleLabel, ResetButton, ResetHitbox;
+			Label.VSplitRight(ResetButtonWidth, &TitleLabel, &ResetButton);
 			ResetHitbox = ResetButton;
 			const bool EyeComfortResetClicked = Ui()->DoButton_FontIcon(&s_EyeComfortResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
 			GameClient()->m_Tooltips.DoToolTip(&s_EyeComfortResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
 			if(EyeComfortResetClicked)
 				g_Config.m_BcEyeComfortStrength = DefaultConfig::BcEyeComfortStrength;
 			Ui()->DoLabel(&TitleLabel, BCLocalize("Eye Comfort"), HeadlineFontSize, TEXTALIGN_ML);
-			BadgeSlot.HMargin(1.5f, &Badge);
-			Badge.x += 4.0f;
-			Badge.w -= 4.0f;
-			Graphics()->DrawRect4(
-				Badge.x, Badge.y, Badge.w, Badge.h,
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				IGraphics::CORNER_ALL, 5.0f);
-			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcEyeComfort, BCLocalize("Enable warm screen filter"), &g_Config.m_BcEyeComfort, &Content, LineSize);
@@ -3782,13 +3780,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 			Content.HSplitTop(LineSize, &Label, &Content);
 			const float ResetButtonWidth = LineSize + 8.0f;
-			const float BadgeWidth = 56.0f;
-			const float HeaderSpacing = 4.0f;
-			CUIRect TitleLabel, HeaderRight, BadgeSlot, ResetButton, ResetHitbox, Badge;
-			Label.VSplitRight(BadgeWidth + HeaderSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
-			HeaderRight.VSplitLeft(BadgeWidth, &BadgeSlot, &HeaderRight);
-			HeaderRight.VSplitLeft(HeaderSpacing, nullptr, &HeaderRight);
-			ResetButton = HeaderRight;
+			CUIRect TitleLabel, ResetButton, ResetHitbox;
+			Label.VSplitRight(ResetButtonWidth, &TitleLabel, &ResetButton);
 			ResetHitbox = ResetButton;
 			const bool FlyingNamePlatesResetClicked = Ui()->DoButton_FontIcon(&s_FlyingNamePlatesResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
 			GameClient()->m_Tooltips.DoToolTip(&s_FlyingNamePlatesResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
@@ -3799,17 +3792,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				g_Config.m_BcFlyingNamePlatesFollow = DefaultConfig::BcFlyingNamePlatesFollow;
 			}
 			Ui()->DoLabel(&TitleLabel, BCLocalize("Flying Name Plates"), HeadlineFontSize, TEXTALIGN_ML);
-			BadgeSlot.HMargin(1.5f, &Badge);
-			Badge.x += 4.0f;
-			Badge.w -= 4.0f;
-			Graphics()->DrawRect4(
-				Badge.x, Badge.y, Badge.w, Badge.h,
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				IGraphics::CORNER_ALL, 5.0f);
-			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcFlyingNamePlates, BCLocalize("Enable flying name plates"), &g_Config.m_BcFlyingNamePlates, &Content, LineSize);
@@ -3982,12 +3964,12 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 			Content.HSplitTop(LineSize, &Label, &Content);
 			const float ResetButtonWidth = LineSize + 8.0f;
-			const float BadgeWidth = 56.0f;
-			const float HeaderSpacing = 4.0f;
+			const float BadgeWidth = 52.0f;
+			const float BadgeSpacing = 4.0f;
 			CUIRect TitleLabel, HeaderRight, BadgeSlot, ResetButton, ResetHitbox, Badge;
-			Label.VSplitRight(BadgeWidth + HeaderSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
+			Label.VSplitRight(BadgeWidth + BadgeSpacing + ResetButtonWidth, &TitleLabel, &HeaderRight);
 			HeaderRight.VSplitLeft(BadgeWidth, &BadgeSlot, &HeaderRight);
-			HeaderRight.VSplitLeft(HeaderSpacing, nullptr, &HeaderRight);
+			HeaderRight.VSplitLeft(BadgeSpacing, nullptr, &HeaderRight);
 			ResetButton = HeaderRight;
 			ResetHitbox = ResetButton;
 			const bool MotionBlurResetClicked = Ui()->DoButton_FontIcon(&s_MotionBlurResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
@@ -3996,16 +3978,14 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				g_Config.m_BcMotionBlurStrength = DefaultConfig::BcMotionBlurStrength;
 			Ui()->DoLabel(&TitleLabel, BCLocalize("Motion Blur"), HeadlineFontSize, TEXTALIGN_ML);
 			BadgeSlot.HMargin(1.5f, &Badge);
-			Badge.x += 4.0f;
-			Badge.w -= 4.0f;
 			Graphics()->DrawRect4(
 				Badge.x, Badge.y, Badge.w, Badge.h,
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+				ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f),
+				ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
+				ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f),
+				ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
 				IGraphics::CORNER_ALL, 5.0f);
-			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
+			Ui()->DoLabel(&Badge, "BETA", 11.0f, TEXTALIGN_MC);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMotionBlur, BCLocalize("Enable motion blur (frame blend)"), &g_Config.m_BcMotionBlur, &Content, LineSize);
@@ -5754,7 +5734,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcEscPlayerList, BCLocalize("Show ESC players list"), &g_Config.m_BcEscPlayerList, &Content, LineSize);
 			Content.HSplitTop(LineSize, &Row, &Content);
 			{
-				CUIRect CheckBox, LabelRow, LabelText, BadgeSlot, Badge;
+				CUIRect CheckBox, LabelRow;
 				Row.VSplitLeft(Row.h, &CheckBox, &LabelRow);
 				LabelRow.VSplitLeft(5.0f, nullptr, &LabelRow);
 
@@ -5770,20 +5750,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				}
 
 				TextRender()->SetRenderFlags(0);
-				LabelRow.VSplitRight(40.0f, &LabelText, &BadgeSlot);
-				Ui()->DoLabel(&LabelText, BCLocalize("Show points in tab"), CheckBox.h * CUi::ms_FontmodHeight, TEXTALIGN_ML);
-
-				BadgeSlot.HMargin(3.0f, &Badge);
-				Badge.x += 4.0f;
-				Badge.w -= 4.0f;
-				Graphics()->DrawRect4(
-					Badge.x, Badge.y, Badge.w, Badge.h,
-					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-					ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-					ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-					IGraphics::CORNER_ALL, 4.0f);
-				Ui()->DoLabel(&Badge, "NEW", 9.5f, TEXTALIGN_MC);
+				Ui()->DoLabel(&LabelRow, BCLocalize("Show points in tab"), CheckBox.h * CUi::ms_FontmodHeight, TEXTALIGN_ML);
 
 				if(Ui()->DoButtonLogic(&g_Config.m_BcShowPointsInTab, g_Config.m_BcShowPointsInTab != 0 ? 1 : 0, &Row, BUTTONFLAG_LEFT, CUi::EButtonSoundType::CHECKBOX))
 					g_Config.m_BcShowPointsInTab ^= 1;
@@ -5824,20 +5791,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, BadgeSlot, Badge;
-			Label.VSplitRight(56.0f, &TitleLabel, &BadgeSlot);
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Rollback Demo"), HeadlineFontSize, TEXTALIGN_ML);
-			BadgeSlot.HMargin(1.5f, &Badge);
-			Badge.x += 6.0f;
-			Badge.w -= 6.0f;
-			Graphics()->DrawRect4(
-				Badge.x, Badge.y, Badge.w, Badge.h,
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f),
-				ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-				IGraphics::CORNER_ALL, 5.0f);
-			Ui()->DoLabel(&Badge, "NEW", 11.0f, TEXTALIGN_MC);
+			Ui()->DoLabel(&Label, BCLocalize("Rollback Demo"), HeadlineFontSize, TEXTALIGN_ML);
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 
 			if(DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_ClReplays, BCLocalize("Enable rollback demo recording"), &g_Config.m_ClReplays, &Content, LineSize))
