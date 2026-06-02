@@ -186,7 +186,10 @@ void CEditor::TileArtCheckColors()
 		m_PopupEventActivated = true;
 	}
 	else
+	{
 		AddTileArt();
+		m_DuoSession.StartMapTransfer();
+	}
 }
 
 bool CEditor::CallbackAddTileArt(const char *pFilepath, int StorageType, void *pUser)

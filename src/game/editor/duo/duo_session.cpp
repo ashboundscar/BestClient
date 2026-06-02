@@ -8,6 +8,7 @@
 #include <game/editor/mapitems/image.h>
 #include <engine/gfx/image_loader.h>
 #include <engine/gfx/image_manipulation.h>
+#include <engine/shared/config.h>
 #include <base/hash_ctxt.h>
 #include <base/math.h>
 #include <game/client/lineinput.h>
@@ -64,6 +65,42 @@ void CDuoSession::OnUpdate()
 		m_ApplyingRemote = true;
 		Editor()->Reset();
 		m_ApplyingRemote = false;
+	}
+
+	// Deferred map transfer: wait for save job to finish, then read and send
+	if(m_PendingMapTransfer && Editor()->m_WriterFinishJobs.empty())
+	{
+		m_PendingMapTransfer = false;
+		static const char *s_pTmpPath = "duo_transfer_tmp.map";
+		IOHANDLE File = Editor()->Storage()->OpenFile(s_pTmpPath, IOFLAG_READ, IStorage::TYPE_SAVE);
+		if(File)
+		{
+			std::vector<uint8_t> vData;
+			uint8_t aBuf[32768];
+			int Read;
+			while((Read = io_read(File, aBuf, sizeof(aBuf))) > 0)
+				vData.insert(vData.end(), aBuf, aBuf + Read);
+			io_close(File);
+			Editor()->Storage()->RemoveFile(s_pTmpPath, IStorage::TYPE_SAVE);
+
+			if(!vData.empty())
+			{
+				const char *pFilename = Editor()->Map()->m_aFilename;
+				const char *pBaseName = pFilename[0] ? pFilename : "untitled.map";
+				for(const char *p = pBaseName; *p; p++)
+					if(*p == '/' || *p == '\\')
+						pBaseName = p + 1;
+				dbg_msg("duo", "MapTransfer: sending '%s' (%d bytes)", pBaseName, (int)vData.size());
+				SendMapStart(pBaseName, (int)vData.size());
+				const int ChunkSize = 32768;
+				for(int Offset = 0; Offset < (int)vData.size(); Offset += ChunkSize)
+				{
+					int Len = minimum(ChunkSize, (int)vData.size() - Offset);
+					SendMapChunk(Offset, vData.data() + Offset, Len);
+				}
+				SendMapEnd();
+			}
+		}
 	}
 
 	int64_t Now = time_get();
@@ -1274,6 +1311,37 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_PendingMapNew = true;
 		break;
 	}
+	case PACKET_EDITOR_SETTINGS:
+	{
+		if(Reader.Remaining() < 9) break;
+		uint8_t BrushColor = Reader.ReadU8();
+		uint8_t AllowUnused = Reader.ReadU8();
+		uint8_t ShowInfo = Reader.ReadU8();
+		uint8_t EnvPreview = Reader.ReadU8();
+		uint8_t AlignQuads = Reader.ReadU8();
+		uint8_t ShowQuadsRect = Reader.ReadU8();
+		uint8_t AutoReload = Reader.ReadU8();
+		uint8_t LayerSelector = Reader.ReadU8();
+		uint8_t ShowIngame = Reader.ReadU8();
+
+		m_ApplyingRemote = true;
+		Editor()->m_BrushColorEnabled = BrushColor != 0;
+		if(AllowUnused == 1)
+			Editor()->m_AllowPlaceUnusedTiles = CEditor::EUnusedEntities::ALLOWED_EXPLICIT;
+		else if(AllowUnused == 2)
+			Editor()->m_AllowPlaceUnusedTiles = CEditor::EUnusedEntities::ALLOWED_IMPLICIT;
+		else
+			Editor()->m_AllowPlaceUnusedTiles = CEditor::EUnusedEntities::NOT_ALLOWED;
+		Editor()->m_ShowTileInfo = static_cast<CEditor::EShowTile>(ShowInfo % 3);
+		Editor()->m_ShowEnvelopePreview = EnvPreview != 0;
+		g_Config.m_EdAlignQuads = AlignQuads != 0;
+		g_Config.m_EdShowQuadsRect = ShowQuadsRect != 0;
+		g_Config.m_EdAutoMapReload = AutoReload != 0;
+		g_Config.m_EdLayerSelector = LayerSelector != 0;
+		g_Config.m_EdShowIngameEntities = ShowIngame != 0;
+		m_ApplyingRemote = false;
+		break;
+	}
 	default:
 		break;
 	}
@@ -1861,6 +1929,12 @@ void CDuoSession::NotifySettingMove(int CmdIdx, int Direction)
 	SendSettingMove(CmdIdx, Direction);
 }
 
+void CDuoSession::NotifyEditorSettings()
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendEditorSettings();
+}
+
 void CDuoSession::SendMapStart(const char *pName, int TotalSize)
 {
 	std::vector<uint8_t> v;
@@ -1896,51 +1970,37 @@ void CDuoSession::SendMapNew()
 	SendFrame(v);
 }
 
+void CDuoSession::SendEditorSettings()
+{
+	if(m_State != STATE_LIVE)
+		return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_EDITOR_SETTINGS);
+	WriteU8(v, Editor()->m_BrushColorEnabled ? 1 : 0);
+	int AllowUnused = 0;
+	if(Editor()->m_AllowPlaceUnusedTiles == CEditor::EUnusedEntities::ALLOWED_EXPLICIT)
+		AllowUnused = 1;
+	else if(Editor()->m_AllowPlaceUnusedTiles == CEditor::EUnusedEntities::ALLOWED_IMPLICIT)
+		AllowUnused = 2;
+	WriteU8(v, static_cast<uint8_t>(AllowUnused));
+	WriteU8(v, static_cast<uint8_t>(Editor()->m_ShowTileInfo));
+	WriteU8(v, Editor()->m_ShowEnvelopePreview ? 1 : 0);
+	WriteU8(v, g_Config.m_EdAlignQuads ? 1 : 0);
+	WriteU8(v, g_Config.m_EdShowQuadsRect ? 1 : 0);
+	WriteU8(v, g_Config.m_EdAutoMapReload ? 1 : 0);
+	WriteU8(v, g_Config.m_EdLayerSelector ? 1 : 0);
+	WriteU8(v, g_Config.m_EdShowIngameEntities ? 1 : 0);
+	SendFrame(v);
+}
+
 void CDuoSession::StartMapTransfer()
 {
 	if(m_State != STATE_LIVE || !m_IsCreator)
 		return;
-	const char *pFilename = Editor()->Map()->m_aFilename;
-	if(!pFilename[0])
-		return;
 
-	// Read the file via storage
-	IOHANDLE File = Editor()->Storage()->OpenFile(pFilename, IOFLAG_READ, IStorage::TYPE_ALL_OR_ABSOLUTE);
-	if(!File)
-	{
-		dbg_msg("duo", "StartMapTransfer: failed to open '%s'", pFilename);
-		return;
-	}
-
-	// Read entire file into memory
-	std::vector<uint8_t> vData;
-	uint8_t aBuf[32768];
-	int Read;
-	while((Read = io_read(File, aBuf, sizeof(aBuf))) > 0)
-		vData.insert(vData.end(), aBuf, aBuf + Read);
-	io_close(File);
-
-	if(vData.empty())
-		return;
-
-	// Extract just the filename without path
-	const char *pBaseName = pFilename;
-	for(const char *p = pFilename; *p; p++)
-		if(*p == '/' || *p == '\\')
-			pBaseName = p + 1;
-
-	dbg_msg("duo", "StartMapTransfer: sending '%s' (%d bytes)", pBaseName, (int)vData.size());
-
-	SendMapStart(pBaseName, (int)vData.size());
-
-	const int ChunkSize = 32768;
-	for(int Offset = 0; Offset < (int)vData.size(); Offset += ChunkSize)
-	{
-		int Len = minimum(ChunkSize, (int)vData.size() - Offset);
-		SendMapChunk(Offset, vData.data() + Offset, Len);
-	}
-
-	SendMapEnd();
+	static const char *s_pTmpPath = "duo_transfer_tmp.map";
+	Editor()->Save(s_pTmpPath);
+	m_PendingMapTransfer = true;
 }
 
 CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoMain(void *pContext, CUIRect View, bool Active)

@@ -183,7 +183,10 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuTools(void *pContext, CUIRect Vi
 		pEditor->Ui()->ShowPopupConfirm(Slot.x + Slot.w, Slot.y, &s_ConfirmPopupContext);
 	}
 	if(s_ConfirmPopupContext.m_Result == CUi::SConfirmPopupContext::CONFIRMED)
+	{
 		pEditor->Map()->RemoveUnusedEnvelopes();
+		pEditor->m_DuoSession.StartMapTransfer();
+	}
 	if(s_ConfirmPopupContext.m_Result != CUi::SConfirmPopupContext::UNSET)
 	{
 		s_ConfirmPopupContext.Reset();
@@ -285,10 +288,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonNo, "No", !pEditor->m_BrushColorEnabled, &No, BUTTONFLAG_LEFT, "Disable brush coloring.", IGraphics::CORNER_L))
 		{
 			pEditor->m_BrushColorEnabled = false;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", pEditor->m_BrushColorEnabled, &Yes, BUTTONFLAG_LEFT, "Enable brush coloring.", IGraphics::CORNER_R))
 		{
 			pEditor->m_BrushColorEnabled = true;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -310,10 +315,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 			if(pEditor->DoButton_Ex(&s_ButtonNo, "No", pEditor->m_AllowPlaceUnusedTiles == EUnusedEntities::NOT_ALLOWED, &No, BUTTONFLAG_LEFT, "[Ctrl+U] Disallow placing unused tiles.", IGraphics::CORNER_L))
 			{
 				pEditor->m_AllowPlaceUnusedTiles = EUnusedEntities::NOT_ALLOWED;
+				pEditor->m_DuoSession.NotifyEditorSettings();
 			}
 			if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", pEditor->m_AllowPlaceUnusedTiles == EUnusedEntities::ALLOWED_EXPLICIT, &Yes, BUTTONFLAG_LEFT, "[Ctrl+U] Allow placing unused tiles.", IGraphics::CORNER_R))
 			{
 				pEditor->m_AllowPlaceUnusedTiles = EUnusedEntities::ALLOWED_EXPLICIT;
+				pEditor->m_DuoSession.NotifyEditorSettings();
 			}
 		}
 	}
@@ -337,16 +344,19 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonOff, pAction->LabelShort(), pAction->Active(), &Off, BUTTONFLAG_LEFT, pAction->Description(), IGraphics::CORNER_L))
 		{
 			pAction->Call();
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		pAction = &pEditor->m_QuickActionShowInfoDec;
 		if(pEditor->DoButton_Ex(&s_ButtonDec, pAction->LabelShort(), pAction->Active(), &Dec, BUTTONFLAG_LEFT, pAction->Description(), IGraphics::CORNER_NONE))
 		{
 			pAction->Call();
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		pAction = &pEditor->m_QuickActionShowInfoHex;
 		if(pEditor->DoButton_Ex(&s_ButtonHex, pAction->LabelShort(), pAction->Active(), &Hex, BUTTONFLAG_LEFT, pAction->Description(), IGraphics::CORNER_R))
 		{
 			pAction->Call();
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -368,11 +378,13 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		{
 			pEditor->m_ShowEnvelopePreview = false;
 			pEditor->m_ActiveEnvelopePreview = EEnvelopePreview::NONE;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", pEditor->m_ShowEnvelopePreview, &Yes, BUTTONFLAG_LEFT, "Preview the paths of quads with a position envelope when a quad layer is selected.", IGraphics::CORNER_R))
 		{
 			pEditor->m_ShowEnvelopePreview = true;
 			pEditor->m_ActiveEnvelopePreview = EEnvelopePreview::NONE;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -393,10 +405,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonNo, "No", !g_Config.m_EdAlignQuads, &No, BUTTONFLAG_LEFT, "Do not perform quad alignment to other quads/points when moving quads.", IGraphics::CORNER_L))
 		{
 			g_Config.m_EdAlignQuads = false;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", g_Config.m_EdAlignQuads, &Yes, BUTTONFLAG_LEFT, "Allow quad alignment to other quads/points when moving quads.", IGraphics::CORNER_R))
 		{
 			g_Config.m_EdAlignQuads = true;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -417,10 +431,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonNo, "No", !g_Config.m_EdShowQuadsRect, &No, BUTTONFLAG_LEFT, "Do not show quad bounds when moving quads.", IGraphics::CORNER_L))
 		{
 			g_Config.m_EdShowQuadsRect = false;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", g_Config.m_EdShowQuadsRect, &Yes, BUTTONFLAG_LEFT, "Show quad bounds when moving quads.", IGraphics::CORNER_R))
 		{
 			g_Config.m_EdShowQuadsRect = true;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -441,10 +457,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonNo, "No", !g_Config.m_EdAutoMapReload, &No, BUTTONFLAG_LEFT, "Do not run 'hot_reload' on the local server while rcon authed on map save.", IGraphics::CORNER_L))
 		{
 			g_Config.m_EdAutoMapReload = false;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", g_Config.m_EdAutoMapReload, &Yes, BUTTONFLAG_LEFT, "Run 'hot_reload' on the local server while rcon authed on map save.", IGraphics::CORNER_R))
 		{
 			g_Config.m_EdAutoMapReload = true;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -465,10 +483,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonNo, "No", !g_Config.m_EdLayerSelector, &No, BUTTONFLAG_LEFT, "Do not select layers when ctrl+right clicking on a tile.", IGraphics::CORNER_L))
 		{
 			g_Config.m_EdLayerSelector = false;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", g_Config.m_EdLayerSelector, &Yes, BUTTONFLAG_LEFT, "Select layers when ctrl+right clicking on a tile.", IGraphics::CORNER_R))
 		{
 			g_Config.m_EdLayerSelector = true;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -489,10 +509,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuSettings(void *pContext, CUIRect
 		if(pEditor->DoButton_Ex(&s_ButtonNo, "No", !g_Config.m_EdShowIngameEntities, &No, BUTTONFLAG_LEFT, "Do not show how weapons, shields, hearts and flags appear ingame.", IGraphics::CORNER_L))
 		{
 			g_Config.m_EdShowIngameEntities = false;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 		if(pEditor->DoButton_Ex(&s_ButtonYes, "Yes", g_Config.m_EdShowIngameEntities, &Yes, BUTTONFLAG_LEFT, "Show how weapons, shields, hearts and flags appear ingame.", IGraphics::CORNER_R))
 		{
 			g_Config.m_EdShowIngameEntities = true;
+			pEditor->m_DuoSession.NotifyEditorSettings();
 		}
 	}
 
@@ -2315,6 +2337,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		else if(pEditor->m_PopupEventType == POPEVENT_PLACE_BORDER_TILES)
 		{
 			pEditor->Map()->PlaceBorderTiles();
+			pEditor->m_DuoSession.NotifyFullSync();
 		}
 		else if(pEditor->m_PopupEventType == POPEVENT_TILE_ART_BIG_IMAGE)
 		{
@@ -2323,10 +2346,12 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		else if(pEditor->m_PopupEventType == POPEVENT_TILE_ART_MANY_COLORS)
 		{
 			pEditor->AddTileArt();
+			pEditor->m_DuoSession.StartMapTransfer();
 		}
 		else if(pEditor->m_PopupEventType == POPEVENT_QUAD_ART_BIG_IMAGE)
 		{
 			pEditor->AddQuadArt();
+			pEditor->m_DuoSession.StartMapTransfer();
 		}
 		else if(pEditor->m_PopupEventType == POPEVENT_REMOVE_USED_IMAGE)
 		{
@@ -3325,6 +3350,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupQuadArt(void *pContext, CUIRect View
 		else
 		{
 			pEditor->AddQuadArt();
+			pEditor->m_DuoSession.StartMapTransfer();
 		}
 		return CUi::POPUP_CLOSE_CURRENT;
 	}

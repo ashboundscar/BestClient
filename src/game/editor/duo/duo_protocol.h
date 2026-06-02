@@ -61,6 +61,7 @@ enum EPacketType : uint8_t
 	PACKET_MAP_CHUNK       = 40,    // Offset(4)+DataLen(2)+Data(N)
 	PACKET_MAP_END         = 41,    // no payload
 	PACKET_MAP_NEW         = 42,    // no payload — owner tells joiner to reset to empty map
+	PACKET_EDITOR_SETTINGS = 43,    // settings sync: BrushColor(1)+AllowUnused(1)+ShowInfo(1)+EnvPreview(1)+AlignQuads(1)+ShowQuadsRect(1)+AutoReload(1)+LayerSelector(1)+ShowIngame(1)
 };
 
 enum EErrorCode : uint8_t

@@ -47,6 +47,7 @@ public:
 	void NotifySettingDel(int CmdIdx);
 	void NotifySettingEdit(int CmdIdx, const char *pCmd);
 	void NotifySettingMove(int CmdIdx, int Direction);
+	void NotifyEditorSettings();
 	void StartMapTransfer(); // called when STATE_LIVE and we are creator
 	bool IsLive() const { return m_State == STATE_LIVE; }
 
@@ -92,6 +93,8 @@ public:
 	bool m_OwnerLoadingMap = false;
 	// set when MAP_NEW received — processed next frame
 	bool m_PendingMapNew = false;
+	// set when map transfer should happen after save completes
+	bool m_PendingMapTransfer = false;
 
 	// debug counters
 	int m_DbgQuadSent = 0;
@@ -160,6 +163,7 @@ public:
 	void SendMapChunk(int Offset, const uint8_t *pData, int DataLen);
 	void SendMapEnd();
 	void SendMapNew();
+	void SendEditorSettings();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);
 	void AppendAuth(std::vector<uint8_t> &vPacket) const;
