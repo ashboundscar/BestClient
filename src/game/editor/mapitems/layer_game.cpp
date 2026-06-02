@@ -38,9 +38,18 @@ void CLayerGame::SetTile(int x, int y, CTile Tile)
 			int GameGroupIndex = std::find(Map()->m_vpGroups.begin(), Map()->m_vpGroups.end(), Map()->m_pGameGroup) - Map()->m_vpGroups.begin();
 			int LayerIndex = Map()->m_vpGroups[GameGroupIndex]->m_vpLayers.size() - 1;
 			Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionAddLayer>(Map(), GameGroupIndex, LayerIndex));
+			Editor()->m_DuoSession.NotifyAddLayer(GameGroupIndex, LayerIndex, pLayerFront->m_Type, pLayerFront->m_aName, 1); // subtype 1 = front
 		}
 		CLayerTiles::SetTile(x, y, CTile{TILE_NOHOOK});
 		Map()->m_pFrontLayer->CLayerTiles::SetTile(x, y, CTile{TILE_THROUGH_CUT}); // NOLINT(bugprone-parent-virtual-call)
+		// sync the tile on the front layer explicitly — it's set directly, bypassing the normal notify path
+		{
+			int GameGroupIndex = std::find(Map()->m_vpGroups.begin(), Map()->m_vpGroups.end(), Map()->m_pGameGroup) - Map()->m_vpGroups.begin();
+			auto &vLayers = Map()->m_pGameGroup->m_vpLayers;
+			int FrontLayerIndex = std::find(vLayers.begin(), vLayers.end(), std::static_pointer_cast<CLayer>(Map()->m_pFrontLayer)) - vLayers.begin();
+			Editor()->m_DuoSession.NotifyTileEdit(GameGroupIndex, FrontLayerIndex, x, y, TILE_THROUGH_CUT, 0);
+			Editor()->m_DuoSession.NotifyStrokeEnd();
+		}
 	}
 	else
 	{
