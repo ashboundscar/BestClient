@@ -1173,9 +1173,12 @@ void CClient::SetCurrentServerInfo(const CServerInfo &ServerInfo)
 {
 	m_CurrentServerInfo = ServerInfo;
 	m_CurrentServerInfoRequestTime = -1;
-	str_copy(m_CurrentServerInfo.m_aMap, GameClient()->Map()->BaseName());
-	m_CurrentServerInfo.m_MapCrc = GameClient()->Map()->Crc();
-	m_CurrentServerInfo.m_MapSize = GameClient()->Map()->Size();
+	if(GameClient()->Map()->IsLoaded())
+	{
+		str_copy(m_CurrentServerInfo.m_aMap, GameClient()->Map()->BaseName());
+		m_CurrentServerInfo.m_MapCrc = GameClient()->Map()->Crc();
+		m_CurrentServerInfo.m_MapSize = GameClient()->Map()->Size();
+	}
 }
 
 void CClient::LoadDebugFont()
@@ -1783,7 +1786,8 @@ void CClient::ProcessServerInfo(int RawType, NETADDR *pFrom, const void *pData, 
 				const char *pSkinName = GameClient()->LocalPlayerSkinName();
 				if(pSkinName == nullptr || pSkinName[0] == '\0')
 					pSkinName = g_Config.m_ClPlayerSkin;
-				Discord()->UpdateServerInfo(m_CurrentServerInfo, GameClient()->Map()->BaseName(), PlayerName(), pSkinName);
+				if(GameClient()->Map()->IsLoaded())
+					Discord()->UpdateServerInfo(m_CurrentServerInfo, GameClient()->Map()->BaseName(), PlayerName(), pSkinName);
 			}
 
 			bool ValidPong = false;
