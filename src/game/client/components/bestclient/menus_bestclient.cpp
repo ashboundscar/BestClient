@@ -4171,7 +4171,13 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_KEYSTROKES))
 		{
 			static CButtonContainer s_KeystrokesResizeButton;
-			const float ContentHeight = MarginSmall * 4.0f + LineSize * 6.0f;
+			static float s_KeyboardPhase = 0.0f;
+			static float s_MousePhase = 0.0f;
+			UpdateRevealPhase(s_KeyboardPhase, g_Config.m_BcKeystrokesKeyboard != 0);
+			UpdateRevealPhase(s_MousePhase, g_Config.m_BcKeystrokesMouse != 0);
+			const float KeyboardExpandedHeight = LineSize * s_KeyboardPhase;
+			const float MouseExpandedHeight = (LineSize * 2.0f + MarginSmall) * s_MousePhase;
+			const float ContentHeight = LineSize + MarginSmall + LineSize + KeyboardExpandedHeight + MarginSmall + LineSize + MouseExpandedHeight;
 			CUIRect Content, Label, Button;
 			BeginBlock(Column, ContentHeight, Content);
 
@@ -4186,70 +4192,86 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcKeystrokesKeyboard, BCLocalize("Show keyboard HUD"), &g_Config.m_BcKeystrokesKeyboard, &Content, LineSize);
 			if(g_Config.m_BcKeystrokesKeyboard && !HudLayout::IsEnabled(HudLayout::MODULE_KEYSTROKES_KEYBOARD))
 				HudLayout::SetEnabled(HudLayout::MODULE_KEYSTROKES_KEYBOARD, true);
-			Content.HSplitTop(LineSize, &Button, &Content);
+			if(KeyboardExpandedHeight > 0.0f)
 			{
-				static CButtonContainer s_KeyboardPresetMinimal;
-				static CButtonContainer s_KeyboardPresetFull;
-				static CButtonContainer s_KeyboardPresetMicro;
-				CUIRect MinimalButton, Rest, FullButton, MicroButton;
-				const float Spacing = 2.0f;
-				const float ButtonWidth = (Button.w - Spacing * 2.0f) / 3.0f;
-				Button.VSplitLeft(ButtonWidth, &MinimalButton, &Rest);
-				Rest.VSplitLeft(Spacing, nullptr, &Rest);
-				Rest.VSplitLeft(ButtonWidth, &FullButton, &Rest);
-				Rest.VSplitLeft(Spacing, nullptr, &Rest);
-				MicroButton = Rest;
-				MinimalButton.HMargin(2.0f, &MinimalButton);
-				FullButton.HMargin(2.0f, &FullButton);
-				MicroButton.HMargin(2.0f, &MicroButton);
-				if(DoButton_Menu(&s_KeyboardPresetMinimal, BCLocalize("Minimal"), g_Config.m_BcKeystrokesKeyboardPreset == 0, &MinimalButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
-					g_Config.m_BcKeystrokesKeyboardPreset = 0;
-				if(DoButton_Menu(&s_KeyboardPresetFull, BCLocalize("Full"), g_Config.m_BcKeystrokesKeyboardPreset == 1, &FullButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
-					g_Config.m_BcKeystrokesKeyboardPreset = 1;
-				if(DoButton_Menu(&s_KeyboardPresetMicro, BCLocalize("Micro"), g_Config.m_BcKeystrokesKeyboardPreset == 2, &MicroButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
-					g_Config.m_BcKeystrokesKeyboardPreset = 2;
+				CUIRect Visible;
+				Content.HSplitTop(KeyboardExpandedHeight, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClipKb { CUi *m_pUi; ~SScopedClipKb() { m_pUi->ClipDisable(); } } ClipKb{Ui()};
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, LineSize};
+				{
+					static CButtonContainer s_KeyboardPresetMinimal;
+					static CButtonContainer s_KeyboardPresetFull;
+					static CButtonContainer s_KeyboardPresetMicro;
+					CUIRect MinimalButton, Rest, FullButton, MicroButton;
+					const float Spacing = 2.0f;
+					const float ButtonWidth = (Expand.w - Spacing * 2.0f) / 3.0f;
+					Expand.VSplitLeft(ButtonWidth, &MinimalButton, &Rest);
+					Rest.VSplitLeft(Spacing, nullptr, &Rest);
+					Rest.VSplitLeft(ButtonWidth, &FullButton, &Rest);
+					Rest.VSplitLeft(Spacing, nullptr, &Rest);
+					MicroButton = Rest;
+					MinimalButton.HMargin(2.0f, &MinimalButton);
+					FullButton.HMargin(2.0f, &FullButton);
+					MicroButton.HMargin(2.0f, &MicroButton);
+					if(DoButton_Menu(&s_KeyboardPresetMinimal, BCLocalize("Minimal"), g_Config.m_BcKeystrokesKeyboardPreset == 0, &MinimalButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
+						g_Config.m_BcKeystrokesKeyboardPreset = 0;
+					if(DoButton_Menu(&s_KeyboardPresetFull, BCLocalize("Full"), g_Config.m_BcKeystrokesKeyboardPreset == 1, &FullButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
+						g_Config.m_BcKeystrokesKeyboardPreset = 1;
+					if(DoButton_Menu(&s_KeyboardPresetMicro, BCLocalize("Micro"), g_Config.m_BcKeystrokesKeyboardPreset == 2, &MicroButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
+						g_Config.m_BcKeystrokesKeyboardPreset = 2;
+				}
 			}
 
 			Content.HSplitTop(MarginSmall, nullptr, &Content);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcKeystrokesMouse, BCLocalize("Show mouse HUD"), &g_Config.m_BcKeystrokesMouse, &Content, LineSize);
 			if(g_Config.m_BcKeystrokesMouse && !HudLayout::IsEnabled(HudLayout::MODULE_KEYSTROKES_MOUSE))
 				HudLayout::SetEnabled(HudLayout::MODULE_KEYSTROKES_MOUSE, true);
-			Content.HSplitTop(LineSize, &Button, &Content);
+			if(MouseExpandedHeight > 0.0f)
 			{
-				static CButtonContainer s_MousePresetDot;
-				static CButtonContainer s_MousePresetArrow;
-				static CButtonContainer s_MousePresetDotDot;
-				CUIRect DotButton, Rest, ArrowButton, DotDotButton;
-				const float Spacing = 2.0f;
-				const float ButtonWidth = (Button.w - Spacing * 2.0f) / 3.0f;
-				Button.VSplitLeft(ButtonWidth, &DotButton, &Rest);
-				Rest.VSplitLeft(Spacing, nullptr, &Rest);
-				Rest.VSplitLeft(ButtonWidth, &ArrowButton, &Rest);
-				Rest.VSplitLeft(Spacing, nullptr, &Rest);
-				DotDotButton = Rest;
-				DotButton.HMargin(2.0f, &DotButton);
-				ArrowButton.HMargin(2.0f, &ArrowButton);
-				DotDotButton.HMargin(2.0f, &DotDotButton);
-				if(DoButton_Menu(&s_MousePresetDot, BCLocalize("Dot"), g_Config.m_BcKeystrokesMousePreset == 0, &DotButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
-					g_Config.m_BcKeystrokesMousePreset = 0;
-				if(DoButton_Menu(&s_MousePresetArrow, BCLocalize("Arrow"), g_Config.m_BcKeystrokesMousePreset == 1, &ArrowButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
-					g_Config.m_BcKeystrokesMousePreset = 1;
-				if(DoButton_Menu(&s_MousePresetDotDot, BCLocalize("Dot Dot"), g_Config.m_BcKeystrokesMousePreset == 2, &DotDotButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
-					g_Config.m_BcKeystrokesMousePreset = 2;
-			}
-
-			Content.HSplitTop(LineSize, &Button, &Content);
-			{
-				static CButtonContainer s_MousePresetDotNoBox;
-				static CButtonContainer s_MousePresetNoMovement;
-				CUIRect Left, Right;
-				Button.VSplitMid(&Left, &Right, 2.0f);
-				Left.HMargin(2.0f, &Left);
-				Right.HMargin(2.0f, &Right);
-				if(DoButton_Menu(&s_MousePresetDotNoBox, BCLocalize("Dot No Box"), g_Config.m_BcKeystrokesMousePreset == 3, &Left, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
-					g_Config.m_BcKeystrokesMousePreset = 3;
-				if(DoButton_Menu(&s_MousePresetNoMovement, BCLocalize("No movement"), g_Config.m_BcKeystrokesMousePreset == 4, &Right, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
-					g_Config.m_BcKeystrokesMousePreset = 4;
+				CUIRect Visible;
+				Content.HSplitTop(MouseExpandedHeight, &Visible, &Content);
+				Ui()->ClipEnable(&Visible);
+				struct SScopedClipMs { CUi *m_pUi; ~SScopedClipMs() { m_pUi->ClipDisable(); } } ClipMs{Ui()};
+				CUIRect Expand = {Visible.x, Visible.y, Visible.w, LineSize * 2.0f + MarginSmall};
+				CUIRect Row1, Row2;
+				Expand.HSplitTop(LineSize, &Row1, &Expand);
+				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
+				Expand.HSplitTop(LineSize, &Row2, &Expand);
+				{
+					static CButtonContainer s_MousePresetDot;
+					static CButtonContainer s_MousePresetArrow;
+					static CButtonContainer s_MousePresetDotDot;
+					CUIRect DotButton, Rest, ArrowButton, DotDotButton;
+					const float Spacing = 2.0f;
+					const float ButtonWidth = (Row1.w - Spacing * 2.0f) / 3.0f;
+					Row1.VSplitLeft(ButtonWidth, &DotButton, &Rest);
+					Rest.VSplitLeft(Spacing, nullptr, &Rest);
+					Rest.VSplitLeft(ButtonWidth, &ArrowButton, &Rest);
+					Rest.VSplitLeft(Spacing, nullptr, &Rest);
+					DotDotButton = Rest;
+					DotButton.HMargin(2.0f, &DotButton);
+					ArrowButton.HMargin(2.0f, &ArrowButton);
+					DotDotButton.HMargin(2.0f, &DotDotButton);
+					if(DoButton_Menu(&s_MousePresetDot, BCLocalize("Dot"), g_Config.m_BcKeystrokesMousePreset == 0, &DotButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
+						g_Config.m_BcKeystrokesMousePreset = 0;
+					if(DoButton_Menu(&s_MousePresetArrow, BCLocalize("Arrow"), g_Config.m_BcKeystrokesMousePreset == 1, &ArrowButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_NONE))
+						g_Config.m_BcKeystrokesMousePreset = 1;
+					if(DoButton_Menu(&s_MousePresetDotDot, BCLocalize("Dot Dot"), g_Config.m_BcKeystrokesMousePreset == 2, &DotDotButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
+						g_Config.m_BcKeystrokesMousePreset = 2;
+				}
+				{
+					static CButtonContainer s_MousePresetDotNoBox;
+					static CButtonContainer s_MousePresetNoMovement;
+					CUIRect Left, Right;
+					Row2.VSplitMid(&Left, &Right, 2.0f);
+					Left.HMargin(2.0f, &Left);
+					Right.HMargin(2.0f, &Right);
+					if(DoButton_Menu(&s_MousePresetDotNoBox, BCLocalize("Dot No Box"), g_Config.m_BcKeystrokesMousePreset == 3, &Left, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_L))
+						g_Config.m_BcKeystrokesMousePreset = 3;
+					if(DoButton_Menu(&s_MousePresetNoMovement, BCLocalize("No movement"), g_Config.m_BcKeystrokesMousePreset == 4, &Right, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_R))
+						g_Config.m_BcKeystrokesMousePreset = 4;
+				}
 			}
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
