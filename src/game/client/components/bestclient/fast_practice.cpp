@@ -999,6 +999,18 @@ bool CFastPractice::OverridePredict()
 		return false;
 	}
 
+	// Apply any teleport that was queued while in spectator mode.
+	{
+		auto &State = m_aPracticeCommandState[LocalClientId];
+		if(State.m_HasPendingTeleport)
+		{
+			CCharacter *pBaseChar = m_PracticeBaseWorld.GetCharacterById(LocalClientId);
+			if(pBaseChar)
+				ApplyPracticeTeleport(LocalClientId, pBaseChar, ClampToPracticePlayableBounds(State.m_PendingTeleportPos));
+			State.m_HasPendingTeleport = false;
+		}
+	}
+
 	SyncPracticeWorldConfig();
 
 	GameClient()->m_PredictedWorld.CopyWorldClean(&m_PracticeBaseWorld);
@@ -2367,6 +2379,41 @@ bool CFastPractice::ConsumePracticeChatCommand(int Team, const char *pLine)
 	{
 		Disable();
 		return true;
+	}
+
+	// In spectator mode the practice world is not updated, so handle teleport commands
+	// by storing a pending teleport that will be applied when the player leaves spec.
+	const bool Spectating = GameClient()->m_Snap.m_SpecInfo.m_Active ||
+				(GameClient()->m_Snap.m_pLocalInfo && GameClient()->m_Snap.m_pLocalInfo->m_Team == TEAM_SPECTATORS);
+	if(Spectating && !vArgs.empty() && vArgs[0].size() >= 2 && vArgs[0][0] == '/')
+	{
+		const std::string Cmd = LowercaseCopy(vArgs[0].substr(1));
+		if(Cmd == "tc" || Cmd == "telecursor")
+		{
+			vec2 Target = GameClient()->m_Camera.m_Center;
+			auto &State = m_aPracticeCommandState[LocalClientId];
+			State.m_HasPendingTeleport = true;
+			State.m_PendingTeleportPos = Target;
+			return true;
+		}
+		if(Cmd == "tp" || Cmd == "teleport")
+		{
+			vec2 Target = GameClient()->m_Camera.m_Center;
+			if(vArgs.size() > 1)
+			{
+				const int TargetId = FindClientByName(vArgs[1].c_str());
+				if(TargetId < 0 || !GameClient()->m_Snap.m_aCharacters[TargetId].m_Active)
+				{
+					EchoPractice("no player with this name found");
+					return true;
+				}
+				Target = vec2((float)GameClient()->m_Snap.m_aCharacters[TargetId].m_Cur.m_X, (float)GameClient()->m_Snap.m_aCharacters[TargetId].m_Cur.m_Y);
+			}
+			auto &State = m_aPracticeCommandState[LocalClientId];
+			State.m_HasPendingTeleport = true;
+			State.m_PendingTeleportPos = Target;
+			return true;
+		}
 	}
 
 	CCharacter *pBaseChar = m_PracticeBaseWorld.GetCharacterById(LocalClientId);

@@ -79,6 +79,8 @@ private:
 		bool m_HasRescueManual = false;
 		bool m_HasLastTeleport = false;
 		bool m_HasLastDeath = false;
+		bool m_HasPendingTeleport = false;
+		vec2 m_PendingTeleportPos = vec2(0.0f, 0.0f);
 		bool m_InvincibleAddedEndlessJump = false;
 		vec2 m_RescueAutoPos = vec2(0.0f, 0.0f);
 		vec2 m_RescueManualPos = vec2(0.0f, 0.0f);
