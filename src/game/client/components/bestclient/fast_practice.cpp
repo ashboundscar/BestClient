@@ -2001,7 +2001,20 @@ bool CFastPractice::ExecutePracticeTeleportCommand(int LocalClientId, CCharacter
 	{
 		vec2 Target = GameClient()->m_Controls.m_aTargetPos[g_Config.m_ClDummy];
 		if(Cmd == "tc" || Cmd == "telecursor")
-			Target = (Target - GameClient()->m_Camera.m_Center) * GameClient()->m_Camera.m_Zoom + GameClient()->m_Camera.m_Center;
+		{
+			Target = GameClient()->m_Camera.m_Center;
+
+			const vec2 CursorTarget = vec2((float)pChar->Core()->m_Input.m_TargetX, (float)pChar->Core()->m_Input.m_TargetY);
+			vec2 TargetCameraOffset(0.0f, 0.0f);
+			const float CursorLength = length(CursorTarget);
+			if(CursorLength > 0.0001f)
+			{
+				const float OffsetAmount = maximum(CursorLength - (float)GameClient()->m_Camera.Deadzone(), 0.0f) * ((float)GameClient()->m_Camera.FollowFactor() / 100.0f);
+				TargetCameraOffset = normalize_pre_length(CursorTarget, CursorLength) * OffsetAmount;
+			}
+
+			Target = pChar->Core()->m_Pos + (CursorTarget - TargetCameraOffset) * GameClient()->m_Camera.m_Zoom + TargetCameraOffset;
+		}
 
 		if(vArgs.size() > 1)
 		{
