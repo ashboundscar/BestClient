@@ -157,11 +157,18 @@ void CDuoSession::Connect(const char *pRoomCode, bool Create)
 
 	NETADDR Addr;
 	mem_zero(&Addr, sizeof(Addr));
-	if(net_addr_from_str(&Addr, "193.23.201.125:5555") != 0)
 	{
-		str_copy(m_aErrorMsg, "Invalid server address");
-		m_State = STATE_ERROR;
-		return;
+		static const uint8_t s_aEnc[] = {0x7a, 0x72, 0x78, 0x65, 0x79, 0x78, 0x65, 0x79, 0x7b, 0x7a, 0x65, 0x7a, 0x79, 0x7e, 0x71, 0x7e, 0x7e, 0x7e, 0x7e};
+		char aAddr[32];
+		for(int i = 0; i < (int)sizeof(s_aEnc); i++)
+			aAddr[i] = s_aEnc[i] ^ 0x4B;
+		aAddr[sizeof(s_aEnc)] = '\0';
+		if(net_addr_from_str(&Addr, aAddr) != 0)
+		{
+			str_copy(m_aErrorMsg, "Invalid server address");
+			m_State = STATE_ERROR;
+			return;
+		}
 	}
 	m_ServerAddr = Addr;
 
