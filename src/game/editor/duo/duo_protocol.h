@@ -60,6 +60,7 @@ enum EPacketType : uint8_t
 	PACKET_MAP_START       = 39,    // TotalSize(4)+NameLen(2)+Name(N)
 	PACKET_MAP_CHUNK       = 40,    // Offset(4)+DataLen(2)+Data(N)
 	PACKET_MAP_END         = 41,    // no payload
+	PACKET_MAP_NEW         = 42,    // no payload — owner tells joiner to reset to empty map
 };
 
 enum EErrorCode : uint8_t

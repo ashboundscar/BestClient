@@ -6464,7 +6464,26 @@ void CEditor::Render()
 		// ctrl+n to create new map
 		if(Input()->KeyPress(KEY_N) && ModPressed)
 		{
-			if(HasUnsavedData())
+			auto &Duo = m_DuoSession;
+			if(Duo.m_State >= CDuoSession::STATE_CONNECTING)
+			{
+				if(!Duo.m_IsCreator)
+				{
+					if(!m_PopupEventWasActivated)
+					{
+						m_PopupEventType = POPEVENT_DUO_NEW;
+						m_PopupEventActivated = true;
+					}
+				}
+				else
+				{
+					Duo.m_OwnerLoadingMap = true;
+					Reset();
+					Duo.m_OwnerLoadingMap = false;
+					Duo.SendMapNew();
+				}
+			}
+			else if(HasUnsavedData())
 			{
 				if(!m_PopupEventWasActivated)
 				{

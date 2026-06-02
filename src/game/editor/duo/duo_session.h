@@ -90,6 +90,8 @@ public:
 	bool m_ApplyingRemote = false;
 	// set while owner is loading a new map to transfer — prevents OnReset from disconnecting
 	bool m_OwnerLoadingMap = false;
+	// set when MAP_NEW received — processed next frame
+	bool m_PendingMapNew = false;
 
 	// debug counters
 	int m_DbgQuadSent = 0;
@@ -157,6 +159,7 @@ public:
 	void SendMapStart(const char *pName, int TotalSize);
 	void SendMapChunk(int Offset, const uint8_t *pData, int DataLen);
 	void SendMapEnd();
+	void SendMapNew();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);
 	void AppendAuth(std::vector<uint8_t> &vPacket) const;

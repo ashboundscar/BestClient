@@ -40,7 +40,23 @@ CUi::EPopupMenuFunctionResult CEditor::PopupMenuFile(void *pContext, CUIRect Vie
 	View.HSplitTop(12.0f, &Slot, &View);
 	if(pEditor->DoButton_MenuItem(&s_NewMapButton, "New", 0, &Slot, BUTTONFLAG_LEFT, "[Ctrl+N] Create a new map."))
 	{
-		if(pEditor->HasUnsavedData())
+		auto &Duo = pEditor->m_DuoSession;
+		if(Duo.m_State >= CDuoSession::STATE_CONNECTING)
+		{
+			if(!Duo.m_IsCreator)
+			{
+				pEditor->m_PopupEventType = POPEVENT_DUO_NEW;
+				pEditor->m_PopupEventActivated = true;
+			}
+			else
+			{
+				Duo.m_OwnerLoadingMap = true;
+				pEditor->Reset();
+				Duo.m_OwnerLoadingMap = false;
+				Duo.SendMapNew();
+			}
+		}
+		else if(pEditor->HasUnsavedData())
 		{
 			pEditor->m_PopupEventType = POPEVENT_NEW;
 			pEditor->m_PopupEventActivated = true;
@@ -2186,6 +2202,11 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		pTitle = "Duo session active";
 		pMessage = "You are in a duo mapping session as a joiner.\nOnly the owner can load maps.\n\nDisconnect from the session to load a map yourself.";
 	}
+	else if(pEditor->m_PopupEventType == POPEVENT_DUO_NEW)
+	{
+		pTitle = "Duo session active";
+		pMessage = "You are in a duo mapping session as a joiner.\nOnly the owner can create a new map.\n\nDisconnect from the session to create a new map yourself.";
+	}
 	else
 	{
 		dbg_assert_failed("m_PopupEventType invalid");
@@ -2242,6 +2263,21 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		if(pEditor->DoButton_Editor(&s_DisconnectButton, "Disconnect", 0, &Button, BUTTONFLAG_LEFT, nullptr))
 		{
 			pEditor->m_DuoSession.Disconnect();
+			pEditor->m_PopupEventWasActivated = false;
+			return CUi::POPUP_CLOSE_CURRENT;
+		}
+		return CUi::POPUP_KEEP_OPEN;
+	}
+
+	// POPEVENT_DUO_NEW: custom buttons — Cancel / Disconnect
+	if(pEditor->m_PopupEventType == POPEVENT_DUO_NEW)
+	{
+		ButtonBar.VSplitRight(110.0f, &ButtonBar, &Button);
+		static int s_DisconnectNewButton = 0;
+		if(pEditor->DoButton_Editor(&s_DisconnectNewButton, "Disconnect", 0, &Button, BUTTONFLAG_LEFT, nullptr))
+		{
+			pEditor->m_DuoSession.Disconnect();
+			pEditor->Reset();
 			pEditor->m_PopupEventWasActivated = false;
 			return CUi::POPUP_CLOSE_CURRENT;
 		}

@@ -36,9 +36,12 @@ void CDuoSession::OnInit(CEditor *pEditor)
 
 void CDuoSession::OnReset()
 {
-	// Don't disconnect if we're applying a remote map transfer or owner is loading a new map
 	if(!m_ApplyingRemote && !m_OwnerLoadingMap)
+	{
+		if(m_State == STATE_LIVE && m_IsCreator)
+			return;
 		Disconnect();
+	}
 }
 
 void CDuoSession::OnUpdate()
@@ -53,6 +56,15 @@ void CDuoSession::OnUpdate()
 
 	if(m_Socket == nullptr)
 		return;
+
+	// Apply pending MAP_NEW (deferred to avoid calling Reset mid-network-processing)
+	if(m_PendingMapNew)
+	{
+		m_PendingMapNew = false;
+		m_ApplyingRemote = true;
+		Editor()->Reset();
+		m_ApplyingRemote = false;
+	}
 
 	int64_t Now = time_get();
 	int64_t Freq = time_freq();
@@ -1249,6 +1261,12 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		dbg_msg("duo", "MAP_END: loaded '%s'", aTmpPath);
 		break;
 	}
+	case PACKET_MAP_NEW:
+	{
+		if(m_IsCreator) break;
+		m_PendingMapNew = true;
+		break;
+	}
 	default:
 		break;
 	}
@@ -1859,6 +1877,15 @@ void CDuoSession::SendMapEnd()
 {
 	std::vector<uint8_t> v;
 	WriteHeader(v, PACKET_MAP_END);
+	SendFrame(v);
+}
+
+void CDuoSession::SendMapNew()
+{
+	if(m_State != STATE_LIVE || !m_IsCreator)
+		return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_MAP_NEW);
 	SendFrame(v);
 }
 
