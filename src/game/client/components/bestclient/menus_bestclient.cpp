@@ -2883,7 +2883,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BESTCLIENT_TAB_GAMEPLAY,
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
-		BESTCLIENT_TAB_EDITORS,
 		BESTCLIENT_TAB_INFO,
 		NUM_BESTCLIENT_TABS,
 	};
@@ -2893,14 +2892,12 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 
 	if(m_AssetsEditorState.m_VisualsEditorOpen && m_AssetsEditorState.m_FullscreenOpen)
 	{
-		s_CurTab = BESTCLIENT_TAB_EDITORS;
 		SetBestClientShopVisible(false);
 		RenderAssetsEditorScreen(*Ui()->Screen());
 		return;
 	}
 	if(m_ComponentsEditorState.m_Open && m_ComponentsEditorState.m_FullscreenOpen)
 	{
-		s_CurTab = BESTCLIENT_TAB_EDITORS;
 		SetBestClientShopVisible(false);
 		RenderComponentsEditorScreen(*Ui()->Screen());
 		return;
@@ -2913,7 +2910,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BCLocalize("Gameplay"),
 		BCLocalize("Others"),
 		BCLocalize("ReShade"),
-		BCLocalize("Editors"),
 		BCLocalize("Info"),
 	};
 	const int aTabOrder[NUM_BESTCLIENT_TABS] = {
@@ -2921,7 +2917,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BESTCLIENT_TAB_GAMEPLAY,
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
-		BESTCLIENT_TAB_EDITORS,
 		BESTCLIENT_TAB_INFO,
 	};
 
@@ -3002,6 +2997,21 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			}
 			return Clicked && CanOpenHudEditor;
 		};
+
+		{
+			CUIRect HudButtonRow;
+			MainView.HSplitTop(24.0f, &HudButtonRow, &MainView);
+			MainView.HSplitTop(MarginSmall, nullptr, &MainView);
+			static CButtonContainer s_HudEditorButton;
+			const bool CanOpen = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
+			if(DoButton_MenuTab(&s_HudEditorButton, BCLocalize("HUD editor"), 0, &HudButtonRow, IGraphics::CORNER_ALL, nullptr, nullptr, nullptr, nullptr, 4.0f) && CanOpen)
+			{
+				SetActive(false);
+				GameClient()->m_HudEditor.Activate();
+			}
+			GameClient()->m_Tooltips.DoToolTip(&s_HudEditorButton, &HudButtonRow, CanOpen ? BCLocalize("Open in HUD editor") : BCLocalize("Join a game first"));
+			GameClient()->m_Tooltips.SetFadeTime(&s_HudEditorButton, 0.0f);
+		}
 
 		static CScrollRegion s_BestClientVisualsScrollRegion;
 		vec2 VisualsScrollOffset(0.0f, 0.0f);
@@ -4755,67 +4765,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		s_BestClientVisualsScrollRegion.AddRect(ScrollRegion);
 		s_BestClientVisualsScrollRegion.End();
 	}
-	else if(s_CurTab == BESTCLIENT_TAB_EDITORS)
-	{
-		const float LineSize = 20.0f;
-
-		if(m_AssetsEditorState.m_VisualsEditorOpen)
-		{
-			RenderAssetsEditorScreen(MainView);
-			return;
-		}
-
-		CUIRect Label, Button;
-		MainView.HSplitTop(24.0f, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("Editors"), 20.0f, TEXTALIGN_ML);
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-
-		MainView.HSplitTop(LineSize, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("Create mixed assets or jump to the name plate editor."), 14.0f, TEXTALIGN_ML);
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-
-		static CButtonContainer s_OpenAssetsEditorButton;
-		MainView.HSplitTop(LineSize + 4.0f, &Button, &MainView);
-		if(DoButton_Menu(&s_OpenAssetsEditorButton, BCLocalize("Assets editor"), 0, &Button))
-		{
-			m_AssetsEditorState.m_VisualsEditorOpen = true;
-			m_AssetsEditorState.m_FullscreenOpen = true;
-			if(!m_AssetsEditorState.m_VisualsEditorInitialized)
-			{
-				AssetsEditorReloadAssets();
-				AssetsEditorResetPartSlots();
-				AssetsEditorEnsureDefaultExportNames();
-				AssetsEditorSyncExportNameFromType();
-				m_AssetsEditorState.m_VisualsEditorInitialized = true;
-			}
-		}
-
-		MainView.HSplitTop(30.0f, nullptr, &MainView);
-		MainView.HSplitTop(LineSize, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("Open a dedicated component toggles page."), 14.0f, TEXTALIGN_ML);
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-
-		static CButtonContainer s_OpenComponentsEditorButton;
-		MainView.HSplitTop(LineSize + 4.0f, &Button, &MainView);
-		if(DoButton_Menu(&s_OpenComponentsEditorButton, BCLocalize("Components editor"), 0, &Button))
-			ComponentsEditorOpen();
-
-		MainView.HSplitTop(30.0f, nullptr, &MainView);
-		MainView.HSplitTop(LineSize, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("Edit HUD positions directly above the live game."), 14.0f, TEXTALIGN_ML);
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-
-		static CButtonContainer s_OpenHudEditorButton;
-		MainView.HSplitTop(LineSize + 4.0f, &Button, &MainView);
-		const bool CanOpenHudEditor = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
-		if(DoButton_Menu(&s_OpenHudEditorButton, BCLocalize("HUD editor"), CanOpenHudEditor ? 0 : -1, &Button) && CanOpenHudEditor)
-		{
-			SetActive(false);
-			GameClient()->m_HudEditor.Activate();
-		}
-		GameClient()->m_Tooltips.DoToolTip(&s_OpenHudEditorButton, &Button, CanOpenHudEditor ? BCLocalize("Open in HUD editor") : BCLocalize("Join a game first"));
-		GameClient()->m_Tooltips.SetFadeTime(&s_OpenHudEditorButton, 0.0f);
-	}
 	else if(s_CurTab == BESTCLIENT_TAB_GAMEPLAY)
 	{
 		const float LineSize = 20.0f;
@@ -6410,7 +6359,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BESTCLIENT_TAB_GAMEPLAY,
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
-		BESTCLIENT_TAB_EDITORS,
 		BESTCLIENT_TAB_INFO,
 		NUM_BESTCLIENT_TABS,
 	};
@@ -6419,6 +6367,8 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	{
 		INFO_SUBTAB_FUN = 0,
 		INFO_SUBTAB_SHOP,
+		INFO_SUBTAB_ASSETS,
+		INFO_SUBTAB_COMPONENTS,
 		INFO_SUBTAB_INFO,
 		NUM_INFO_SUBTABS,
 	};
@@ -6438,6 +6388,8 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	const char *apSubTabNames[NUM_INFO_SUBTABS] = {
 		BCLocalize("Fun"),
 		BCLocalize("Shop"),
+		BCLocalize("Assets"),
+		BCLocalize("Components"),
 		BCLocalize("Info"),
 	};
 	const float SubTabWidth = SubTabBar.w / (float)NUM_INFO_SUBTABS;
@@ -6460,6 +6412,53 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	if(s_CurSubTab == INFO_SUBTAB_SHOP)
 	{
 		RenderSettingsBestClientShop(MainView);
+		return;
+	}
+	if(s_CurSubTab == INFO_SUBTAB_ASSETS)
+	{
+		if(m_AssetsEditorState.m_VisualsEditorOpen)
+		{
+			RenderAssetsEditorScreen(MainView);
+			return;
+		}
+		const float LSize = 20.0f;
+		CUIRect Label, Button;
+		MainView.HSplitTop(LSize, &Label, &MainView);
+		Ui()->DoLabel(&Label, BCLocalize("Create mixed assets or jump to the name plate editor."), 14.0f, TEXTALIGN_ML);
+		MainView.HSplitTop(5.0f, nullptr, &MainView);
+		static CButtonContainer s_OpenAssetsEditorButton;
+		MainView.HSplitTop(LSize + 4.0f, &Button, &MainView);
+		if(DoButton_Menu(&s_OpenAssetsEditorButton, BCLocalize("Assets editor"), 0, &Button))
+		{
+			m_AssetsEditorState.m_VisualsEditorOpen = true;
+			m_AssetsEditorState.m_FullscreenOpen = true;
+			if(!m_AssetsEditorState.m_VisualsEditorInitialized)
+			{
+				AssetsEditorReloadAssets();
+				AssetsEditorResetPartSlots();
+				AssetsEditorEnsureDefaultExportNames();
+				AssetsEditorSyncExportNameFromType();
+				m_AssetsEditorState.m_VisualsEditorInitialized = true;
+			}
+		}
+		return;
+	}
+	if(s_CurSubTab == INFO_SUBTAB_COMPONENTS)
+	{
+		if(m_ComponentsEditorState.m_Open)
+		{
+			RenderComponentsEditorScreen(MainView);
+			return;
+		}
+		const float LSize = 20.0f;
+		CUIRect Label, Button;
+		MainView.HSplitTop(LSize, &Label, &MainView);
+		Ui()->DoLabel(&Label, BCLocalize("Open a dedicated component toggles page."), 14.0f, TEXTALIGN_ML);
+		MainView.HSplitTop(5.0f, nullptr, &MainView);
+		static CButtonContainer s_OpenComponentsEditorButton;
+		MainView.HSplitTop(LSize + 4.0f, &Button, &MainView);
+		if(DoButton_Menu(&s_OpenComponentsEditorButton, BCLocalize("Components editor"), 0, &Button))
+			ComponentsEditorOpen();
 		return;
 	}
 
@@ -6626,7 +6625,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BCLocalize("Gameplay"),
 		BCLocalize("Others"),
 		BCLocalize("ReShade"),
-		BCLocalize("Editors"),
 		BCLocalize("Info"),
 	};
 	const int aTabOrder[NUM_BESTCLIENT_TABS] = {
@@ -6634,7 +6632,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BESTCLIENT_TAB_GAMEPLAY,
 		BESTCLIENT_TAB_OTHERS,
 		BESTCLIENT_TAB_RESHADE,
-		BESTCLIENT_TAB_EDITORS,
 		BESTCLIENT_TAB_INFO,
 	};
 
