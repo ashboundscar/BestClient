@@ -162,6 +162,8 @@ struct SBestClientReShadeUiCache
 	time_t m_SettingsModifiedTime = 0;
 	bool m_HasEffectIndex = false;
 	bool m_HasTechniqueIndex = false;
+	int64_t m_EffectIndexRetryTime = 0;
+	int64_t m_TechniqueIndexRetryTime = 0;
 	bool m_HasPresetCache = false;
 	SBestClientReShadePresetState m_PresetState;
 	std::string m_StatusText;
@@ -1015,6 +1017,10 @@ static void BestClientBuildReShadeEffectIndex(IStorage *pStorage)
 {
 	if(gs_BestClientReShadeUiCache.m_HasEffectIndex)
 		return;
+	// While the index is empty, retry on a throttle instead of every frame so a
+	// shader folder that becomes ready after startup still gets picked up.
+	if(gs_BestClientReShadeUiCache.m_EffectIndexRetryTime != 0 && time_get() < gs_BestClientReShadeUiCache.m_EffectIndexRetryTime)
+		return;
 
 	gs_BestClientReShadeUiCache.m_EffectPaths.clear();
 
@@ -1022,7 +1028,7 @@ static void BestClientBuildReShadeEffectIndex(IStorage *pStorage)
 	pStorage->GetBinaryPathAbsolute(gs_pBestClientReShadeShadersPath, aShadersAbsolutePath, sizeof(aShadersAbsolutePath));
 	if(aShadersAbsolutePath[0] == '\0')
 	{
-		gs_BestClientReShadeUiCache.m_HasEffectIndex = true;
+		gs_BestClientReShadeUiCache.m_EffectIndexRetryTime = time_get() + time_freq() * 2;
 		return;
 	}
 
@@ -1041,6 +1047,15 @@ static void BestClientBuildReShadeEffectIndex(IStorage *pStorage)
 			gs_BestClientReShadeUiCache.m_EffectPaths[EffectName] = Path.string();
 	}
 
+	// Only lock the cache once we actually found effects. An empty result means the
+	// folder is missing/not-yet-ready or a transient FS error occurred; retry later.
+	if(gs_BestClientReShadeUiCache.m_EffectPaths.empty())
+	{
+		gs_BestClientReShadeUiCache.m_EffectIndexRetryTime = time_get() + time_freq() * 2;
+		return;
+	}
+
+	gs_BestClientReShadeUiCache.m_EffectIndexRetryTime = 0;
 	gs_BestClientReShadeUiCache.m_HasEffectIndex = true;
 }
 
@@ -1202,6 +1217,8 @@ static void BestClientBuildReShadeTechniqueIndex(IStorage *pStorage)
 {
 	if(gs_BestClientReShadeUiCache.m_HasTechniqueIndex)
 		return;
+	if(gs_BestClientReShadeUiCache.m_TechniqueIndexRetryTime != 0 && time_get() < gs_BestClientReShadeUiCache.m_TechniqueIndexRetryTime)
+		return;
 
 	BestClientBuildReShadeEffectIndex(pStorage);
 	gs_BestClientReShadeUiCache.m_vTechniqueIndex.clear();
@@ -1231,6 +1248,16 @@ static void BestClientBuildReShadeTechniqueIndex(IStorage *pStorage)
 		gs_BestClientReShadeUiCache.m_vTechniqueIndex.insert(gs_BestClientReShadeUiCache.m_vTechniqueIndex.end(), vTechniques.begin(), vTechniques.end());
 	}
 
+	// Don't lock an empty technique list while the effect index is still retrying
+	// (shader folder not ready / transient FS error). Once effects are indexed, an
+	// empty technique list is a real result, so lock it to stop re-parsing.
+	if(gs_BestClientReShadeUiCache.m_vTechniqueIndex.empty() && !gs_BestClientReShadeUiCache.m_HasEffectIndex)
+	{
+		gs_BestClientReShadeUiCache.m_TechniqueIndexRetryTime = time_get() + time_freq() * 2;
+		return;
+	}
+
+	gs_BestClientReShadeUiCache.m_TechniqueIndexRetryTime = 0;
 	gs_BestClientReShadeUiCache.m_HasTechniqueIndex = true;
 }
 
