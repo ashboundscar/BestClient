@@ -10,6 +10,7 @@ class IEditor : public IInterface
 public:
 	virtual void Init() = 0;
 	virtual void OnUpdate() = 0;
+	virtual void OnBackgroundUpdate() = 0;
 	virtual void OnRender() = 0;
 	virtual void OnActivate() = 0;
 	virtual void OnWindowResize() = 0;

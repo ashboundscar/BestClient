@@ -292,6 +292,7 @@ public:
 
 	void Init() override;
 	void OnUpdate() override;
+	void OnBackgroundUpdate() override;
 	void OnRender() override;
 	void OnActivate() override;
 	void OnWindowResize() override;

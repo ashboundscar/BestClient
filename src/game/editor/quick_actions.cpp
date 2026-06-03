@@ -243,6 +243,7 @@ void CEditor::TestMapLocally()
 	{
 		if(net_addr_is_local(&Client()->ServerAddress()))
 		{
+			m_DuoSession.m_LocalTestingActive = true;
 			OnClose();
 			g_Config.m_ClEditor = 0;
 			char aMapChange[IO_MAX_PATH_LENGTH + 64];
@@ -264,6 +265,7 @@ void CEditor::TestMapLocally()
 		str_format(aMapChange, sizeof(aMapChange), "change_map %s", aFilenameNoExt);
 		if(pGameClient->m_LocalServer.RunServer({"sv_register 0", aMapChange}))
 		{
+			m_DuoSession.m_LocalTestingActive = true;
 			OnClose();
 			g_Config.m_ClEditor = 0;
 			Client()->Connect("localhost");

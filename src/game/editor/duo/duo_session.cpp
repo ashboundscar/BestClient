@@ -36,6 +36,16 @@ void CDuoSession::OnInit(CEditor *pEditor)
 	CEditorComponent::OnInit(pEditor);
 }
 
+void CDuoSession::PushLog(const char *pText)
+{
+	// shift entries down, newest at index 0
+	for(int i = LOG_CAPACITY - 1; i > 0; i--)
+		m_aLog[i] = m_aLog[i - 1];
+	str_copy(m_aLog[0].m_aText, pText);
+	if(m_LogCount < LOG_CAPACITY)
+		m_LogCount++;
+}
+
 void CDuoSession::OnReset()
 {
 	if(!m_ApplyingRemote && !m_OwnerLoadingMap)
@@ -50,11 +60,6 @@ void CDuoSession::OnUpdate()
 {
 	if(m_State == STATE_IDLE || m_State == STATE_ERROR)
 		return;
-
-	if(m_Socket == nullptr)
-		return;
-
-	ProcessNetwork();
 
 	if(m_Socket == nullptr)
 		return;
@@ -122,22 +127,6 @@ void CDuoSession::OnUpdate()
 
 	int64_t Now = time_get();
 	int64_t Freq = time_freq();
-
-	// Stale server detection (30s no data)
-	if(m_State >= STATE_CONNECTING && Now - m_LastServerPacketTime > Freq * 30)
-	{
-		str_copy(m_aErrorMsg, "Connection lost");
-		m_State = STATE_ERROR;
-		CloseSocket();
-		return;
-	}
-
-	// Heartbeat every 5 seconds
-	if(m_State >= STATE_WAITING && Now - m_LastHeartbeatTime > Freq * 5)
-	{
-		SendHeartbeat();
-		m_LastHeartbeatTime = Now;
-	}
 
 	// Cursor sync at ~30 Hz
 	if(m_State == STATE_LIVE && Now - m_LastCursorSendTime > Freq / 30)
@@ -245,6 +234,10 @@ void CDuoSession::Disconnect()
 	CloseSocket();
 	m_State = STATE_IDLE;
 	m_HasRemoteCursor = false;
+	m_RemoteActivity = ACTIVITY_MAPPING;
+	m_LastLocalActivity = ACTIVITY_MAPPING;
+	m_RemoteDisconnected = false;
+	m_LogCount = 0;
 	m_ParticipantCount = 0;
 	m_RecvBufLen = 0;
 	m_vRecvBuf.clear();
@@ -508,10 +501,21 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			m_aRoomCode[CodeLen] = '\0';
 		}
 		m_State = STATE_WAITING;
+		if(m_IsCreator)
+		{
+			char aBuf[64];
+			str_format(aBuf, sizeof(aBuf), "Room created: %s", m_aRoomCode);
+			PushLog(aBuf);
+		}
+		else
+		{
+			PushLog("Waiting for session start...");
+		}
 		break;
 	}
 	case PACKET_ROOM_STATE:
 	{
+		bool WasLive = (m_State == STATE_LIVE);
 		m_ParticipantCount = Reader.ReadU8();
 		uint8_t Live = Reader.ReadU8();
 		if(Live)
@@ -519,9 +523,23 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			m_State = STATE_LIVE;
 			m_LastEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
 			m_EnvDirty = false;
+			if(m_RemoteDisconnected)
+				PushLog("Partner reconnected");
+			m_RemoteDisconnected = false;
 		}
 		if(m_ParticipantCount < 2)
+		{
 			m_HasRemoteCursor = false;
+			if(WasLive)
+			{
+				m_RemoteDisconnected = true;
+				PushLog("Partner disconnected");
+			}
+		}
+		else
+		{
+			m_RemoteDisconnected = false;
+		}
 		break;
 	}
 	case PACKET_START:
@@ -529,6 +547,7 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_State = STATE_LIVE;
 		m_LastEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
 		m_EnvDirty = false;
+		PushLog("Session started");
 		if(m_IsCreator)
 			StartMapTransfer();
 		break;
@@ -585,6 +604,7 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		case ERROR_RATE_LIMITED: str_copy(m_aErrorMsg, "Rate limited"); break;
 		default: str_copy(m_aErrorMsg, "Unknown error"); break;
 		}
+		PushLog(m_aErrorMsg);
 		m_State = STATE_ERROR;
 		CloseSocket();
 		break;
@@ -1327,6 +1347,11 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_State = STATE_LIVE;
 		m_LastEnvUndoSize = (int)Editor()->Map()->m_EnvelopeEditorHistory.m_vpUndoActions.size();
 		m_EnvDirty = false;
+		{
+			char aBuf[64];
+			str_format(aBuf, sizeof(aBuf), "Map loaded: %s", m_aMapTransferName);
+			PushLog(aBuf);
+		}
 		dbg_msg("duo", "MAP_END: loaded '%s'", aTmpPath);
 		break;
 	}
@@ -1365,6 +1390,35 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		g_Config.m_EdLayerSelector = LayerSelector != 0;
 		g_Config.m_EdShowIngameEntities = ShowIngame != 0;
 		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_ACTIVITY:
+	{
+		if(Reader.Remaining() < 1) break;
+		uint8_t Act = Reader.ReadU8();
+		if(Act <= ACTIVITY_AWAY)
+		{
+			EActivity Prev = m_RemoteActivity;
+			m_RemoteActivity = static_cast<EActivity>(Act);
+			if(m_RemoteActivity != Prev)
+			{
+				const char *pMsg = nullptr;
+				switch(m_RemoteActivity)
+				{
+				case ACTIVITY_DIALOG: pMsg = "Partner: selecting file..."; break;
+				case ACTIVITY_ENVELOPES: pMsg = "Partner: editing envelopes"; break;
+				case ACTIVITY_SETTINGS: pMsg = "Partner: server settings"; break;
+				case ACTIVITY_TESTING: pMsg = "Partner: local testing"; break;
+				case ACTIVITY_AWAY: pMsg = "Partner: left editor"; break;
+				case ACTIVITY_MAPPING: pMsg = "Partner: back to mapping"; break;
+				default: break;
+				}
+				if(pMsg)
+					PushLog(pMsg);
+			}
+		}
+		if(m_RemoteActivity != ACTIVITY_MAPPING)
+			m_HasRemoteCursor = false;
 		break;
 	}
 	default:
@@ -2016,6 +2070,70 @@ void CDuoSession::SendEditorSettings()
 	WriteU8(v, g_Config.m_EdLayerSelector ? 1 : 0);
 	WriteU8(v, g_Config.m_EdShowIngameEntities ? 1 : 0);
 	SendFrame(v);
+}
+
+void CDuoSession::SendActivity(EActivity Activity)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_ACTIVITY);
+	WriteU8(v, static_cast<uint8_t>(Activity));
+	SendFrame(v);
+}
+
+void CDuoSession::OnBackgroundUpdate()
+{
+	if(m_State < STATE_CONNECTING || m_Socket == nullptr)
+		return;
+
+	ProcessNetwork();
+	if(m_Socket == nullptr)
+		return;
+
+	int64_t Now = time_get();
+	int64_t Freq = time_freq();
+
+	// Stale server detection
+	if(Now - m_LastServerPacketTime > Freq * 30)
+	{
+		str_copy(m_aErrorMsg, "Connection lost");
+		PushLog("Connection lost");
+		m_State = STATE_ERROR;
+		CloseSocket();
+		return;
+	}
+
+	// Heartbeat every 5 seconds
+	if(m_State >= STATE_WAITING && Now - m_LastHeartbeatTime > Freq * 5)
+	{
+		SendHeartbeat();
+		m_LastHeartbeatTime = Now;
+	}
+
+	// Determine current activity and send if changed
+	EActivity Current = ACTIVITY_AWAY;
+	if(g_Config.m_ClEditor)
+	{
+		if(Editor()->m_Dialog != DIALOG_NONE)
+			Current = ACTIVITY_DIALOG;
+		else if(Editor()->m_ActiveExtraEditor == CEditor::EXTRAEDITOR_SERVER_SETTINGS)
+			Current = ACTIVITY_SETTINGS;
+		else if(Editor()->m_ActiveExtraEditor == CEditor::EXTRAEDITOR_ENVELOPES)
+			Current = ACTIVITY_ENVELOPES;
+		else
+			Current = ACTIVITY_MAPPING;
+	}
+	else
+	{
+		Current = m_LocalTestingActive ? ACTIVITY_TESTING : ACTIVITY_AWAY;
+	}
+
+	if(Current != m_LastLocalActivity)
+	{
+		m_LastLocalActivity = Current;
+		SendActivity(Current);
+	}
 }
 
 void CDuoSession::StartMapTransfer()

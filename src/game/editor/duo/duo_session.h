@@ -78,6 +78,9 @@ public:
 	float m_RemoteCursorY = 0.0f;
 	bool m_HasRemoteCursor = false;
 
+	DuoProtocol::EActivity m_RemoteActivity = DuoProtocol::ACTIVITY_MAPPING;
+	DuoProtocol::EActivity m_LastLocalActivity = DuoProtocol::ACTIVITY_MAPPING;
+
 	int m_ParticipantCount = 0;
 	char m_aJoinCodeInput[DuoProtocol::ROOM_CODE_LEN + 1] = {};
 	int m_JoinCodeLen = 0;
@@ -98,6 +101,17 @@ public:
 	// envelope sync: track undo stack size to detect changes
 	int m_LastEnvUndoSize = 0;
 	bool m_EnvDirty = false;
+	// set when partner leaves the room while session was LIVE
+	bool m_RemoteDisconnected = false;
+	// set by TestMapLocally to distinguish testing from just closing editor
+	bool m_LocalTestingActive = false;
+
+	// status log — up to 4 recent entries shown in menubar
+	struct SLogEntry { char m_aText[128]; };
+	static const int LOG_CAPACITY = 4;
+	SLogEntry m_aLog[LOG_CAPACITY] = {};
+	int m_LogCount = 0;
+	void PushLog(const char *pText);
 
 	// debug counters
 	int m_DbgQuadSent = 0;
@@ -167,6 +181,8 @@ public:
 	void SendMapEnd();
 	void SendMapNew();
 	void SendEditorSettings();
+	void SendActivity(DuoProtocol::EActivity Activity);
+	void OnBackgroundUpdate();
 	void ProcessNetwork();
 	void HandleMessage(const uint8_t *pData, int Size);
 	void AppendAuth(std::vector<uint8_t> &vPacket) const;

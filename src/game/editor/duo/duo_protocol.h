@@ -62,6 +62,17 @@ enum EPacketType : uint8_t
 	PACKET_MAP_END         = 41,    // no payload
 	PACKET_MAP_NEW         = 42,    // no payload — owner tells joiner to reset to empty map
 	PACKET_EDITOR_SETTINGS = 43,    // settings sync: BrushColor(1)+AllowUnused(1)+ShowInfo(1)+EnvPreview(1)+AlignQuads(1)+ShowQuadsRect(1)+AutoReload(1)+LayerSelector(1)+ShowIngame(1)
+	PACKET_ACTIVITY        = 44,    // activity state(1) — what the user is currently doing
+};
+
+enum EActivity : uint8_t
+{
+	ACTIVITY_MAPPING = 0,
+	ACTIVITY_DIALOG = 1,
+	ACTIVITY_ENVELOPES = 2,
+	ACTIVITY_SETTINGS = 3,
+	ACTIVITY_TESTING = 4,
+	ACTIVITY_AWAY = 5,
 };
 
 enum EErrorCode : uint8_t

@@ -3361,6 +3361,7 @@ void CClient::Update()
 	m_ServerBrowser.Update();
 
 	// update editor/gameclient
+	m_pEditor->OnBackgroundUpdate();
 	if(m_EditorActive)
 		m_pEditor->OnUpdate();
 	else
