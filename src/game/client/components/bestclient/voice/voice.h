@@ -198,6 +198,15 @@ private:
 	int m_LastBitrate = -1;
 	bool m_HelloResetPending = false;
 	bool m_SecondaryHelloResetPending = false;
+
+	// Challenge-response state for primary socket
+	bool m_ChallengeActive = false;
+	uint8_t m_ChallengeNonce[BestClientVoice::CHALLENGE_NONCE_SIZE] = {};
+	std::vector<uint8_t> m_PendingHelloPayload; // hello body sent before challenge arrived
+	// Challenge-response state for secondary socket
+	bool m_SecondaryChallengeActive = false;
+	uint8_t m_SecondaryChallengeNonce[BestClientVoice::CHALLENGE_NONCE_SIZE] = {};
+	std::vector<uint8_t> m_SecondaryPendingHelloPayload;
 	ERuntimeState m_RuntimeState = RUNTIME_STOPPED;
 	ESubsystemRuntimeState m_SubsystemState = ESubsystemRuntimeState::DISABLED;
 
@@ -324,6 +333,7 @@ private:
 	void ClearPeerState();
 	void SendHello();
 	void SendHelloSecondary();
+	void SendHelloResponse(NETSOCKET Socket, const uint8_t *pNonce, const std::vector<uint8_t> &vHelloPayload);
 	void SendGoodbye();
 	void SendGoodbyeSecondary();
 	void SendVoiceFrame(const uint8_t *pOpusData, int OpusSize, int Team, vec2 Position);

@@ -2560,17 +2560,27 @@ void CVoiceChat::SendHello()
 	const int LocalClientId = LocalGameClientId();
 	const int VoiceTeam = LocalVoiceTeam();
 	const uint64_t AuthTimestamp = CurrentHelloAuthTimestamp();
-	std::vector<uint8_t> vPacket;
 	const uint16_t RoomKeySize = (uint16_t)minimum<size_t>(RoomKey.size(), BestClientVoice::MAX_ROOM_KEY_LENGTH);
-	vPacket.reserve(40 + RoomKeySize + BestClientVoice::HELLO_AUTH_PROOF_SIZE);
+
+	// Build hello body (without HMAC — server will challenge us)
+	std::vector<uint8_t> vBody;
+	vBody.reserve(20 + RoomKeySize);
+	BestClientVoice::WriteU16(vBody, BESTCLIENT_VERSIONNR);
+	BestClientVoice::WriteU16(vBody, RoomKeySize);
+	vBody.insert(vBody.end(), RoomKey.begin(), RoomKey.begin() + RoomKeySize);
+	BestClientVoice::WriteS16(vBody, (int16_t)LocalClientId);
+	BestClientVoice::WriteS16(vBody, (int16_t)VoiceTeam);
+	BestClientVoice::WriteU64(vBody, AuthTimestamp);
+
+	// Save for PACKET_HELLO_RESPONSE
+	m_PendingHelloPayload = vBody;
+	m_ChallengeActive = false;
+
+	std::vector<uint8_t> vPacket;
+	vPacket.reserve(8 + vBody.size());
 	BestClientVoice::WriteHeader(vPacket, BestClientVoice::PACKET_HELLO);
-	BestClientVoice::WriteU16(vPacket, BESTCLIENT_VERSIONNR);
-	BestClientVoice::WriteU16(vPacket, RoomKeySize);
-	vPacket.insert(vPacket.end(), RoomKey.begin(), RoomKey.begin() + RoomKeySize);
-	BestClientVoice::WriteS16(vPacket, (int16_t)LocalClientId);
-	BestClientVoice::WriteS16(vPacket, (int16_t)VoiceTeam);
-	BestClientVoice::WriteU64(vPacket, AuthTimestamp);
-	AppendHelloAuthProof(vPacket);
+	vPacket.insert(vPacket.end(), vBody.begin(), vBody.end());
+
 	net_udp_send(m_Socket, &m_ServerAddr, vPacket.data(), (int)vPacket.size());
 	m_LastHelloTick = time_get();
 	m_LastHeartbeatTick = m_LastHelloTick;
@@ -2588,23 +2598,58 @@ void CVoiceChat::SendHelloSecondary()
 	const int LocalClientId = LocalGameClientId();
 	const int VoiceTeam = LocalOwnVoiceTeam();
 	const uint64_t AuthTimestamp = CurrentHelloAuthTimestamp();
-	std::vector<uint8_t> vPacket;
 	const uint16_t RoomKeySize = (uint16_t)minimum<size_t>(RoomKey.size(), BestClientVoice::MAX_ROOM_KEY_LENGTH);
-	vPacket.reserve(40 + RoomKeySize + BestClientVoice::HELLO_AUTH_PROOF_SIZE);
+
+	std::vector<uint8_t> vBody;
+	vBody.reserve(20 + RoomKeySize);
+	BestClientVoice::WriteU16(vBody, BESTCLIENT_VERSIONNR);
+	BestClientVoice::WriteU16(vBody, RoomKeySize);
+	vBody.insert(vBody.end(), RoomKey.begin(), RoomKey.begin() + RoomKeySize);
+	BestClientVoice::WriteS16(vBody, (int16_t)LocalClientId);
+	BestClientVoice::WriteS16(vBody, (int16_t)VoiceTeam);
+	BestClientVoice::WriteU64(vBody, AuthTimestamp);
+
+	m_SecondaryPendingHelloPayload = vBody;
+	m_SecondaryChallengeActive = false;
+
+	std::vector<uint8_t> vPacket;
+	vPacket.reserve(8 + vBody.size());
 	BestClientVoice::WriteHeader(vPacket, BestClientVoice::PACKET_HELLO);
-	BestClientVoice::WriteU16(vPacket, BESTCLIENT_VERSIONNR);
-	BestClientVoice::WriteU16(vPacket, RoomKeySize);
-	vPacket.insert(vPacket.end(), RoomKey.begin(), RoomKey.begin() + RoomKeySize);
-	BestClientVoice::WriteS16(vPacket, (int16_t)LocalClientId);
-	BestClientVoice::WriteS16(vPacket, (int16_t)VoiceTeam);
-	BestClientVoice::WriteU64(vPacket, AuthTimestamp);
-	AppendHelloAuthProof(vPacket);
+	vPacket.insert(vPacket.end(), vBody.begin(), vBody.end());
+
 	net_udp_send(m_SecondarySocket, &m_ServerAddr, vPacket.data(), (int)vPacket.size());
 	m_SecondaryLastHelloTick = time_get();
 	m_SecondaryLastHeartbeatTick = m_SecondaryLastHelloTick;
 	m_SecondaryAdvertisedRoomKey.assign(RoomKey.begin(), RoomKey.begin() + RoomKeySize);
 	m_SecondaryAdvertisedGameClientId = LocalClientId;
 	m_SecondaryAdvertisedTeam = VoiceTeam;
+}
+
+void CVoiceChat::SendHelloResponse(NETSOCKET Socket, const uint8_t *pNonce, const std::vector<uint8_t> &vHelloPayload)
+{
+	if(!Socket || !m_HasServerAddr)
+		return;
+
+	const std::string AuthKey = VoiceAuthKey();
+
+	// Build message: nonce ‖ hello_payload — HMAC input
+	std::vector<uint8_t> vHmacInput;
+	vHmacInput.reserve(BestClientVoice::CHALLENGE_NONCE_SIZE + vHelloPayload.size());
+	vHmacInput.insert(vHmacInput.end(), pNonce, pNonce + BestClientVoice::CHALLENGE_NONCE_SIZE);
+	vHmacInput.insert(vHmacInput.end(), vHelloPayload.begin(), vHelloPayload.end());
+
+	const SHA256_DIGEST Proof = BestClientIndicator::ComputeHmacSha256(
+		AuthKey.c_str(), vHmacInput.data(), (int)vHmacInput.size());
+
+	// PACKET_HELLO_RESPONSE: header + [u16 hello_payload_len] + hello_payload + [32-byte HMAC]
+	std::vector<uint8_t> vPacket;
+	vPacket.reserve(8 + 2 + vHelloPayload.size() + SHA256_DIGEST_LENGTH);
+	BestClientVoice::WriteHeader(vPacket, BestClientVoice::PACKET_HELLO_RESPONSE);
+	BestClientVoice::WriteU16(vPacket, (uint16_t)vHelloPayload.size());
+	vPacket.insert(vPacket.end(), vHelloPayload.begin(), vHelloPayload.end());
+	vPacket.insert(vPacket.end(), Proof.data, Proof.data + SHA256_DIGEST_LENGTH);
+
+	net_udp_send(Socket, &m_ServerAddr, vPacket.data(), (int)vPacket.size());
 }
 
 void CVoiceChat::SendGoodbye()
@@ -2692,6 +2737,8 @@ void CVoiceChat::ProcessVoiceRelayPacket(const uint8_t *pRawData, int DataSize, 
 	auto ItPeer = m_Peers.find(SenderId);
 	if(ItPeer == m_Peers.end())
 	{
+		if((int)m_Peers.size() >= BestClientVoice::MAX_VOICE_PEERS)
+			return;
 		// Recover quickly even if peer-list packets are delayed/lost for a while.
 		CRemotePeer &NewPeer = m_Peers[SenderId];
 		NewPeer.m_LastReceiveTick = time_get();
@@ -2852,6 +2899,17 @@ void CVoiceChat::ProcessNetwork()
 			continue;
 		m_LastServerPacketTick = time_get();
 
+		if(Type == BestClientVoice::PACKET_HELLO_CHALLENGE)
+		{
+			// Server is challenging us — read nonce and send HMAC response
+			if((int)(Offset + BestClientVoice::CHALLENGE_NONCE_SIZE) > DataSize)
+				continue;
+			mem_copy(m_ChallengeNonce, pRawData + Offset, BestClientVoice::CHALLENGE_NONCE_SIZE);
+			m_ChallengeActive = true;
+			SendHelloResponse(m_Socket, m_ChallengeNonce, m_PendingHelloPayload);
+			continue;
+		}
+
 		if(Type == BestClientVoice::PACKET_HELLO_ACK)
 		{
 			uint16_t VoiceId = 0;
@@ -2916,6 +2974,8 @@ void CVoiceChat::ProcessNetwork()
 				if(PeerId == 0 || PeerId == m_ClientVoiceId)
 					continue;
 				vSeenPeerIds.insert(PeerId);
+				if(m_Peers.find(PeerId) == m_Peers.end() && (int)m_Peers.size() >= BestClientVoice::MAX_VOICE_PEERS)
+					continue;
 				CRemotePeer &Peer = m_Peers[PeerId];
 				Peer.m_LastReceiveTick = Now;
 			}
@@ -2967,6 +3027,8 @@ void CVoiceChat::ProcessNetwork()
 				if(PeerId == 0 || PeerId == m_ClientVoiceId)
 					continue;
 				vSeenPeerIds.insert(PeerId);
+				if(m_Peers.find(PeerId) == m_Peers.end() && (int)m_Peers.size() >= BestClientVoice::MAX_VOICE_PEERS)
+					continue;
 				CRemotePeer &Peer = m_Peers[PeerId];
 				Peer.m_LastReceiveTick = Now;
 				Peer.m_AnnouncedGameClientId = AnnouncedGameClientId;
@@ -3270,6 +3332,16 @@ void CVoiceChat::ProcessSecondaryNetwork()
 		if(!BestClientVoice::ReadHeader(pRawData, DataSize, Type, Offset))
 			continue;
 		m_SecondaryLastServerPacketTick = time_get();
+
+		if(Type == BestClientVoice::PACKET_HELLO_CHALLENGE)
+		{
+			if((int)(Offset + BestClientVoice::CHALLENGE_NONCE_SIZE) > DataSize)
+				continue;
+			mem_copy(m_SecondaryChallengeNonce, pRawData + Offset, BestClientVoice::CHALLENGE_NONCE_SIZE);
+			m_SecondaryChallengeActive = true;
+			SendHelloResponse(m_SecondarySocket, m_SecondaryChallengeNonce, m_SecondaryPendingHelloPayload);
+			continue;
+		}
 
 		if(Type == BestClientVoice::PACKET_HELLO_ACK)
 		{

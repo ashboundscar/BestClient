@@ -22,6 +22,8 @@ constexpr int DEFAULT_PORT = 8777;
 constexpr int MAX_ROOM_KEY_LENGTH = 128;
 constexpr int INVALID_GAME_CLIENT_ID = -1;
 constexpr int HELLO_AUTH_PROOF_SIZE = 32;
+constexpr int CHALLENGE_NONCE_SIZE = 16;
+constexpr int MAX_VOICE_PEERS = 128;
 
 enum EPacketType : uint8_t
 {
@@ -34,6 +36,9 @@ enum EPacketType : uint8_t
 	PACKET_PONG = 7,
 	PACKET_PEER_LIST_EX = 8,
 	PACKET_GOODBYE = 9,
+	// Challenge-response handshake (protocol v4.1+)
+	PACKET_HELLO_CHALLENGE = 21,
+	PACKET_HELLO_RESPONSE = 22,
 };
 
 inline void WriteU8(std::vector<uint8_t> &vOut, uint8_t Value)
