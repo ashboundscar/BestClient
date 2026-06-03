@@ -2888,6 +2888,9 @@ static void ComponentsEditorSetDisabled(int Component, int &MaskLo, int &MaskHi,
 
 void CMenus::RenderSettingsBestClient(CUIRect MainView)
 {
+	MainView.y -= 20.0f;
+	MainView.h += 20.0f;
+
 	enum
 	{
 		BESTCLIENT_TAB_VISUALS = 0,
@@ -2913,6 +2916,19 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		RenderComponentsEditorScreen(*Ui()->Screen());
 		return;
 	}
+
+	{
+		CUIRect HintBar, Badge;
+		MainView.HSplitTop(18.0f, &HintBar, &MainView);
+		HintBar.VSplitLeft(310.0f, &Badge, nullptr);
+		Badge.HMargin(1.5f, &Badge);
+		Graphics()->DrawRect4(Badge.x, Badge.y, Badge.w, Badge.h,
+			ColorRGBA(0.15f, 0.40f, 0.85f, 1.0f), ColorRGBA(0.05f, 0.25f, 0.65f, 1.0f),
+			ColorRGBA(0.15f, 0.40f, 0.85f, 1.0f), ColorRGBA(0.05f, 0.25f, 0.65f, 1.0f),
+			IGraphics::CORNER_ALL, 3.0f);
+		Ui()->DoLabel(&Badge, BCLocalize("assets & components editors/fun/shop \xe2\x86\x92 Info"), 11.0f, TEXTALIGN_MC);
+	}
+	MainView.HSplitTop(4.0f, nullptr, &MainView);
 
 	CUIRect TabBar, TabButton;
 	MainView.HSplitTop(24.0f, &TabBar, &MainView);
@@ -2970,6 +2986,8 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		{
 			s_CurTab = Tab;
 		}
+		if(Tab == BESTCLIENT_TAB_INFO)
+			GameClient()->m_Tooltips.DoToolTip(&s_aPageTabs[Tab], &TabButton, BCLocalize("Fun and Shop moved here"));
 		VisibleIndex++;
 	}
 
@@ -6160,13 +6178,11 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	{
 		INFO_SUBTAB_FUN = 0,
 		INFO_SUBTAB_SHOP,
-		INFO_SUBTAB_ASSETS,
-		INFO_SUBTAB_COMPONENTS,
 		INFO_SUBTAB_INFO,
 		NUM_INFO_SUBTABS,
 	};
 
-	static int s_CurSubTab = INFO_SUBTAB_FUN;
+	static int s_CurSubTab = INFO_SUBTAB_INFO;
 	static CButtonContainer s_aSubTabButtons[NUM_INFO_SUBTABS] = {};
 
 	const float LineSize = 20.0f;
@@ -6181,8 +6197,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	const char *apSubTabNames[NUM_INFO_SUBTABS] = {
 		BCLocalize("Fun"),
 		BCLocalize("Shop"),
-		BCLocalize("Assets"),
-		BCLocalize("Components"),
 		BCLocalize("Info"),
 	};
 	const float SubTabWidth = SubTabBar.w / (float)NUM_INFO_SUBTABS;
@@ -6205,53 +6219,6 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 	if(s_CurSubTab == INFO_SUBTAB_SHOP)
 	{
 		RenderSettingsBestClientShop(MainView);
-		return;
-	}
-	if(s_CurSubTab == INFO_SUBTAB_ASSETS)
-	{
-		if(m_AssetsEditorState.m_VisualsEditorOpen)
-		{
-			RenderAssetsEditorScreen(MainView);
-			return;
-		}
-		const float LSize = 20.0f;
-		CUIRect Label, Button;
-		MainView.HSplitTop(LSize, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("Create mixed assets or jump to the name plate editor."), 14.0f, TEXTALIGN_ML);
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-		static CButtonContainer s_OpenAssetsEditorButton;
-		MainView.HSplitTop(LSize + 4.0f, &Button, &MainView);
-		if(DoButton_Menu(&s_OpenAssetsEditorButton, BCLocalize("Assets editor"), 0, &Button))
-		{
-			m_AssetsEditorState.m_VisualsEditorOpen = true;
-			m_AssetsEditorState.m_FullscreenOpen = true;
-			if(!m_AssetsEditorState.m_VisualsEditorInitialized)
-			{
-				AssetsEditorReloadAssets();
-				AssetsEditorResetPartSlots();
-				AssetsEditorEnsureDefaultExportNames();
-				AssetsEditorSyncExportNameFromType();
-				m_AssetsEditorState.m_VisualsEditorInitialized = true;
-			}
-		}
-		return;
-	}
-	if(s_CurSubTab == INFO_SUBTAB_COMPONENTS)
-	{
-		if(m_ComponentsEditorState.m_Open)
-		{
-			RenderComponentsEditorScreen(MainView);
-			return;
-		}
-		const float LSize = 20.0f;
-		CUIRect Label, Button;
-		MainView.HSplitTop(LSize, &Label, &MainView);
-		Ui()->DoLabel(&Label, BCLocalize("Open a dedicated component toggles page."), 14.0f, TEXTALIGN_ML);
-		MainView.HSplitTop(5.0f, nullptr, &MainView);
-		static CButtonContainer s_OpenComponentsEditorButton;
-		MainView.HSplitTop(LSize + 4.0f, &Button, &MainView);
-		if(DoButton_Menu(&s_OpenComponentsEditorButton, BCLocalize("Components editor"), 0, &Button))
-			ComponentsEditorOpen();
 		return;
 	}
 
@@ -6337,6 +6304,41 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		}
 	}
 #endif
+
+	LeftView.HSplitTop(MarginSmall, nullptr, &LeftView);
+	LeftView.HSplitTop(HeadlineHeight, &Label, &LeftView);
+	Ui()->DoLabel(&Label, BCLocalize("Editors"), HeadlineFontSize, TEXTALIGN_ML);
+	LeftView.HSplitTop(MarginSmall, nullptr, &LeftView);
+	{
+		const float LSize = 20.0f;
+		CUIRect EditorLabel, EditorButton;
+		LeftView.HSplitTop(LSize, &EditorLabel, &LeftView);
+		Ui()->DoLabel(&EditorLabel, BCLocalize("Create mixed assets or jump to the name plate editor."), 14.0f, TEXTALIGN_ML);
+		LeftView.HSplitTop(5.0f, nullptr, &LeftView);
+		static CButtonContainer s_AssetsEditorButton2;
+		LeftView.HSplitTop(LSize + 4.0f, &EditorButton, &LeftView);
+		if(DoButton_Menu(&s_AssetsEditorButton2, BCLocalize("Assets editor"), 0, &EditorButton))
+		{
+			m_AssetsEditorState.m_VisualsEditorOpen = true;
+			m_AssetsEditorState.m_FullscreenOpen = true;
+			if(!m_AssetsEditorState.m_VisualsEditorInitialized)
+			{
+				AssetsEditorReloadAssets();
+				AssetsEditorResetPartSlots();
+				AssetsEditorEnsureDefaultExportNames();
+				AssetsEditorSyncExportNameFromType();
+				m_AssetsEditorState.m_VisualsEditorInitialized = true;
+			}
+		}
+		LeftView.HSplitTop(MarginSmall, nullptr, &LeftView);
+		LeftView.HSplitTop(LSize, &EditorLabel, &LeftView);
+		Ui()->DoLabel(&EditorLabel, BCLocalize("Open a dedicated component toggles page."), 14.0f, TEXTALIGN_ML);
+		LeftView.HSplitTop(5.0f, nullptr, &LeftView);
+		static CButtonContainer s_ComponentsEditorButton2;
+		LeftView.HSplitTop(LSize + 4.0f, &EditorButton, &LeftView);
+		if(DoButton_Menu(&s_ComponentsEditorButton2, BCLocalize("Components editor"), 0, &EditorButton))
+			ComponentsEditorOpen();
+	}
 
 	LeftView = LowerLeftView;
 	LeftView.HSplitBottom(LineSize * 2.0f + MarginSmall * 2.0f + HeadlineFontSize, nullptr, &LeftView);

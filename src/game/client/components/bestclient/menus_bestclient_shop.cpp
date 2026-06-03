@@ -1641,6 +1641,28 @@ void CMenus::RenderSettingsBestClientShop(CUIRect MainView)
 {
 	SetBestClientShopVisible(true);
 
+	{
+		const bool IsRussian = str_find_nocase(g_Config.m_ClLanguagefile, "russian") != nullptr;
+		const char *pLine1 = IsRussian ? "\xd0\xa8\xd0\xbe\xd0\xbf \xd0\xb2\xd1\x80\xd0\xb5\xd0\xbc\xd0\xb5\xd0\xbd\xd0\xbd\xd0\xbe \xd0\xbd\xd0\xb5\xd0\xb4\xd0\xbe\xd1\x81\xd1\x82\xd1\x83\xd0\xbf\xd0\xb5\xd0\xbd" : "Shop is temporarily unavailable";
+		const char *pLine2 = IsRussian ? "\xd0\xa8\xd0\xbe\xd0\xbf \xd1\x80\xd0\xb0\xd0\xb1\xd0\xbe\xd1\x82\xd0\xb0\xd0\xbb \xd0\xbd\xd0\xb0 \xd1\x81\xd0\xb0\xd0\xb9\xd1\x82\xd0\xb5 catdata.dev, \xd0\xba\xd0\xbe\xd1\x82\xd0\xbe\xd1\x80\xd1\x8b\xd0\xb9 \xd1\x82\xd0\xb5\xd0\xbf\xd0\xb5\xd1\x80\xd1\x8c \xd0\xb1\xd0\xbe\xd0\xbb\xd1\x8c\xd1\x88\xd0\xb5 \xd0\xbd\xd0\xb5 \xd0\xb4\xd0\xbe\xd1\x81\xd1\x82\xd1\x83\xd0\xbf\xd0\xb5\xd0\xbd" : "Shop was powered by catdata.dev, which is no longer available";
+		const char *pLine3 = IsRussian ? "\xd0\x9e\xd0\xb6\xd0\xb8\xd0\xb4\xd0\xb0\xd0\xb9\xd1\x82\xd0\xb5 \xd0\xbe\xd0\xb1\xd0\xbd\xd0\xbe\xd0\xb2\xd0\xbb\xd0\xb5\xd0\xbd\xd0\xb8\xd1\x8f" : "Please await an update";
+
+		CUIRect Block;
+		MainView.HSplitTop(MainView.h * 0.35f, nullptr, &Block);
+
+		CUIRect Line1, Line2, Line3;
+		Block.HSplitTop(30.0f, &Line1, &Block);
+		Block.HSplitTop(8.0f, nullptr, &Block);
+		Block.HSplitTop(24.0f, &Line2, &Block);
+		Block.HSplitTop(5.0f, nullptr, &Block);
+		Block.HSplitTop(24.0f, &Line3, &Block);
+
+		Ui()->DoLabel(&Line1, pLine1, 20.0f, TEXTALIGN_MC);
+		Ui()->DoLabel(&Line2, pLine2, 15.0f, TEXTALIGN_MC);
+		Ui()->DoLabel(&Line3, pLine3, 15.0f, TEXTALIGN_MC);
+		return;
+	}
+
 	const CUIRect FullView = MainView;
 	BestClientShopInitState();
 
