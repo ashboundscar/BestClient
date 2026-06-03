@@ -2922,7 +2922,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		MainView.HSplitTop(18.0f, &HintBar, &MainView);
 		HintBar.VSplitLeft(310.0f, &Badge, nullptr);
 		Badge.HMargin(1.5f, &Badge);
-		Ui()->DoLabel(&Badge, BCLocalize("assets & components editors/fun/shop \xe2\x86\x92 Info"), 11.0f, TEXTALIGN_ML);
+		Ui()->DoLabel(&Badge, BCLocalize("assets & components editors/fun/shop \xe2\x86\x92 Info"), 14.0f, TEXTALIGN_ML);
 	}
 	MainView.HSplitTop(4.0f, nullptr, &MainView);
 
