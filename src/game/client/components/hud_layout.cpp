@@ -27,7 +27,7 @@ namespace HudLayout
 			{110.0f, 2.0f, 100, 0, true, true, 0x66000000U},
 			{500.0f, 141.0f, 100, 0, true, true, 0x66000000U},
 			{460.0f, 229.0f, 100, 0, true, true, 0x40000000U},
-			{198.0f, 2.0f, 100, 0, true, false, 0x1E59A36BU},
+			{198.0f, 0.0f, 100, 0, true, false, 0x1E59A36BU},
 			{4.0f, 122.0f, 100, 0, true, false, 0x66000000U},
 			{136.0f, 0.0f, 100, 0, true, false, 0x66000000U},
 			{5.0f, 278.0f, 100, 0, true, false, 0x66000000U},
