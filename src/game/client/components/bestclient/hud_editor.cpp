@@ -24,8 +24,8 @@ namespace
 {
 	constexpr float SNAP_THRESHOLD = 6.0f;
 	constexpr float SETTINGS_POPUP_WIDTH = 210.0f;
-	constexpr float SETTINGS_POPUP_HEIGHT = 132.0f;
-	constexpr float MUSIC_PLAYER_SETTINGS_POPUP_EXTRA_HEIGHT = 56.0f;
+	constexpr float SETTINGS_POPUP_HEIGHT = 120.0f;
+	constexpr float MUSIC_PLAYER_SETTINGS_POPUP_EXTRA_HEIGHT = 50.0f;
 
 	bool IsMusicPlayerEnabled(const CGameClient *pGameClient)
 	{
@@ -624,12 +624,12 @@ CUi::EPopupMenuFunctionResult CHudEditor::PopupModuleSettings(void *pContext, CU
 	CUIRect Title, ToggleButton, ScaleLabel, ScaleSlider, MusicPlayerHudColorButton, MusicPlayerHudAlphaLabel, MusicPlayerHudAlphaSlider, ResetPositionButton, ResetSettingsButton;
 	View.HSplitTop(16.0f, &Title, &View);
 	pThis->Ui()->DoLabel(&Title, HudLayout::Name(pThis->m_SelectedModule), 10.0f, TEXTALIGN_MC);
-	View.HSplitTop(8.0f, nullptr, &View);
+	View.HSplitTop(4.0f, nullptr, &View);
 	View.HSplitTop(16.0f, &ToggleButton, &View);
 	if(pThis->GameClient()->m_Menus.DoButton_CheckBox(&pThis->m_ToggleModuleButton, BCLocalize("Enabled"), Enabled ? 1 : 0, &ToggleButton))
 		HudLayout::SetEnabled(pThis->m_SelectedModule, !Enabled);
 
-	View.HSplitTop(8.0f, nullptr, &View);
+	View.HSplitTop(4.0f, nullptr, &View);
 	View.HSplitTop(12.0f, &ScaleLabel, &View);
 
 	if(pThis->IsEditableModule(pThis->m_SelectedModule))
@@ -651,12 +651,12 @@ CUi::EPopupMenuFunctionResult CHudEditor::PopupModuleSettings(void *pContext, CU
 
 	if(pThis->m_SelectedModule == HudLayout::MODULE_MUSIC_PLAYER)
 	{
-		View.HSplitTop(8.0f, nullptr, &View);
+		View.HSplitTop(4.0f, nullptr, &View);
 		View.HSplitTop(16.0f, &MusicPlayerHudColorButton, &View);
 		if(pThis->GameClient()->m_Menus.DoButton_CheckBox(&g_Config.m_BcMusicPlayerUseColorForHud, BCLocalize("Use Music Player color for HUD"), g_Config.m_BcMusicPlayerUseColorForHud, &MusicPlayerHudColorButton))
 			g_Config.m_BcMusicPlayerUseColorForHud ^= 1;
 
-		View.HSplitTop(6.0f, nullptr, &View);
+		View.HSplitTop(4.0f, nullptr, &View);
 		char aHudColorAlpha[64];
 		str_format(aHudColorAlpha, sizeof(aHudColorAlpha), "%s %d%%", BCLocalize("Music Player / HUD alpha"), g_Config.m_BcMusicPlayerHudColorAlpha);
 		View.HSplitTop(12.0f, &MusicPlayerHudAlphaLabel, &View);
@@ -667,12 +667,12 @@ CUi::EPopupMenuFunctionResult CHudEditor::PopupModuleSettings(void *pContext, CU
 		g_Config.m_BcMusicPlayerHudColorAlpha = CUi::ms_LinearScrollbarScale.ToAbsolute(NewHudAlphaRelative, 0, 100);
 	}
 
-	View.HSplitTop(10.0f, nullptr, &View);
+	View.HSplitTop(6.0f, nullptr, &View);
 	View.HSplitTop(16.0f, &ResetPositionButton, &View);
 	if(pThis->Ui()->DoButton_PopupMenu(&pThis->m_ResetPositionButton, BCLocalize("Reset position"), &ResetPositionButton, 8.0f, TEXTALIGN_MC))
 		HudLayout::ResetPosition(pThis->m_SelectedModule);
 
-	View.HSplitTop(5.0f, nullptr, &View);
+	View.HSplitTop(3.0f, nullptr, &View);
 	View.HSplitTop(16.0f, &ResetSettingsButton, &View);
 	if(pThis->Ui()->DoButton_PopupMenu(&pThis->m_ResetSettingsButton, BCLocalize("Reset settings"), &ResetSettingsButton, 8.0f, TEXTALIGN_MC))
 	{
@@ -694,8 +694,8 @@ void CHudEditor::OpenModuleSettings(const SModuleVisual &Visual)
 	const float UiScaleY = Ui()->Screen()->h / maximum(Height, 1.0f);
 	constexpr float PopupMargin = 5.0f;
 	constexpr float PopupGap = 6.0f;
-	const float PopupWidth = SETTINGS_POPUP_WIDTH * UiScaleX;
-	const float PopupHeight = SettingsPopupHeight(Visual.m_Module) * UiScaleY;
+	const float PopupWidth = SETTINGS_POPUP_WIDTH;
+	const float PopupHeight = SettingsPopupHeight(Visual.m_Module);
 	const CUIRect ModuleRectUi = {
 		Visual.m_Rect.x * UiScaleX,
 		Visual.m_Rect.y * UiScaleY,
