@@ -112,6 +112,7 @@ public:
 	SLogEntry m_aLog[LOG_CAPACITY] = {};
 	int m_LogCount = 0;
 	void PushLog(const char *pText);
+	static void SanitizeMapName(const char *pIn, char *pOut, int OutSize);
 
 	// debug counters
 	int m_DbgQuadSent = 0;

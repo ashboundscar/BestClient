@@ -82,6 +82,7 @@ enum EErrorCode : uint8_t
 	ERROR_AUTH_FAILED = 3,
 	ERROR_RATE_LIMITED = 4,
 	ERROR_REPLAY_DETECTED = 5,
+	ERROR_BAD_MAP = 6,
 };
 
 inline void WriteU8(std::vector<uint8_t> &v, uint8_t val) { v.push_back(val); }

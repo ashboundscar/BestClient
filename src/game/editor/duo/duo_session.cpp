@@ -46,6 +46,45 @@ void CDuoSession::PushLog(const char *pText)
 		m_LogCount++;
 }
 
+void CDuoSession::SanitizeMapName(const char *pIn, char *pOut, int OutSize)
+{
+	// Defense against path traversal: a malicious peer fully controls this
+	// string. Strip any directory component and keep only a safe basename,
+	// then force a .map extension so the result can only ever be a map file
+	// inside maps/. Never trust the wire value for filesystem paths.
+	const char *pBase = pIn;
+	for(const char *p = pIn; *p; p++)
+	{
+		if(*p == '/' || *p == '\\')
+			pBase = p + 1;
+	}
+
+	int Len = 0;
+	char aClean[128];
+	for(const char *p = pBase; *p && Len < (int)sizeof(aClean) - 1; p++)
+	{
+		char c = *p;
+		bool Ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			  (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+		// reject "." sequences that could form ".." traversal
+		if(c == '.' && (p == pBase || p[1] == '.' || p[1] == '\0'))
+			Ok = false;
+		if(Ok)
+			aClean[Len++] = c;
+	}
+	aClean[Len] = '\0';
+
+	if(Len == 0)
+		str_copy(aClean, "unnamed");
+
+	// strip existing extension and force .map
+	char aNoExt[128];
+	fs_split_file_extension(aClean, aNoExt, sizeof(aNoExt));
+	if(aNoExt[0] == '\0')
+		str_copy(aNoExt, "unnamed");
+	str_format(pOut, OutSize, "%s.map", aNoExt);
+}
+
 void CDuoSession::OnReset()
 {
 	if(!m_ApplyingRemote && !m_OwnerLoadingMap)
@@ -596,6 +635,13 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	case PACKET_ERROR:
 	{
 		uint8_t Code = Reader.ReadU8();
+		// Bad map rejection is non-fatal: the server refused to relay a
+		// transfer that didn't look like a real map. Keep the session alive.
+		if(Code == ERROR_BAD_MAP)
+		{
+			PushLog("Map transfer rejected (not a valid map)");
+			break;
+		}
 		switch(Code)
 		{
 		case ERROR_ROOM_FULL: str_copy(m_aErrorMsg, "Room is full"); break;
@@ -1307,10 +1353,10 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		m_MapTransferActive = true;
 		m_MapTransferTotal = TotalSize;
 		m_MapTransferReceived = 0;
-		str_copy(m_aMapTransferName, aName);
+		SanitizeMapName(aName, m_aMapTransferName, sizeof(m_aMapTransferName));
 		m_vMapTransferBuf.clear();
 		m_vMapTransferBuf.resize(TotalSize, 0);
-		dbg_msg("duo", "MAP_START: '%s' %d bytes", aName, TotalSize);
+		dbg_msg("duo", "MAP_START: '%s' -> '%s' %d bytes", aName, m_aMapTransferName, TotalSize);
 		break;
 	}
 	case PACKET_MAP_CHUNK:
