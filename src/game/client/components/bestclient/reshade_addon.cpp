@@ -844,6 +844,10 @@ namespace
 		if(!QueryWriteTime(State.m_PresetPath, WriteTime))
 			return;
 
+		// mtime unchanged since the applied preset: skip the full file read + hash.
+		if(State.m_HasAppliedPreset && State.m_HasWriteTime && WriteTime == State.m_LastWriteTime)
+			return;
+
 		size_t PresetHash = 0;
 		if(!QueryPresetFingerprint(State.m_PresetPath, WriteTime, PresetHash))
 			return;

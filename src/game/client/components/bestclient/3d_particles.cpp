@@ -57,22 +57,24 @@ constexpr int HEART_LOW_POINTS = 24;
 constexpr int HEART_LAYERS = 5;
 constexpr float HEART_THICKNESS = 0.35f;
 
-vec3 RotateVec3(const vec3 &V, const vec3 &Rot)
+struct SRotation
 {
-	vec3 R = V;
+	float m_Cx, m_Sx, m_Cy, m_Sy, m_Cz, m_Sz;
+};
 
-	const float Cz = std::cos(Rot.z);
-	const float Sz = std::sin(Rot.z);
-	R = vec3(R.x * Cz - R.y * Sz, R.x * Sz + R.y * Cz, R.z);
+SRotation MakeRotation(const vec3 &Rot)
+{
+	return SRotation{
+		std::cos(Rot.x), std::sin(Rot.x),
+		std::cos(Rot.y), std::sin(Rot.y),
+		std::cos(Rot.z), std::sin(Rot.z)};
+}
 
-	const float Cx = std::cos(Rot.x);
-	const float Sx = std::sin(Rot.x);
-	R = vec3(R.x, R.y * Cx - R.z * Sx, R.y * Sx + R.z * Cx);
-
-	const float Cy = std::cos(Rot.y);
-	const float Sy = std::sin(Rot.y);
-	R = vec3(R.x * Cy + R.z * Sy, R.y, -R.x * Sy + R.z * Cy);
-
+vec3 RotateVec3(const vec3 &V, const SRotation &Rot)
+{
+	vec3 R = vec3(V.x * Rot.m_Cz - V.y * Rot.m_Sz, V.x * Rot.m_Sz + V.y * Rot.m_Cz, V.z);
+	R = vec3(R.x, R.y * Rot.m_Cx - R.z * Rot.m_Sx, R.y * Rot.m_Sx + R.z * Rot.m_Cx);
+	R = vec3(R.x * Rot.m_Cy + R.z * Rot.m_Sy, R.y, -R.x * Rot.m_Sy + R.z * Rot.m_Cy);
 	return R;
 }
 
@@ -593,11 +595,12 @@ void C3DParticles::RenderParticles(float ViewMinX, float ViewMaxX, float ViewMin
 	auto DrawCube = [&](const SParticle &Part, const vec3 &RenderPos, float RenderSize, float FinalAlpha) {
 		Graphics()->SetColor(ColorRGBA(Part.m_Color.r, Part.m_Color.g, Part.m_Color.b, Part.m_Color.a * FinalAlpha));
 
+		const SRotation Rot = MakeRotation(Part.m_Rot);
 		std::array<vec2, g_aCubeVertices.size()> aProjected;
 		for(size_t i = 0; i < g_aCubeVertices.size(); i++)
 		{
 			const vec3 Local = g_aCubeVertices[i] * RenderSize;
-			const vec3 V = RotateVec3(Local, Part.m_Rot) + RenderPos;
+			const vec3 V = RotateVec3(Local, Rot) + RenderPos;
 			aProjected[i] = ProjectPoint(V, GameClient()->m_Camera.m_Center);
 		}
 
@@ -613,6 +616,7 @@ void C3DParticles::RenderParticles(float ViewMinX, float ViewMaxX, float ViewMin
 	auto DrawHeart = [&](const SParticle &Part, const vec3 &RenderPos, float RenderSize, float FinalAlpha) {
 		Graphics()->SetColor(ColorRGBA(Part.m_Color.r, Part.m_Color.g, Part.m_Color.b, Part.m_Color.a * FinalAlpha));
 
+		const SRotation Rot = MakeRotation(Part.m_Rot);
 		const auto &Verts = HeartLowVertices();
 		const float Scale = RenderSize * 0.055f;
 		const float LayerStep = HEART_LAYERS > 1 ? 2.0f / (float)(HEART_LAYERS - 1) : 0.0f;
@@ -627,7 +631,7 @@ void C3DParticles::RenderParticles(float ViewMinX, float ViewMaxX, float ViewMin
 			for(int i = 0; i < HEART_LOW_POINTS; i++)
 			{
 				const vec3 Local = vec3(Verts[i].x * Scale * LayerScale, Verts[i].y * Scale * LayerScale, Z);
-				const vec3 V = RotateVec3(Local, Part.m_Rot) + RenderPos;
+				const vec3 V = RotateVec3(Local, Rot) + RenderPos;
 				aProjected[L][i] = ProjectPoint(V, GameClient()->m_Camera.m_Center);
 			}
 		}
@@ -661,8 +665,8 @@ void C3DParticles::RenderParticles(float ViewMinX, float ViewMaxX, float ViewMin
 		{
 			const int Front = 0;
 			const int Back = HEART_LAYERS - 1;
-			const vec2 CenterFront = ProjectPoint(RotateVec3(vec3(0.0f, 0.0f, aLayerZ[Front]), Part.m_Rot) + RenderPos, GameClient()->m_Camera.m_Center);
-			const vec2 CenterBack = ProjectPoint(RotateVec3(vec3(0.0f, 0.0f, aLayerZ[Back]), Part.m_Rot) + RenderPos, GameClient()->m_Camera.m_Center);
+			const vec2 CenterFront = ProjectPoint(RotateVec3(vec3(0.0f, 0.0f, aLayerZ[Front]), Rot) + RenderPos, GameClient()->m_Camera.m_Center);
+			const vec2 CenterBack = ProjectPoint(RotateVec3(vec3(0.0f, 0.0f, aLayerZ[Back]), Rot) + RenderPos, GameClient()->m_Camera.m_Center);
 			std::array<IGraphics::CLineItem, HEART_LOW_POINTS> aFront;
 			std::array<IGraphics::CLineItem, HEART_LOW_POINTS> aBack;
 			for(int i = 0; i < HEART_LOW_POINTS; i++)
