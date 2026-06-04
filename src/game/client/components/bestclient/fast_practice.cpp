@@ -1297,7 +1297,7 @@ int CFastPractice::ApplyVisualFastInputPrediction(int FinalTickRegular, int Loca
 
 		if(Tick == FinalTickSelf)
 		{
-			GameClient()->m_PredictedWorld.CopyWorldClean(&VisualWorld);
+			// Save prev state BEFORE ticking so interpolation has two distinct positions.
 			GameClient()->m_PrevPredictedWorld.CopyWorldClean(&VisualWorld);
 			GameClient()->m_PredictedPrevChar = pLocalChar->GetCore();
 			GameClient()->m_aClients[LocalClientId].m_PrevPredicted = pLocalChar->GetCore();
@@ -1349,6 +1349,8 @@ int CFastPractice::ApplyVisualFastInputPrediction(int FinalTickRegular, int Loca
 
 		if(Tick == FinalTickSelf)
 		{
+			// Copy world AFTER tick so m_PredictedWorld reflects the current (post-tick) position.
+			GameClient()->m_PredictedWorld.CopyWorldClean(&VisualWorld);
 			GameClient()->m_PredictedChar = pLocalChar->GetCore();
 			GameClient()->m_aClients[LocalClientId].m_Predicted = pLocalChar->GetCore();
 		}
