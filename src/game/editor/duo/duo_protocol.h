@@ -73,6 +73,7 @@ enum EActivity : uint8_t
 	ACTIVITY_SETTINGS = 3,
 	ACTIVITY_TESTING = 4,
 	ACTIVITY_AWAY = 5,
+	ACTIVITY_PICKER = 6,
 };
 
 enum EErrorCode : uint8_t

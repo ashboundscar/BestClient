@@ -743,6 +743,7 @@ void CEditor::DoToolbarLayers(CUIRect ToolBar)
 				case ACTIVITY_SETTINGS: pStatus = "Server settings..."; break;
 				case ACTIVITY_TESTING: pStatus = "Local testing..."; break;
 				case ACTIVITY_AWAY: pStatus = "Left editor..."; break;
+				case ACTIVITY_PICKER: pStatus = "Selecting tileset..."; break;
 				default: break;
 				}
 			}

@@ -167,8 +167,9 @@ void CDuoSession::OnUpdate()
 	int64_t Now = time_get();
 	int64_t Freq = time_freq();
 
-	// Cursor sync at ~30 Hz
-	if(m_State == STATE_LIVE && Now - m_LastCursorSendTime > Freq / 30)
+	// Cursor sync at ~30 Hz — only while actively mapping, so the partner's
+	// cursor disappears when we open a dialog / picker / extra editor.
+	if(m_State == STATE_LIVE && m_LastLocalActivity == ACTIVITY_MAPPING && Now - m_LastCursorSendTime > Freq / 30)
 	{
 		SendCursor(Editor()->m_MouseWorldNoParaPos.x, Editor()->m_MouseWorldNoParaPos.y);
 		m_LastCursorSendTime = Now;
@@ -597,7 +598,9 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		int32_t wy = Reader.ReadS32();
 		m_RemoteCursorX = static_cast<float>(wx) / 1000.0f;
 		m_RemoteCursorY = static_cast<float>(wy) / 1000.0f;
-		m_HasRemoteCursor = true;
+		// Only show the cursor while the partner is actively mapping. A late
+		// cursor relay must not resurrect the cursor we hid on activity change.
+		m_HasRemoteCursor = (m_RemoteActivity == ACTIVITY_MAPPING);
 		break;
 	}
 	case PACKET_TILE_RELAY:
@@ -1442,7 +1445,7 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	{
 		if(Reader.Remaining() < 1) break;
 		uint8_t Act = Reader.ReadU8();
-		if(Act <= ACTIVITY_AWAY)
+		if(Act <= ACTIVITY_PICKER)
 		{
 			EActivity Prev = m_RemoteActivity;
 			m_RemoteActivity = static_cast<EActivity>(Act);
@@ -1456,6 +1459,7 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 				case ACTIVITY_SETTINGS: pMsg = "Partner: server settings"; break;
 				case ACTIVITY_TESTING: pMsg = "Partner: local testing"; break;
 				case ACTIVITY_AWAY: pMsg = "Partner: left editor"; break;
+				case ACTIVITY_PICKER: pMsg = "Partner: selecting tileset"; break;
 				case ACTIVITY_MAPPING: pMsg = "Partner: back to mapping"; break;
 				default: break;
 				}
@@ -2161,7 +2165,9 @@ void CDuoSession::OnBackgroundUpdate()
 	EActivity Current = ACTIVITY_AWAY;
 	if(g_Config.m_ClEditor)
 	{
-		if(Editor()->m_Dialog != DIALOG_NONE)
+		if(Editor()->m_ShowPicker)
+			Current = ACTIVITY_PICKER;
+		else if(Editor()->m_Dialog != DIALOG_NONE)
 			Current = ACTIVITY_DIALOG;
 		else if(Editor()->m_ActiveExtraEditor == CEditor::EXTRAEDITOR_SERVER_SETTINGS)
 			Current = ACTIVITY_SETTINGS;
