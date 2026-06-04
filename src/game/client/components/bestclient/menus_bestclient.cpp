@@ -2849,6 +2849,8 @@ static const SBestClientComponentEntry gs_aBestClientComponentEntries[] = {
 	{CBestClient::COMPONENT_VISUALS_ANIMATIONS, "Animations", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_ASPECT_RATIO, "Aspect Ratio", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_EYE_COMFORT, "Eye Comfort", COMPONENTS_GROUP_VISUALS},
+	{CBestClient::COMPONENT_VISUALS_MOTION_BLUR, "Motion Blur", COMPONENTS_GROUP_VISUALS},
+	{CBestClient::COMPONENT_VISUALS_FLYING_NAMEPLATES, "Flying Nameplates", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_GAMEPLAY_HOOK_COMBO, "Hook Combo", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_GAMEPLAY_INPUT, "Input", COMPONENTS_GROUP_GAMEPLAY},
 	{CBestClient::COMPONENT_GAMEPLAY_FAST_ACTIONS, "Fast Actions", COMPONENTS_GROUP_GAMEPLAY},
@@ -3729,6 +3731,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 
+		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_FLYING_NAMEPLATES))
 		{
 			static CButtonContainer s_FlyingNamePlatesResetButton;
 			const bool ShowFlyingNamePlateSettings = g_Config.m_BcFlyingNamePlates != 0;
@@ -3829,6 +3832,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		Column.HSplitTop(10.0f, nullptr, &Column);
 
 		// Motion blur / frame blend (right column block)
+		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_MOTION_BLUR))
 		{
 			static float s_MotionBlurPhase = 0.0f;
 			static CButtonContainer s_MotionBlurResetButton;
