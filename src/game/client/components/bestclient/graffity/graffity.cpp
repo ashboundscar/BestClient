@@ -113,9 +113,15 @@ namespace
 		LowerHex(aDigest, sizeof(aDigest), pOut, OutSize);
 	}
 
-	const char *ConfiguredGraffityServerAddress()
+	std::string ConfiguredGraffityServerAddress()
 	{
-		return g_Config.m_BcGraffityServerAddress[0] != '\0' ? g_Config.m_BcGraffityServerAddress : DEFAULT_GRAFFITY_SERVER_ADDRESS;
+		std::string Address = g_Config.m_BcGraffityServerAddress;
+		const size_t First = Address.find_first_not_of(" \t\r\n");
+		if(First == std::string::npos)
+			return DEFAULT_GRAFFITY_SERVER_ADDRESS;
+
+		const size_t Last = Address.find_last_not_of(" \t\r\n");
+		return Address.substr(First, Last - First + 1);
 	}
 
 	float EaseInOutQuad(float t)
@@ -672,6 +678,11 @@ void CGraffity::DrainInbound()
 
 void CGraffity::EnsureNetworkConnection()
 {
+	if(!GraffityEnabled())
+	{
+		StopNetwork();
+		return;
+	}
 	if(Client()->State() != IClient::STATE_ONLINE)
 	{
 		StopNetwork();
@@ -749,7 +760,7 @@ void CGraffity::JoinNetworkThreadIfNeeded()
 void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
 {
 	NETADDR ServerAddr;
-	if(!ParseAddress(ConfiguredGraffityServerAddress(), ServerAddr))
+	if(!ParseAddress(ConfiguredGraffityServerAddress().c_str(), ServerAddr))
 	{
 		str_copy(m_aLastError, "Graffity server address is invalid", sizeof(m_aLastError));
 		m_NetworkRunning = false;
