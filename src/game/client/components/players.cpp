@@ -558,6 +558,14 @@ void CPlayers::RenderHook(
 	if(pPlayerChar->m_HookedPlayer != -1 && !GameClient()->m_Snap.m_aCharacters[pPlayerChar->m_HookedPlayer].m_Active)
 		return;
 
+	// in fast practice, hide hooks from non-participants that target a practice participant
+	// (server-side hook to the real tee position looks wrong in the practice world)
+	if(GameClient()->m_FastPractice.Enabled() && !GameClient()->m_Snap.m_SpecInfo.m_Active &&
+		ClientId >= 0 && !GameClient()->m_FastPractice.IsPracticeParticipant(ClientId) &&
+		in_range(pPlayerChar->m_HookedPlayer, MAX_CLIENTS - 1) &&
+		GameClient()->m_FastPractice.IsPracticeParticipant(pPlayerChar->m_HookedPlayer))
+		return;
+
 	if(ClientId >= 0)
 		Intra = GameClient()->m_aClients[ClientId].m_IsPredicted ? Client()->PredIntraGameTick(g_Config.m_ClDummy) : Client()->IntraGameTick(g_Config.m_ClDummy);
 
@@ -586,10 +594,18 @@ void CPlayers::RenderHook(
 
 	if(in_range(pPlayerChar->m_HookedPlayer, MAX_CLIENTS - 1))
 	{
-		HookPos = GameClient()->m_aClients[pPlayerChar->m_HookedPlayer].m_RenderPos;
-		if(g_Config.m_TcSwapGhosts && Client()->State() != IClient::STATE_DEMOPLAYBACK && GameClient()->m_Snap.m_LocalClientId == ClientId)
+		const bool HookedPlayerIsParticipant = GameClient()->m_FastPractice.Enabled() &&
+			GameClient()->m_FastPractice.IsPracticeParticipant(ClientId) &&
+			!GameClient()->m_FastPractice.IsPracticeParticipant(pPlayerChar->m_HookedPlayer);
+		if(HookedPlayerIsParticipant)
+			HookPos = mix(vec2(Prev.m_HookX, Prev.m_HookY), vec2(Player.m_HookX, Player.m_HookY), Intra);
+		else
 		{
-			HookPos = GameClient()->GetSmoothPos(pPlayerChar->m_HookedPlayer);
+			HookPos = GameClient()->m_aClients[pPlayerChar->m_HookedPlayer].m_RenderPos;
+			if(g_Config.m_TcSwapGhosts && Client()->State() != IClient::STATE_DEMOPLAYBACK && GameClient()->m_Snap.m_LocalClientId == ClientId)
+			{
+				HookPos = GameClient()->GetSmoothPos(pPlayerChar->m_HookedPlayer);
+			}
 		}
 	}
 	else
@@ -1063,8 +1079,17 @@ void CPlayers::RenderPlayer(
 		}
 	}
 
-	// render the "shadow" tee
-	if(g_Config.m_ClUnpredictedShadow == 3 || (Local && g_Config.m_ClUnpredictedShadow == 1) || (!Local && g_Config.m_ClUnpredictedShadow == 2))
+	// In fast practice override emote from snap with practice world state.
+	if(ClientId >= 0 && GameClient()->m_FastPractice.Enabled() && GameClient()->m_FastPractice.IsPracticeParticipant(ClientId))
+	{
+		const CGameClient::CClientData &CD = GameClient()->m_aClients[ClientId];
+		const bool PracticeFrozen = CD.m_Predicted.m_FreezeEnd != 0 || CD.m_Predicted.m_LiveFrozen;
+		Player.m_Emote = PracticeFrozen ? EMOTE_PAIN : EMOTE_NORMAL;
+	}
+
+	// render the "shadow" tee — skip for practice participants, their snap position is meaningless
+	const bool IsPracticeParticipant = ClientId >= 0 && GameClient()->m_FastPractice.Enabled() && GameClient()->m_FastPractice.IsPracticeParticipant(ClientId);
+	if(!IsPracticeParticipant && (g_Config.m_ClUnpredictedShadow == 3 || (Local && g_Config.m_ClUnpredictedShadow == 1) || (!Local && g_Config.m_ClUnpredictedShadow == 2)))
 	{
 		vec2 ShadowPosition = Position;
 		if(ClientId >= 0)
@@ -1663,8 +1688,9 @@ void CPlayers::OnRender()
 				aRenderInfo[i].m_TeeRenderFlags |= TEE_EFFECT_SPARKLE;
 
 			Frozen = GameClient()->m_aClients[i].m_Predicted.m_FreezeEnd != 0;
-			// TClient
-			if(g_Config.m_TcFastInput)
+			// TClient: fast input uses RegularPredicted for freeze, but in fast practice
+			// the practice world state must take priority over the real server state.
+			if(g_Config.m_TcFastInput && !GameClient()->m_FastPractice.IsPracticeParticipant(i))
 				Frozen = GameClient()->m_aClients[i].m_RegularPredicted.m_FreezeEnd != 0;
 		}
 		else
