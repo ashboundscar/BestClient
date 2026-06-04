@@ -211,7 +211,7 @@ void CGraffity::ConGraffity(IConsole::IResult *pResult, void *pUserData)
 	if(!Pressed)
 	{
 		if(g_Config.m_BcGraffityHoldWheel)
-			pSelf->CloseWheel();
+			pSelf->ReleaseWheel();
 		return;
 	}
 	if(pSelf->GameClient()->m_Scoreboard.IsActive())
@@ -421,28 +421,9 @@ void CGraffity::OnRender()
 	ClampSelectorMouseToCircle();
 
 	if(m_WheelActive)
-	{
-		m_SelectedIndex = -1;
-		const CUIRect Screen = *Ui()->Screen();
-		bool CursorInOwnedPreview = false;
-		for(const SOwnedPreviewRect &OwnedRect : BuildOwnedPreviewRects(Screen))
-		{
-			if(OwnedRect.m_Rect.Inside(Screen.Center() + m_SelectorMouse))
-			{
-				CursorInOwnedPreview = true;
-				break;
-			}
-		}
-		if(!CursorInOwnedPreview && length(m_SelectorMouse) > WHEEL_SELECT_RADIUS)
-		{
-			const float SelectorAngle = angle(m_SelectorMouse);
-			m_SelectedIndex = PositiveMod(std::round(SelectorAngle / (2.0f * pi) * (float)NUM_GRAFFITIES), NUM_GRAFFITIES);
-		}
-	}
+		m_SelectedIndex = SelectedWheelIndex();
 	else
-	{
 		m_SelectedIndex = -1;
-	}
 
 	float PrevScreenX0, PrevScreenY0, PrevScreenX1, PrevScreenY1;
 	Graphics()->GetScreen(&PrevScreenX0, &PrevScreenY0, &PrevScreenX1, &PrevScreenY1);
@@ -618,6 +599,10 @@ void CGraffity::OpenWheel()
 		GameClient()->Echo("Graffiti: disabled on localhost servers");
 		return;
 	}
+	if(m_PlacementActive)
+		CancelPlacement();
+	if(m_WheelActive)
+		return;
 
 	GameClient()->m_Emoticon.OnRelease();
 	GameClient()->m_BindWheel.OnRelease();
@@ -647,6 +632,38 @@ void CGraffity::CloseWheel()
 {
 	m_WheelActive = false;
 	m_SelectedIndex = -1;
+}
+
+void CGraffity::ReleaseWheel()
+{
+	if(!m_WheelActive)
+		return;
+
+	const int SelectedIndex = SelectedWheelIndex();
+	if(SelectedIndex >= 0 && SelectedIndex < NUM_GRAFFITIES && GraffityEnabled())
+	{
+		BeginPlacement(SelectedIndex);
+		return;
+	}
+
+	CloseWheel();
+}
+
+int CGraffity::SelectedWheelIndex() const
+{
+	const CUIRect Screen = *Ui()->Screen();
+	const vec2 CursorPos = Screen.Center() + m_SelectorMouse;
+	for(const SOwnedPreviewRect &OwnedRect : BuildOwnedPreviewRects(Screen))
+	{
+		if(OwnedRect.m_Rect.Inside(CursorPos))
+			return -1;
+	}
+
+	if(length(m_SelectorMouse) <= WHEEL_SELECT_RADIUS)
+		return -1;
+
+	const float SelectorAngle = angle(m_SelectorMouse);
+	return (int)PositiveMod(std::round(SelectorAngle / (2.0f * pi) * (float)NUM_GRAFFITIES), (float)NUM_GRAFFITIES);
 }
 
 void CGraffity::ClampSelectorMouseToCircle()

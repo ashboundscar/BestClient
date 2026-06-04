@@ -101,6 +101,8 @@ private:
 	void OpenWheel();
 	void ToggleWheel();
 	void CloseWheel();
+	void ReleaseWheel();
+	int SelectedWheelIndex() const;
 	void ClampSelectorMouseToCircle();
 	void CancelPlacement();
 	void BeginPlacement(int Index);
