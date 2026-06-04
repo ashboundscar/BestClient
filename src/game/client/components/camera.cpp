@@ -44,12 +44,6 @@ CCamera::CCamera()
 	m_DyncamTargetCameraOffset = vec2(0, 0);
 	std::fill(std::begin(m_aDyncamCurrentCameraOffset), std::end(m_aDyncamCurrentCameraOffset), vec2(0.0f, 0.0f));
 	m_DyncamSmoothingSpeedBias = 0.5f;
-	m_DriftTargetOffset = vec2(0.0f, 0.0f);
-	m_DriftCurrentOffset = vec2(0.0f, 0.0f);
-	m_DynamicFovTarget = 1.0f;
-	m_DynamicFovCurrent = 1.0f;
-	m_DynamicFovAppliedFactor = 1.0f;
-
 	m_AutoSpecCamera = true;
 	m_AutoSpecCameraZooming = false;
 	m_CanUseCameraInfo = false;
@@ -122,12 +116,6 @@ void CCamera::ResetAutoSpecCamera()
 
 void CCamera::UpdateCamera()
 {
-	if(m_DynamicFovAppliedFactor != 1.0f)
-	{
-		m_Zoom /= m_DynamicFovAppliedFactor;
-		m_DynamicFovAppliedFactor = 1.0f;
-	}
-
 	// use hardcoded smooth camera for spectating unless player explicitly turn it off
 	bool CanUseCameraInfo = !GameClient()->m_MultiViewActivated;
 	if(Client()->State() == IClient::STATE_DEMOPLAYBACK)
@@ -328,100 +316,6 @@ void CCamera::UpdateCamera()
 			pDemoTrackedPrevCharacter = &GameClient()->m_Snap.m_aCharacters[TrackedClientId].m_Prev;
 		}
 	}
-	if(g_Config.m_BcCameraDrift &&
-		!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_CAMERA_DRIFT) &&
-		!IsBlockedCameraServer &&
-		(!GameClient()->m_Snap.m_SpecInfo.m_Active || IsDemoPlayback))
-	{
-		vec2 PlayerVel = vec2(0.0f, 0.0f);
-		bool HasDriftVelocity = false;
-
-		if(IsDemoPlayback)
-		{
-			if(pDemoTrackedCharacter)
-			{
-				const vec2 CurVel = vec2(pDemoTrackedCharacter->m_VelX / 256.0f, 0.0f);
-				const vec2 PrevVel = pDemoTrackedPrevCharacter ? vec2(pDemoTrackedPrevCharacter->m_VelX / 256.0f, 0.0f) : CurVel;
-				PlayerVel = mix(PrevVel, CurVel, Client()->IntraGameTick(g_Config.m_ClDummy));
-				HasDriftVelocity = true;
-			}
-		}
-		else
-		{
-			// Use predicted velocity so camera drift follows local simulation (e.g. fast practice),
-			// not delayed server snapshots.
-			PlayerVel = vec2(GameClient()->m_PredictedChar.m_Vel.x, 0.0f);
-			HasDriftVelocity = true;
-		}
-
-		if(HasDriftVelocity)
-		{
-			vec2 DriftDirection = normalize(PlayerVel);
-			if(g_Config.m_BcCameraDriftReverse)
-			{
-				DriftDirection *= -1.0f;
-			}
-
-			float VelocityFactor = length(PlayerVel);
-			float DriftMultiplier = 1.0f + (VelocityFactor / 10.0f);
-			float DriftAmount = VelocityFactor * (g_Config.m_BcCameraDriftAmount / 50.0f) * DriftMultiplier;
-
-			m_DriftTargetOffset = DriftDirection * DriftAmount;
-
-			if(g_Config.m_BcCameraDriftSmoothness > 0)
-			{
-				float SmoothFactor = (1.0f - (g_Config.m_BcCameraDriftSmoothness / 100.0f)) * 10.0f;
-				m_DriftCurrentOffset += (m_DriftTargetOffset - m_DriftCurrentOffset) * minimum(DeltaTime * SmoothFactor, 1.0f);
-			}
-			else
-			{
-				m_DriftCurrentOffset = m_DriftTargetOffset;
-			}
-
-			m_aDyncamCurrentCameraOffset[g_Config.m_ClDummy] += m_DriftCurrentOffset;
-		}
-	}
-
-	const bool DynamicFovActive = g_Config.m_BcDynamicFov &&
-				      !GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_DYNAMIC_FOV) &&
-				      !IsBlockedCameraServer &&
-				      (!GameClient()->m_Snap.m_SpecInfo.m_Active || (IsDemoPlayback && pDemoTrackedCharacter != nullptr));
-	m_DynamicFovTarget = 1.0f;
-	if(DynamicFovActive)
-	{
-		vec2 PlayerVel;
-		if(IsDemoPlayback && pDemoTrackedCharacter != nullptr)
-		{
-			const vec2 CurVel = vec2(pDemoTrackedCharacter->m_VelX / 256.0f, pDemoTrackedCharacter->m_VelY / 256.0f);
-			const vec2 PrevVel = pDemoTrackedPrevCharacter ? vec2(pDemoTrackedPrevCharacter->m_VelX / 256.0f, pDemoTrackedPrevCharacter->m_VelY / 256.0f) : CurVel;
-			PlayerVel = mix(PrevVel, CurVel, Client()->IntraGameTick(g_Config.m_ClDummy));
-		}
-		else
-		{
-			PlayerVel = GameClient()->m_PredictedChar.m_Vel;
-		}
-		float VelocityFactor = length(PlayerVel);
-		float DynamicFovMultiplier = 1.0f + (VelocityFactor / 10.0f);
-		float DynamicFovAmount = VelocityFactor * (g_Config.m_BcDynamicFovAmount / 50.0f) * DynamicFovMultiplier;
-
-		// Convert drift-like amount to a zoom multiplier for a stable FOV increase.
-		m_DynamicFovTarget = std::clamp(1.0f + DynamicFovAmount / 500.0f, 1.0f, 5.0f);
-	}
-
-	if(DynamicFovActive && g_Config.m_BcDynamicFovSmoothness > 0)
-	{
-		// Extended smoothness range: at max (100) gives very smooth transitions
-		float SmoothFactor = (1.0f - (g_Config.m_BcDynamicFovSmoothness / 100.0f)) * 15.0f + 0.5f;
-		m_DynamicFovCurrent += (m_DynamicFovTarget - m_DynamicFovCurrent) * minimum(DeltaTime * SmoothFactor, 1.0f);
-	}
-	else
-	{
-		m_DynamicFovCurrent = m_DynamicFovTarget;
-	}
-
-	m_DynamicFovCurrent = maximum(1.0f, m_DynamicFovCurrent);
-	m_Zoom *= m_DynamicFovCurrent;
-	m_DynamicFovAppliedFactor = m_DynamicFovCurrent;
 }
 
 void CCamera::OnRender()
@@ -601,11 +495,6 @@ void CCamera::OnConsoleInit()
 void CCamera::OnReset()
 {
 	m_CameraSmoothing = false;
-	m_DriftTargetOffset = vec2(0.0f, 0.0f);
-	m_DriftCurrentOffset = vec2(0.0f, 0.0f);
-	m_DynamicFovTarget = 1.0f;
-	m_DynamicFovCurrent = 1.0f;
-	m_DynamicFovAppliedFactor = 1.0f;
 
 	m_Zoom = CCamera::ZoomStepsToValue(g_Config.m_ClDefaultZoom - 10);
 	m_Zooming = false;

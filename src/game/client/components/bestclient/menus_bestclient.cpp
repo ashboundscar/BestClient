@@ -2837,10 +2837,8 @@ struct SBestClientComponentEntry
 };
 
 static const SBestClientComponentEntry gs_aBestClientComponentEntries[] = {
-	{CBestClient::COMPONENT_VISUALS_CAMERA_DRIFT, "Camera Drift", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_JELLY_TEE, "Jelly Tee", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_3D_PARTICLES, "3D Particles", COMPONENTS_GROUP_VISUALS},
-	{CBestClient::COMPONENT_VISUALS_DYNAMIC_FOV, "Dynamic FOV", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_AFTERIMAGE, "Afterimage", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_GRAFFITI, "Graffiti", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_MUSIC_PLAYER, "Music Player", COMPONENTS_GROUP_VISUALS},
@@ -4321,137 +4319,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
 
-		// Camera Drift (right column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_CAMERA_DRIFT))
-		{
-			static float s_CameraDriftPhase = 0.0f;
-			static CButtonContainer s_CameraDriftResetButton;
-			const bool CameraDriftEnabled = g_Config.m_BcCameraDrift != 0;
-			UpdateRevealPhase(s_CameraDriftPhase, CameraDriftEnabled);
-			const float ExtraTargetHeight = 3.0f * LineSize;
-			const float BlockedHintHeight = IsBlockedCameraServer ? (MarginSmall + LineSize) : 0.0f;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_CameraDriftPhase + BlockedHintHeight;
-			CUIRect Content, Label, Row, Visible;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
-			ResetHitbox = ResetButton;
-			const bool CameraDriftResetClicked = Ui()->DoButton_FontIcon(&s_CameraDriftResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(&s_CameraDriftResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
-			if(CameraDriftResetClicked)
-			{
-				g_Config.m_BcCameraDriftAmount = DefaultConfig::BcCameraDriftAmount;
-				g_Config.m_BcCameraDriftSmoothness = DefaultConfig::BcCameraDriftSmoothness;
-				g_Config.m_BcCameraDriftReverse = DefaultConfig::BcCameraDriftReverse;
-			}
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Camera Drift"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcCameraDrift, BCLocalize("Camera Drift"), &g_Config.m_BcCameraDrift, &Content, LineSize);
-
-			const float ExtraHeight = ExtraTargetHeight * s_CameraDriftPhase;
-			if(!CameraDriftResetClicked && ExtraHeight > 0.0f)
-			{
-				Content.HSplitTop(ExtraHeight, &Visible, &Content);
-				Ui()->ClipEnable(&Visible);
-				struct SScopedClip
-				{
-					CUi *m_pUi;
-					~SScopedClip() { m_pUi->ClipDisable(); }
-				} ClipGuard{Ui()};
-
-				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExtraTargetHeight};
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcCameraDriftAmount, &g_Config.m_BcCameraDriftAmount, &Row, BCLocalize("Camera drift amount"), 1, 200);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcCameraDriftSmoothness, &g_Config.m_BcCameraDriftSmoothness, &Row, BCLocalize("Camera drift smoothness"), 1, 20);
-
-				CUIRect DirectionLabel, DirectionButtons, DirectionForward, DirectionBackward;
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Row.VSplitLeft(150.0f, &DirectionLabel, &DirectionButtons);
-				Ui()->DoLabel(&DirectionLabel, BCLocalize("Drift direction"), 14.0f, TEXTALIGN_ML);
-				DirectionButtons.VSplitMid(&DirectionForward, &DirectionBackward, MarginSmall);
-
-				static int s_CameraDriftForwardButton = 0;
-				static int s_CameraDriftBackwardButton = 0;
-				if(DoButton_CheckBox(&s_CameraDriftForwardButton, BCLocalize("Forward"), !g_Config.m_BcCameraDriftReverse, &DirectionForward))
-					g_Config.m_BcCameraDriftReverse = 0;
-				if(DoButton_CheckBox(&s_CameraDriftBackwardButton, BCLocalize("Backward"), g_Config.m_BcCameraDriftReverse, &DirectionBackward))
-					g_Config.m_BcCameraDriftReverse = 1;
-			}
-			if(IsBlockedCameraServer)
-			{
-				Content.HSplitTop(MarginSmall, nullptr, &Content);
-				Content.HSplitTop(LineSize, &Label, &Content);
-				TextRender()->TextColor(1.0f, 0.4f, 0.4f, 1.0f);
-				Ui()->DoLabel(&Label, BCLocalize("Looks like you're on a server where this feature is forbidden"), 14.0f, TEXTALIGN_ML);
-				TextRender()->TextColor(TextRender()->DefaultTextColor());
-			}
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
-
 		// Dynamic FOV (right column block)
-		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_DYNAMIC_FOV))
-		{
-			static float s_DynamicFovPhase = 0.0f;
-			static CButtonContainer s_DynamicFovResetButton;
-			const bool DynamicFovEnabled = g_Config.m_BcDynamicFov != 0;
-			UpdateRevealPhase(s_DynamicFovPhase, DynamicFovEnabled);
-			const float ExtraTargetHeight = 2.0f * LineSize;
-			const float BlockedHintHeight = IsBlockedCameraServer ? (MarginSmall + LineSize) : 0.0f;
-			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_DynamicFovPhase + BlockedHintHeight;
-			CUIRect Content, Label, Row, Visible;
-			BeginBlock(Column, ContentHeight, Content);
-
-			Content.HSplitTop(LineSize, &Label, &Content);
-			CUIRect TitleLabel, ResetButton, ResetHitbox;
-			Label.VSplitRight(LineSize + 8.0f, &TitleLabel, &ResetButton);
-			ResetHitbox = ResetButton;
-			const bool DynamicFovResetClicked = Ui()->DoButton_FontIcon(&s_DynamicFovResetButton, FontIcon::ARROW_ROTATE_LEFT, 0, &ResetHitbox, BUTTONFLAG_LEFT);
-			GameClient()->m_Tooltips.DoToolTip(&s_DynamicFovResetButton, &ResetHitbox, BCLocalize("Reset to defaults"));
-			if(DynamicFovResetClicked)
-			{
-				g_Config.m_BcDynamicFovAmount = DefaultConfig::BcDynamicFovAmount;
-				g_Config.m_BcDynamicFovSmoothness = DefaultConfig::BcDynamicFovSmoothness;
-			}
-			Ui()->DoLabel(&TitleLabel, BCLocalize("Dynamic FOV"), HeadlineFontSize, TEXTALIGN_ML);
-			Content.HSplitTop(MarginSmall, nullptr, &Content);
-
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcDynamicFov, BCLocalize("Dynamic FOV"), &g_Config.m_BcDynamicFov, &Content, LineSize);
-
-			const float ExtraHeight = ExtraTargetHeight * s_DynamicFovPhase;
-			if(!DynamicFovResetClicked && ExtraHeight > 0.0f)
-			{
-				Content.HSplitTop(ExtraHeight, &Visible, &Content);
-				Ui()->ClipEnable(&Visible);
-				struct SScopedClip
-				{
-					CUi *m_pUi;
-					~SScopedClip() { m_pUi->ClipDisable(); }
-				} ClipGuard{Ui()};
-
-				CUIRect Expand = {Visible.x, Visible.y, Visible.w, ExtraTargetHeight};
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcDynamicFovAmount, &g_Config.m_BcDynamicFovAmount, &Row, BCLocalize("Dynamic FOV amount"), 1, 200);
-
-				Expand.HSplitTop(LineSize, &Row, &Expand);
-				Ui()->DoScrollbarOption(&g_Config.m_BcDynamicFovSmoothness, &g_Config.m_BcDynamicFovSmoothness, &Row, BCLocalize("Dynamic FOV smoothness"), 1, 100);
-			}
-			if(IsBlockedCameraServer)
-			{
-				Content.HSplitTop(MarginSmall, nullptr, &Content);
-				Content.HSplitTop(LineSize, &Label, &Content);
-				TextRender()->TextColor(1.0f, 0.4f, 0.4f, 1.0f);
-				Ui()->DoLabel(&Label, BCLocalize("Looks like you're on a server where this feature is forbidden"), 14.0f, TEXTALIGN_ML);
-				TextRender()->TextColor(TextRender()->DefaultTextColor());
-			}
-			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
-		}
 
 		// Aspect ratio (right column block)
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_ASPECT_RATIO))

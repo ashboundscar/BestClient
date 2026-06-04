@@ -59,11 +59,6 @@ private:
 
 	char m_aAutoSpecCameraTooltip[512];
 
-	vec2 m_DriftTargetOffset;
-	vec2 m_DriftCurrentOffset;
-	float m_DynamicFovTarget;
-	float m_DynamicFovCurrent;
-	float m_DynamicFovAppliedFactor;
 	bool m_CinematicCameraSmoothing;
 	vec2 m_CinematicCameraPosition;
 
