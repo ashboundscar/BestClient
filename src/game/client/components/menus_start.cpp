@@ -199,10 +199,24 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	Menu.HSplitBottom(5.0f, &Menu, nullptr);
 	Menu.HSplitBottom(40.0f, &Menu, &Button);
 	static CButtonContainer s_MapEditorButton;
+	const CUIRect EditorButton = Button;
 	if(GameClient()->m_Menus.DoButton_MenuEx(&s_MapEditorButton, Localize("Editor"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "editor" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, GameClient()->Editor()->HasUnsavedData() ? ColorRGBA(0.0f, 1.0f, 0.0f, 0.25f) : ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || CheckHotKey(KEY_E))
 	{
 		g_Config.m_ClEditor = 1;
 		Input()->MouseModeRelative();
+	}
+
+	// "DUO MAPPING" badge in the editor button's top-left corner
+	{
+		CUIRect Badge = EditorButton;
+		Badge.VSplitLeft(90.0f, &Badge, nullptr);
+		Badge.HSplitTop(16.0f, &Badge, nullptr);
+		Badge.Margin(3.0f, &Badge);
+		Graphics()->DrawRect4(Badge.x, Badge.y, Badge.w, Badge.h,
+			ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), ColorRGBA(0.42f, 0.10f, 0.78f, 1.0f),
+			ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), ColorRGBA(0.42f, 0.10f, 0.78f, 1.0f),
+			IGraphics::CORNER_ALL, 4.0f);
+		Ui()->DoLabel(&Badge, "DUO MAPPING", 8.0f, TEXTALIGN_MC);
 	}
 
 	Menu.HSplitBottom(5.0f, &Menu, nullptr);

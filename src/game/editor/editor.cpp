@@ -4391,9 +4391,9 @@ void CEditor::RenderStatusbar(CUIRect View, CUIRect *pTooltipRect)
 	{
 		// highlight button when session is active
 		static SPopupMenuId s_DuoPopupId;
-		int Color = m_DuoSession.IsLive() ? 1 : (m_DuoSession.m_State == CDuoSession::STATE_WAITING || m_DuoSession.m_State == CDuoSession::STATE_CONNECTING ? 0 : 0);
+		int Checked = m_DuoSession.IsLive() ? 1 : 0;
 		static int s_DuoButton = 0;
-		if(DoButton_Editor(&s_DuoButton, "Duo Mapping", Color, &Button, BUTTONFLAG_LEFT, "Collaborate on a map in real-time."))
+		if(DoButton_Env(&s_DuoButton, "Duo Mapping", Checked, &Button, "Collaborate on a map in real-time.", ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), IGraphics::CORNER_ALL))
 		{
 			Ui()->DoPopupMenu(&s_DuoPopupId, Button.x, Button.y - 128.0f, 220.0f, 126.0f, this, CDuoSession::PopupDuo);
 		}
