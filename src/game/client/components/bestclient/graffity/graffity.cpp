@@ -41,7 +41,6 @@ namespace
 	constexpr float WHEEL_CIRCLE_RADIUS = 138.0f;
 	constexpr float GRAFFITY_FADE_IN_TIME = 0.18f;
 	constexpr int DEFAULT_GRAFFITY_SERVER_PORT = 8781;
-	constexpr const char *DEFAULT_GRAFFITY_SERVER_ADDRESS = BC_GRAFFITY_SERVER_ADDRESS_DEFAULT;
 	constexpr int GRAFFITY_AUTH_KEY_SIZE = 32;
 	constexpr int GRAFFITY_AUTH_HEX_SIZE = SHA256_DIGEST_LENGTH * 2 + 1;
 	const uint8_t s_aGraffityAuthKeyObfuscated[GRAFFITY_AUTH_KEY_SIZE] = {
@@ -51,6 +50,11 @@ namespace
 		0x33, 0x20, 0x29, 0x35, 0x29, 0x69, 0x0a, 0x0b,
 	};
 	constexpr uint8_t GRAFFITY_AUTH_XOR_KEY = 0x5A;
+	constexpr uint8_t GRAFFITY_SERVER_ADDRESS_XOR_KEY = 0x4B;
+	const uint8_t s_aGraffityServerAddressObfuscated[] = {
+		0x7a, 0x72, 0x78, 0x65, 0x79, 0x78, 0x65, 0x79, 0x7b, 0x7a,
+		0x65, 0x7a, 0x79, 0x7e, 0x71, 0x73, 0x7c, 0x73, 0x7a,
+	};
 
 	void DeobfuscateGraffityAuthKey(uint8_t *pOut)
 	{
@@ -113,12 +117,21 @@ namespace
 		LowerHex(aDigest, sizeof(aDigest), pOut, OutSize);
 	}
 
+	std::string DefaultGraffityServerAddress()
+	{
+		char aAddress[sizeof(s_aGraffityServerAddressObfuscated) + 1];
+		for(int i = 0; i < (int)sizeof(s_aGraffityServerAddressObfuscated); ++i)
+			aAddress[i] = s_aGraffityServerAddressObfuscated[i] ^ GRAFFITY_SERVER_ADDRESS_XOR_KEY;
+		aAddress[sizeof(s_aGraffityServerAddressObfuscated)] = '\0';
+		return aAddress;
+	}
+
 	std::string ConfiguredGraffityServerAddress()
 	{
 		std::string Address = g_Config.m_BcGraffityServerAddress;
 		const size_t First = Address.find_first_not_of(" \t\r\n");
 		if(First == std::string::npos)
-			return DEFAULT_GRAFFITY_SERVER_ADDRESS;
+			return DefaultGraffityServerAddress();
 
 		const size_t Last = Address.find_last_not_of(" \t\r\n");
 		return Address.substr(First, Last - First + 1);

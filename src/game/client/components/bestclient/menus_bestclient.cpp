@@ -3556,11 +3556,9 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			const bool GraffityExpanded = g_Config.m_BcGraffityEnabled != 0;
 			UpdateRevealPhase(s_GraffityPhase, GraffityExpanded);
 			const float KeyReaderLineSize = LineSize;
-			const float GraffityLabelFontSize = 12.0f;
-			const float GraffityEditBoxFontSize = 10.0f;
-			const float ExtraTargetHeight = MarginSmall + LineSize * 4.0f + KeyReaderLineSize + MarginSmall * 4.0f + LineSize;
+			const float ExtraTargetHeight = LineSize * 3.0f + KeyReaderLineSize + MarginSmall * 4.0f;
 			const float ContentHeight = LineSize + MarginSmall + LineSize + ExtraTargetHeight * s_GraffityPhase;
-			CUIRect Content, Label, Button, Row, Visible;
+			CUIRect Content, Label, Row, Visible;
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
@@ -3618,15 +3616,6 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 				static CButtonContainer s_GraffityReaderButton;
 				static CButtonContainer s_GraffityClearButton;
 				DoLine_KeyReader(Label, s_GraffityReaderButton, s_GraffityClearButton, BCLocalize("Graffiti wheel key"), "+graffity");
-
-				Expand.HSplitTop(MarginSmall, nullptr, &Expand);
-				Expand.HSplitTop(LineSize, &Button, &Expand);
-				Button.VSplitLeft(150.0f, &Label, &Button);
-				Ui()->DoLabel(&Label, BCLocalize("Server address:"), GraffityLabelFontSize, TEXTALIGN_ML);
-				static CLineInput s_GraffityServerAddressInput;
-				s_GraffityServerAddressInput.SetBuffer(g_Config.m_BcGraffityServerAddress, sizeof(g_Config.m_BcGraffityServerAddress));
-				s_GraffityServerAddressInput.SetEmptyText(BCLocalize("host:port"));
-				Ui()->DoEditBox(&s_GraffityServerAddressInput, &Button, GraffityEditBoxFontSize);
 			}
 
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
