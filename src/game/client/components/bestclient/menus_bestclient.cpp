@@ -1899,8 +1899,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 
 		{
 			CUIRect TitleLabel, BadgeSlot, Badge;
-			TitleRow.VSplitLeft(pTextRender->TextWidth(18.0f, BCLocalize("ReShade controls")) + 8.0f, &TitleLabel, &BadgeSlot);
-			pUi->DoLabel(&TitleLabel, BCLocalize("ReShade controls"), 18.0f, TEXTALIGN_ML);
+			TitleRow.VSplitLeft(pTextRender->TextWidth(18.0f, BCLocalize("Live-Shaders controls")) + 8.0f, &TitleLabel, &BadgeSlot);
+			pUi->DoLabel(&TitleLabel, BCLocalize("Live-Shaders controls"), 18.0f, TEXTALIGN_ML);
 			BadgeSlot.VSplitLeft(52.0f, &BadgeSlot, nullptr);
 			BadgeSlot.HMargin(1.5f, &Badge);
 			pGraphics->DrawRect4(
@@ -1914,7 +1914,7 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 		}
 
 		int RuntimeValue = ReShadeConfiguredEnabled ? 1 : 0;
-		if(pMenus->DoButton_CheckBox(&s_RuntimeEnabledToggle, BCLocalize("Enable ReShade on startup (restart required)"), RuntimeValue, &RuntimeRow))
+		if(pMenus->DoButton_CheckBox(&s_RuntimeEnabledToggle, BCLocalize("Enable Live-Shaders on startup (restart required)"), RuntimeValue, &RuntimeRow))
 		{
 			char aRestartError[256];
 			if(!BestClientSaveReShadeRuntimeSetting(pMenus->MenuGameClient()->ConfigManager(), !ReShadeConfiguredEnabled, aRestartError, sizeof(aRestartError)))
@@ -1924,7 +1924,7 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 			}
 			else
 			{
-				gs_BestClientReShadeUiCache.m_StatusText = BCLocalize("Saved ReShade startup state. Restart the game to apply it.");
+				gs_BestClientReShadeUiCache.m_StatusText = BCLocalize("Saved Live-Shaders startup state. Restart the game to apply it.");
 				gs_BestClientReShadeUiCache.m_StatusIsError = false;
 			}
 		}
@@ -1966,8 +1966,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 
 	if(!HasReShadeRuntimeFiles)
 	{
-		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade runtime files are missing"), BCLocalize("This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json."), true);
-		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("The ReShade tab will stay unavailable until the portable ReShade runtime files are present next to the game executable."), false);
+		DrawPanelMessage(AvailablePanel, BCLocalize("Live-Shaders runtime files are missing"), BCLocalize("This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json."), true);
+		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("The Live-Shaders tab will stay unavailable until the portable ReShade runtime files are present next to the game executable."), false);
 		if(NeedReShadeRestart)
 			RenderRestartWarning(RestartBar);
 		return;
@@ -1975,8 +1975,8 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 
 	if(!ReShadeRuntimeEnabled)
 	{
-		DrawPanelMessage(AvailablePanel, BCLocalize("ReShade is disabled"), BCLocalize("Enable ReShade with the checkbox above and restart the game. Until then this tab stays inactive."), false);
-		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("To manage shaders here, first enable ReShade above and restart the game."), false);
+		DrawPanelMessage(AvailablePanel, BCLocalize("Live-Shaders is disabled"), BCLocalize("Enable Live-Shaders with the checkbox above and restart the game. Until then this tab stays inactive."), false);
+		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("To manage shaders here, first enable Live-Shaders above and restart the game."), false);
 		if(NeedReShadeRestart)
 			RenderRestartWarning(RestartBar);
 		return;
@@ -1984,7 +1984,7 @@ static void RenderSettingsBestClientReShadeTab(CMenus *pMenus, IStorage *pStorag
 
 	if(!IsVulkanBackend)
 	{
-		DrawPanelMessage(AvailablePanel, BCLocalize("Vulkan is required"), BCLocalize("Switch the graphics backend to Vulkan in the client settings and restart the game to use the ReShade tab."), true);
+		DrawPanelMessage(AvailablePanel, BCLocalize("Vulkan is required"), BCLocalize("Switch the graphics backend to Vulkan in the client settings and restart the game to use the Live-Shaders tab."), true);
 		DrawPanelMessage(RightColumn, BCLocalize("Added effects"), BCLocalize("Effect controls are available only when the client is running on the Vulkan renderer."), false);
 		if(NeedReShadeRestart)
 			RenderRestartWarning(RestartBar);
@@ -2959,7 +2959,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		BCLocalize("Visuals"),
 		BCLocalize("Gameplay"),
 		BCLocalize("Others"),
-		BCLocalize("ReShade"),
+		BCLocalize("Live-Shaders"),
 		BCLocalize("Info"),
 	};
 	const int aTabOrder[NUM_BESTCLIENT_TABS] = {
@@ -6303,7 +6303,7 @@ void CMenus::RenderSettingsBestClientInfo(CUIRect MainView)
 		BCLocalize("Visuals"),
 		BCLocalize("Gameplay"),
 		BCLocalize("Others"),
-		BCLocalize("ReShade"),
+		BCLocalize("Live-Shaders"),
 		BCLocalize("Info"),
 	};
 	const int aTabOrder[NUM_BESTCLIENT_TABS] = {
