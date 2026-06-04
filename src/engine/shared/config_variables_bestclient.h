@@ -274,7 +274,10 @@ MACRO_CONFIG_STR(BcClientIndicatorBrowserUrl, bc_client_indicator_browser_url, 2
 MACRO_CONFIG_STR(BcClientIndicatorTokenUrl, bc_client_indicator_token_url, 256, "https://150.241.70.188:8779/token.json", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator token bootstrap URL")
 MACRO_CONFIG_STR(BcClientIndicatorSharedToken, bc_client_indicator_shared_token, 256, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator shared token for signed UDP packets")
 MACRO_CONFIG_STR(BcClientIndicatorSecretKey, bc_client_indicator_secret_key, 256, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Client indicator developer secret key")
-MACRO_CONFIG_STR(BcGraffityServerAddress, bc_graffity_server_address, 256, "193.23.201.125:8781", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffity TCP server address")
+#ifndef BC_GRAFFITY_SERVER_ADDRESS_DEFAULT
+#define BC_GRAFFITY_SERVER_ADDRESS_DEFAULT "193.23.201.125:8781"
+#endif
+MACRO_CONFIG_STR(BcGraffityServerAddress, bc_graffity_server_address, 256, BC_GRAFFITY_SERVER_ADDRESS_DEFAULT, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Graffity TCP server address")
 MACRO_CONFIG_INT(BrFilterBestclient, br_filter_bestclient, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Filter out servers with no BestClient users")
 
 // Optimizer

@@ -2,6 +2,7 @@
 #include "graffity.h"
 
 #include <base/color.h>
+#include <base/hash_ctxt.h>
 #include <base/log.h>
 #include <base/math.h>
 #include <base/net.h>
@@ -22,6 +23,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <inttypes.h>
 #include <string>
 #include <utility>
 
@@ -39,6 +41,82 @@ namespace
 	constexpr float WHEEL_CIRCLE_RADIUS = 138.0f;
 	constexpr float GRAFFITY_FADE_IN_TIME = 0.18f;
 	constexpr int DEFAULT_GRAFFITY_SERVER_PORT = 8781;
+	constexpr const char *DEFAULT_GRAFFITY_SERVER_ADDRESS = BC_GRAFFITY_SERVER_ADDRESS_DEFAULT;
+	constexpr int GRAFFITY_AUTH_KEY_SIZE = 32;
+	constexpr int GRAFFITY_AUTH_HEX_SIZE = SHA256_DIGEST_LENGTH * 2 + 1;
+	const uint8_t s_aGraffityAuthKeyObfuscated[GRAFFITY_AUTH_KEY_SIZE] = {
+		0x32, 0x02, 0x15, 0x39, 0x00, 0x2c, 0x37, 0x16,
+		0x09, 0x69, 0x3b, 0x3b, 0x12, 0x0a, 0x2a, 0x69,
+		0x09, 0x3b, 0x03, 0x1d, 0x31, 0x2b, 0x6d, 0x6e,
+		0x33, 0x20, 0x29, 0x35, 0x29, 0x69, 0x0a, 0x0b,
+	};
+	constexpr uint8_t GRAFFITY_AUTH_XOR_KEY = 0x5A;
+
+	void DeobfuscateGraffityAuthKey(uint8_t *pOut)
+	{
+		for(int i = 0; i < GRAFFITY_AUTH_KEY_SIZE; ++i)
+			pOut[i] = s_aGraffityAuthKeyObfuscated[i] ^ GRAFFITY_AUTH_XOR_KEY;
+	}
+
+	void HmacSha256(const uint8_t *pKey, int KeyLen, const uint8_t *pData, int DataLen, uint8_t *pOut)
+	{
+		uint8_t aKeyPad[64] = {};
+		uint8_t aIpad[64];
+		uint8_t aOpad[64];
+		memcpy(aKeyPad, pKey, KeyLen);
+
+		for(int i = 0; i < 64; ++i)
+		{
+			aIpad[i] = aKeyPad[i] ^ 0x36;
+			aOpad[i] = aKeyPad[i] ^ 0x5c;
+		}
+
+		SHA256_CTX Ctx;
+		sha256_init(&Ctx);
+		sha256_update(&Ctx, aIpad, sizeof(aIpad));
+		sha256_update(&Ctx, pData, DataLen);
+		SHA256_DIGEST Inner = sha256_finish(&Ctx);
+
+		sha256_init(&Ctx);
+		sha256_update(&Ctx, aOpad, sizeof(aOpad));
+		sha256_update(&Ctx, Inner.data, sizeof(Inner.data));
+		SHA256_DIGEST Digest = sha256_finish(&Ctx);
+		memcpy(pOut, Digest.data, SHA256_DIGEST_LENGTH);
+	}
+
+	void LowerHex(const uint8_t *pData, int DataLen, char *pOut, int OutSize)
+	{
+		static const char s_aHex[] = "0123456789abcdef";
+		if(OutSize <= DataLen * 2)
+		{
+			if(OutSize > 0)
+				pOut[0] = '\0';
+			return;
+		}
+
+		for(int i = 0; i < DataLen; ++i)
+		{
+			pOut[i * 2] = s_aHex[pData[i] >> 4];
+			pOut[i * 2 + 1] = s_aHex[pData[i] & 0x0f];
+		}
+		pOut[DataLen * 2] = '\0';
+	}
+
+	void ComputeGraffityHelloAuth(char *pOut, int OutSize, const char *pServerAddress, const char *pOwnerId, int64_t Timestamp)
+	{
+		uint8_t aKey[GRAFFITY_AUTH_KEY_SIZE];
+		DeobfuscateGraffityAuthKey(aKey);
+
+		const std::string Payload = "hello\n" + std::to_string(Timestamp) + "\n" + pServerAddress + "\n" + pOwnerId;
+		uint8_t aDigest[SHA256_DIGEST_LENGTH];
+		HmacSha256(aKey, sizeof(aKey), reinterpret_cast<const uint8_t *>(Payload.data()), (int)Payload.size(), aDigest);
+		LowerHex(aDigest, sizeof(aDigest), pOut, OutSize);
+	}
+
+	const char *ConfiguredGraffityServerAddress()
+	{
+		return g_Config.m_BcGraffityServerAddress[0] != '\0' ? g_Config.m_BcGraffityServerAddress : DEFAULT_GRAFFITY_SERVER_ADDRESS;
+	}
 
 	float EaseInOutQuad(float t)
 	{
@@ -617,10 +695,10 @@ void CGraffity::EnsureNetworkConnection()
 		StopNetwork();
 		m_ActiveGameServerAddress = aServerAddr;
 	}
-	if(m_ActiveGraffityServerAddress != g_Config.m_BcGraffityServerAddress)
+	if(m_ActiveGraffityServerAddress != ConfiguredGraffityServerAddress())
 	{
 		StopNetwork();
-		m_ActiveGraffityServerAddress = g_Config.m_BcGraffityServerAddress;
+		m_ActiveGraffityServerAddress = ConfiguredGraffityServerAddress();
 	}
 
 	const int64_t ReconnectDelayTicks = time_freq() * 2;
@@ -671,7 +749,7 @@ void CGraffity::JoinNetworkThreadIfNeeded()
 void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
 {
 	NETADDR ServerAddr;
-	if(!ParseAddress(g_Config.m_BcGraffityServerAddress, ServerAddr))
+	if(!ParseAddress(ConfiguredGraffityServerAddress(), ServerAddr))
 	{
 		str_copy(m_aLastError, "Graffity server address is invalid", sizeof(m_aLastError));
 		m_NetworkRunning = false;
@@ -700,11 +778,17 @@ void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
 	m_NetworkConnected = true;
 	m_aLastError[0] = '\0';
 
-	char aHello[512];
+	const int64_t HelloTimestamp = ::time(nullptr);
+	char aAuth[GRAFFITY_AUTH_HEX_SIZE];
+	ComputeGraffityHelloAuth(aAuth, sizeof(aAuth), GameServerAddress.c_str(), OwnerId.c_str(), HelloTimestamp);
+
+	char aHello[768];
 	str_format(aHello, sizeof(aHello),
-		"{\"type\":\"hello\",\"server_address\":\"%s\",\"owner_id\":\"%s\"}",
+		"{\"type\":\"hello\",\"server_address\":\"%s\",\"owner_id\":\"%s\",\"timestamp\":%" PRId64 ",\"auth\":\"%s\"}",
 		GameServerAddress.c_str(),
-		OwnerId.c_str());
+		OwnerId.c_str(),
+		HelloTimestamp,
+		aAuth);
 	QueueOutbound(aHello);
 
 	std::string PendingRecv;

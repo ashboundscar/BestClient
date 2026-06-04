@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -40,6 +43,8 @@ const (
 	placeBurst           = 3.0
 	removeRatePerSecond  = 2.0
 	removeBurst          = 6.0
+	helloClockSkew       = 5 * time.Minute
+	graffityHelloSecret  = "hXOcZvmLS3aaHPp3SaYGkq74izsos3PQ"
 )
 
 var allowedGraffityIDs = map[string]struct{}{
@@ -52,6 +57,8 @@ type inboundMessage struct {
 	Type          string `json:"type"`
 	ServerAddress string `json:"server_address"`
 	OwnerID       string `json:"owner_id"`
+	Timestamp     int64  `json:"timestamp"`
+	Auth          string `json:"auth"`
 	GraffityID    string `json:"graffity_id"`
 	ID            string `json:"id"`
 	X             int    `json:"x"`
@@ -180,24 +187,28 @@ func (s *serverState) removeClient(c *clientConn) {
 	s.releaseConnection(c.remoteIP)
 }
 
-func (s *serverState) handleHello(c *clientConn, msg inboundMessage) {
+func (s *serverState) handleHello(c *clientConn, msg inboundMessage) bool {
 	serverAddress := strings.TrimSpace(msg.ServerAddress)
 	if serverAddress == "" {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: server_address is required"})
-		return
+		return false
 	}
 	if len(serverAddress) > maxServerAddrLen {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: server_address too long"})
-		return
+		return false
 	}
 	ownerID := strings.TrimSpace(msg.OwnerID)
 	if ownerID == "" {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: owner_id is required"})
-		return
+		return false
 	}
 	if len(ownerID) > maxOwnerIDLen {
 		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: owner_id too long"})
-		return
+		return false
+	}
+	if !validHelloAuth(serverAddress, ownerID, msg.Timestamp, msg.Auth) {
+		_ = c.send(outboundMessage{Type: "error", Message: "Graffity: auth failed"})
+		return false
 	}
 
 	s.mu.Lock()
@@ -224,6 +235,35 @@ func (s *serverState) handleHello(c *clientConn, msg inboundMessage) {
 		s.broadcastSnapshot(oldServer, nil)
 	}
 	s.sendSnapshot(c)
+	return true
+}
+
+func helloAuthPayload(serverAddress string, ownerID string, timestamp int64) string {
+	return fmt.Sprintf("hello\n%d\n%s\n%s", timestamp, serverAddress, ownerID)
+}
+
+func validHelloAuth(serverAddress string, ownerID string, timestamp int64, auth string) bool {
+	if timestamp <= 0 {
+		return false
+	}
+	now := time.Now().Unix()
+	delta := now - timestamp
+	if delta < 0 {
+		delta = -delta
+	}
+	if time.Duration(delta)*time.Second > helloClockSkew {
+		return false
+	}
+
+	provided, err := hex.DecodeString(strings.TrimSpace(auth))
+	if err != nil || len(provided) != sha256.Size {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(graffityHelloSecret))
+	_, _ = mac.Write([]byte(helloAuthPayload(serverAddress, ownerID, timestamp)))
+	expected := mac.Sum(nil)
+	return hmac.Equal(provided, expected)
 }
 
 func (s *serverState) handlePlace(c *clientConn, msg inboundMessage) {
@@ -550,7 +590,9 @@ func handleClient(s *serverState, conn net.Conn) {
 
 		switch msg.Type {
 		case "hello":
-			s.handleHello(client, msg)
+			if !s.handleHello(client, msg) {
+				return
+			}
 			helloSeen = true
 			_ = conn.SetReadDeadline(time.Now().Add(idleTimeout))
 		case "place":
