@@ -7125,7 +7125,10 @@ void CEditor::RenderSwitchEntities(const std::shared_ptr<CLayerTiles> &pTiles)
 
 void CEditor::Reset(bool CreateDefault)
 {
-	Ui()->ClosePopupMenus();
+	// Keep the Duo popup open while a remotely-received map is being loaded;
+	// otherwise the joiner's session window closes the moment the map arrives.
+	if(!m_DuoSession.m_ApplyingRemote)
+		Ui()->ClosePopupMenus();
 	Map()->Clean();
 
 	for(CEditorComponent &Component : m_vComponents)

@@ -2320,9 +2320,31 @@ CUi::EPopupMenuFunctionResult CDuoSession::PopupDuoJoin(void *pContext, CUIRect 
 	CDuoSession *pDuo = &pEditor->m_DuoSession;
 	CUIRect Slot;
 
-	// если уже подключились — закрыть попап
+	// подключились — окно остаётся открытым с инфой о сессии,
+	// джойнер закрывает его вручную (как у создателя)
 	if(pDuo->m_State == STATE_WAITING || pDuo->m_State == STATE_LIVE)
-		return CUi::POPUP_CLOSE_CURRENT;
+	{
+		char aBuf[64];
+		View.HSplitTop(14.0f, &Slot, &View);
+		str_format(aBuf, sizeof(aBuf), "Room: %s", pDuo->m_aRoomCode);
+		pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_MC);
+
+		View.HSplitTop(14.0f, &Slot, &View);
+		str_format(aBuf, sizeof(aBuf), "Players: %d / 2", pDuo->m_ParticipantCount);
+		pEditor->Ui()->DoLabel(&Slot, aBuf, 10.0f, TEXTALIGN_MC);
+
+		View.HSplitTop(14.0f, &Slot, &View);
+		const char *pStatus = pDuo->m_State == STATE_LIVE ? "Connected!" : "Waiting for host...";
+		pEditor->Ui()->DoLabel(&Slot, pStatus, 9.0f, TEXTALIGN_MC);
+
+		View.HSplitTop(4.0f, nullptr, &View);
+		static int s_CloseButton = 0;
+		View.HSplitTop(14.0f, &Slot, &View);
+		if(pEditor->DoButton_MenuItem(&s_CloseButton, "Close", 0, &Slot, BUTTONFLAG_LEFT, "Close this window and keep mapping."))
+			return CUi::POPUP_CLOSE_CURRENT;
+
+		return CUi::POPUP_KEEP_OPEN;
+	}
 
 	View.HSplitTop(14.0f, &Slot, &View);
 	pEditor->Ui()->DoLabel(&Slot, "Enter room code:", 10.0f, TEXTALIGN_ML);
