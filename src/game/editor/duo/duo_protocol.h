@@ -63,6 +63,14 @@ enum EPacketType : uint8_t
 	PACKET_MAP_NEW         = 42,    // no payload — owner tells joiner to reset to empty map
 	PACKET_EDITOR_SETTINGS = 43,    // settings sync: BrushColor(1)+AllowUnused(1)+ShowInfo(1)+EnvPreview(1)+AlignQuads(1)+ShowQuadsRect(1)+AutoReload(1)+LayerSelector(1)+ShowIngame(1)
 	PACKET_ACTIVITY        = 44,    // activity state(1) — what the user is currently doing
+	PACKET_STRUCT_ADD_SOUND = 45,  // Name(2+N)+DataSize(4)+Data(N)
+	PACKET_STRUCT_DEL_SOUND = 46,  // SoundIdx(4)
+	PACKET_STRUCT_SET_SOUND = 47,  // GroupIdx(4)+LayerIdx(4)+SoundIdx(4)
+	PACKET_STRUCT_ADD_SOUND_SOURCE  = 48, // GroupIdx(4)+LayerIdx(4)+SourceIdx(4)+SourceData
+	PACKET_STRUCT_DEL_SOUND_SOURCE  = 49, // GroupIdx(4)+LayerIdx(4)+SourceIdx(4)
+	PACKET_STRUCT_EDIT_SOUND_SOURCE = 50, // GroupIdx(4)+LayerIdx(4)+SourceIdx(4)+PropId(1)+Value(4)
+	// PropId values for EDIT_SOUND_SOURCE beyond ESoundProp:
+	// 20 = shape type, 21 = shape width/radius, 22 = shape height
 };
 
 enum EActivity : uint8_t

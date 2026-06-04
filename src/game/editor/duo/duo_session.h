@@ -35,6 +35,12 @@ public:
 	void NotifyDelImage(int ImageIdx);
 	void NotifyEmbedImage(int ImageIdx, const uint8_t *pData, int DataSize);
 	void NotifyExternImage(int ImageIdx);
+	void NotifyAddSound(const char *pName, const uint8_t *pData, int DataSize);
+	void NotifyDelSound(int SoundIdx);
+	void NotifySetSound(int GroupIdx, int LayerIdx, int SoundIdx);
+	void NotifyAddSoundSource(int GroupIdx, int LayerIdx, int SourceIdx);
+	void NotifyDelSoundSource(int GroupIdx, int LayerIdx, int SourceIdx);
+	void NotifyEditSoundSource(int GroupIdx, int LayerIdx, int SourceIdx, int PropId, int Value);
 	void NotifyAddQuad(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad);
 	void NotifyDelQuad(int GroupIdx, int LayerIdx, int QuadIdx);
 	void NotifyQuadPoints(int GroupIdx, int LayerIdx, int QuadIdx, const CPoint *pPoints);
@@ -164,6 +170,12 @@ public:
 	void SendStructDelImage(int ImageIdx);
 	void SendStructEmbedImage(int ImageIdx, const uint8_t *pData, int DataSize);
 	void SendStructExternImage(int ImageIdx);
+	void SendStructAddSound(const char *pName, const uint8_t *pData, int DataSize);
+	void SendStructDelSound(int SoundIdx);
+	void SendStructSetSound(int GroupIdx, int LayerIdx, int SoundIdx);
+	void SendStructAddSoundSource(int GroupIdx, int LayerIdx, int SourceIdx);
+	void SendStructDelSoundSource(int GroupIdx, int LayerIdx, int SourceIdx);
+	void SendStructEditSoundSource(int GroupIdx, int LayerIdx, int SourceIdx, int PropId, int Value);
 	void SendQuadAdd(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad);
 	void SendQuadDel(int GroupIdx, int LayerIdx, int QuadIdx);
 	void SendQuadPoints(int GroupIdx, int LayerIdx, int QuadIdx, const CPoint *pPoints);

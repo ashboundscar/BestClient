@@ -2015,6 +2015,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupSound(void *pContext, CUIRect View, 
 		}
 		else
 		{
+			pEditor->m_DuoSession.NotifyDelSound(pEditor->Map()->m_SelectedSound);
 			pEditor->Map()->m_vpSounds.erase(pEditor->Map()->m_vpSounds.begin() + pEditor->Map()->m_SelectedSound);
 			pEditor->Map()->ModifySoundIndex(gs_ModifyIndexDeleted(pEditor->Map()->m_SelectedSound));
 			pEditor->m_ToolbarPreviewSound = -1;
@@ -2361,6 +2362,7 @@ CUi::EPopupMenuFunctionResult CEditor::PopupEvent(void *pContext, CUIRect View, 
 		}
 		else if(pEditor->m_PopupEventType == POPEVENT_REMOVE_USED_SOUND)
 		{
+			pEditor->m_DuoSession.NotifyDelSound(pEditor->Map()->m_SelectedSound);
 			pEditor->Map()->m_vpSounds.erase(pEditor->Map()->m_vpSounds.begin() + pEditor->Map()->m_SelectedSound);
 			pEditor->Map()->ModifySoundIndex(gs_ModifyIndexDeleted(pEditor->Map()->m_SelectedSound));
 			pEditor->m_ToolbarPreviewSound = -1;

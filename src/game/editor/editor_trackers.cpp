@@ -429,6 +429,9 @@ void CSoundSourceOperationTracker::End()
 		{
 			Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionMoveSoundSource>(
 				Map(), Map()->m_SelectedGroup, m_LayerIndex, Map()->m_SelectedSoundSource, m_Data.m_OriginalPoint, m_pSource->m_Position));
+			// sync final position to partner (RecordAction doesn't call Redo)
+			Editor()->m_DuoSession.NotifyEditSoundSource(Map()->m_SelectedGroup, m_LayerIndex, Map()->m_SelectedSoundSource, (int)ESoundProp::POS_X, m_pSource->m_Position.x);
+			Editor()->m_DuoSession.NotifyEditSoundSource(Map()->m_SelectedGroup, m_LayerIndex, Map()->m_SelectedSoundSource, (int)ESoundProp::POS_Y, m_pSource->m_Position.y);
 		}
 	}
 
@@ -658,6 +661,7 @@ int CLayerSoundsPropTracker::PropToValue(ELayerSoundsProp Prop)
 void CSoundSourcePropTracker::OnEnd(ESoundProp Prop, int Value)
 {
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionEditSoundSourceProp>(Map(), m_OriginalGroupIndex, m_OriginalLayerIndex, Map()->m_SelectedSoundSource, Prop, m_OriginalValue, Value));
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_OriginalGroupIndex, m_OriginalLayerIndex, Map()->m_SelectedSoundSource, (int)Prop, Value);
 }
 
 int CSoundSourcePropTracker::PropToValue(ESoundProp Prop)
@@ -683,6 +687,8 @@ int CSoundSourcePropTracker::PropToValue(ESoundProp Prop)
 void CSoundSourceRectShapePropTracker::OnEnd(ERectangleShapeProp Prop, int Value)
 {
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionEditRectSoundSourceShapeProp>(Map(), m_OriginalGroupIndex, m_OriginalLayerIndex, Map()->m_SelectedSoundSource, Prop, m_OriginalValue, Value));
+	int PropId = (Prop == ERectangleShapeProp::RECTANGLE_WIDTH) ? 21 : 22;
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_OriginalGroupIndex, m_OriginalLayerIndex, Map()->m_SelectedSoundSource, PropId, Value);
 }
 
 int CSoundSourceRectShapePropTracker::PropToValue(ERectangleShapeProp Prop)
@@ -698,6 +704,7 @@ int CSoundSourceRectShapePropTracker::PropToValue(ERectangleShapeProp Prop)
 void CSoundSourceCircleShapePropTracker::OnEnd(ECircleShapeProp Prop, int Value)
 {
 	Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionEditCircleSoundSourceShapeProp>(Map(), m_OriginalGroupIndex, m_OriginalLayerIndex, Map()->m_SelectedSoundSource, Prop, m_OriginalValue, Value));
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_OriginalGroupIndex, m_OriginalLayerIndex, Map()->m_SelectedSoundSource, 21, Value);
 }
 
 int CSoundSourceCircleShapePropTracker::PropToValue(ECircleShapeProp Prop)

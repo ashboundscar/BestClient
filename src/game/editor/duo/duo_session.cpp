@@ -5,15 +5,19 @@
 #include <game/editor/mapitems.h>
 #include <game/editor/mapitems/layer_tiles.h>
 #include <game/editor/mapitems/layer_quads.h>
+#include <game/editor/mapitems/layer_sounds.h>
 #include <game/editor/mapitems/image.h>
+#include <game/editor/mapitems/sound.h>
 #include <engine/gfx/image_loader.h>
 #include <engine/gfx/image_manipulation.h>
+#include <engine/sound.h>
 #include <engine/shared/config.h>
 #include <engine/keys.h>
 #include <base/hash_ctxt.h>
 #include <base/math.h>
 #include <game/client/lineinput.h>
 #include <cstdio>
+#include <cstdlib>
 
 using namespace DuoProtocol;
 
@@ -515,6 +519,36 @@ static bool ReadQuad(DuoProtocol::CPacketReader &r, CQuad &q)
 	q.m_PosEnvOffset = r.ReadS32();
 	q.m_ColorEnv = r.ReadS32();
 	q.m_ColorEnvOffset = r.ReadS32();
+	return true;
+}
+
+static void WriteSoundSource(std::vector<uint8_t> &v, const CSoundSource &s)
+{
+	DuoProtocol::WriteS32(v, s.m_Position.x);
+	DuoProtocol::WriteS32(v, s.m_Position.y);
+	DuoProtocol::WriteS32(v, s.m_Loop);
+	DuoProtocol::WriteS32(v, s.m_Pan);
+	DuoProtocol::WriteS32(v, s.m_TimeDelay);
+	DuoProtocol::WriteS32(v, s.m_Falloff);
+	DuoProtocol::WriteS32(v, s.m_PosEnv);
+	DuoProtocol::WriteS32(v, s.m_PosEnvOffset);
+	DuoProtocol::WriteS32(v, s.m_SoundEnv);
+	DuoProtocol::WriteS32(v, s.m_SoundEnvOffset);
+	DuoProtocol::WriteU8(v, (uint8_t)s.m_Shape.m_Type);
+	DuoProtocol::WriteS32(v, s.m_Shape.m_Circle.m_Radius);
+	DuoProtocol::WriteS32(v, s.m_Shape.m_Rectangle.m_Height);
+}
+
+static bool ReadSoundSource(DuoProtocol::CPacketReader &r, CSoundSource &s)
+{
+	s.m_Position.x = r.ReadS32(); s.m_Position.y = r.ReadS32();
+	s.m_Loop = r.ReadS32(); s.m_Pan = r.ReadS32();
+	s.m_TimeDelay = r.ReadS32(); s.m_Falloff = r.ReadS32();
+	s.m_PosEnv = r.ReadS32(); s.m_PosEnvOffset = r.ReadS32();
+	s.m_SoundEnv = r.ReadS32(); s.m_SoundEnvOffset = r.ReadS32();
+	s.m_Shape.m_Type = r.ReadU8();
+	s.m_Shape.m_Circle.m_Radius = r.ReadS32();
+	s.m_Shape.m_Rectangle.m_Height = r.ReadS32();
 	return true;
 }
 
@@ -1067,6 +1101,165 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			break;
 		m_ApplyingRemote = true;
 		Editor()->Map()->m_vpImages[ImageIdx]->m_External = 1;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_ADD_SOUND:
+	{
+		if(!Reader.HasBytes(2))
+			break;
+		uint16_t NameLen = Reader.ReadU16();
+		if(!Reader.HasBytes(NameLen))
+			break;
+		char aName[128] = {};
+		int CopyLen = minimum((int)NameLen, (int)sizeof(aName) - 1);
+		Reader.ReadBytes(reinterpret_cast<uint8_t *>(aName), CopyLen);
+		if((int)NameLen > CopyLen)
+		{
+			uint8_t aDummy[1];
+			for(int i = CopyLen; i < (int)NameLen; i++)
+				Reader.ReadBytes(aDummy, 1);
+		}
+		if(!Reader.HasBytes(4))
+			break;
+		int DataSize = Reader.ReadS32();
+		if(DataSize <= 0 || !Reader.HasBytes(DataSize))
+			break;
+		// skip if sound with this name already exists
+		for(const auto &pSnd : Editor()->Map()->m_vpSounds)
+		{
+			if(!str_comp(pSnd->m_aName, aName))
+				goto skip_add_sound;
+		}
+		{
+			void *pData = malloc(DataSize);
+			if(!pData)
+				break;
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pData), DataSize);
+			const int SoundId = Editor()->Sound()->LoadOpusFromMem(pData, (unsigned)DataSize, true, aName);
+			if(SoundId == -1)
+			{
+				free(pData);
+				break;
+			}
+			auto pSound = std::make_shared<CEditorSound>(Editor()->Map());
+			pSound->m_SoundId = SoundId;
+			pSound->m_pData = pData;
+			pSound->m_DataSize = (unsigned)DataSize;
+			str_copy(pSound->m_aName, aName, sizeof(pSound->m_aName));
+			m_ApplyingRemote = true;
+			Editor()->Map()->m_vpSounds.push_back(pSound);
+			Editor()->Map()->OnModify();
+			m_ApplyingRemote = false;
+		}
+		skip_add_sound:;
+		break;
+	}
+	case PACKET_STRUCT_DEL_SOUND:
+	{
+		if(!Reader.HasBytes(4))
+			break;
+		int SoundIdx = Reader.ReadS32();
+		if(SoundIdx < 0 || SoundIdx >= (int)Editor()->Map()->m_vpSounds.size())
+			break;
+		m_ApplyingRemote = true;
+		Editor()->Map()->m_vpSounds.erase(Editor()->Map()->m_vpSounds.begin() + SoundIdx);
+		Editor()->Map()->ModifySoundIndex([SoundIdx](int *pIndex) {
+			if(*pIndex == SoundIdx) *pIndex = -1;
+			else if(*pIndex > SoundIdx) *pIndex = *pIndex - 1;
+		});
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_SET_SOUND:
+	{
+		if(!Reader.HasBytes(12)) break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int SoundIdx = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size()) break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size()) break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_SOUNDS) break;
+		if(SoundIdx < -1 || SoundIdx >= (int)Editor()->Map()->m_vpSounds.size()) break;
+		m_ApplyingRemote = true;
+		std::static_pointer_cast<CLayerSounds>(vLayers[LayerIdx])->m_Sound = SoundIdx;
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_ADD_SOUND_SOURCE:
+	{
+		if(!Reader.HasBytes(12)) break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		Reader.ReadS32(); // SourceIdx hint — not needed, we always append
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size()) break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size()) break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_SOUNDS) break;
+		CSoundSource Src = {};
+		if(!ReadSoundSource(Reader, Src)) break;
+		m_ApplyingRemote = true;
+		std::static_pointer_cast<CLayerSounds>(vLayers[LayerIdx])->m_vSources.push_back(Src);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_DEL_SOUND_SOURCE:
+	{
+		if(!Reader.HasBytes(12)) break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int SourceIdx = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size()) break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size()) break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_SOUNDS) break;
+		auto pSounds = std::static_pointer_cast<CLayerSounds>(vLayers[LayerIdx]);
+		if(SourceIdx < 0 || SourceIdx >= (int)pSounds->m_vSources.size()) break;
+		m_ApplyingRemote = true;
+		pSounds->m_vSources.erase(pSounds->m_vSources.begin() + SourceIdx);
+		Editor()->Map()->OnModify();
+		m_ApplyingRemote = false;
+		break;
+	}
+	case PACKET_STRUCT_EDIT_SOUND_SOURCE:
+	{
+		if(!Reader.HasBytes(13)) break;
+		int GroupIdx = Reader.ReadS32();
+		int LayerIdx = Reader.ReadS32();
+		int SourceIdx = Reader.ReadS32();
+		int PropId = Reader.ReadU8();
+		int Value = Reader.ReadS32();
+		auto &vGroups = Editor()->Map()->m_vpGroups;
+		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size()) break;
+		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size()) break;
+		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_SOUNDS) break;
+		auto pSounds = std::static_pointer_cast<CLayerSounds>(vLayers[LayerIdx]);
+		if(SourceIdx < 0 || SourceIdx >= (int)pSounds->m_vSources.size()) break;
+		CSoundSource &Src = pSounds->m_vSources[SourceIdx];
+		m_ApplyingRemote = true;
+		ESoundProp Prop = (ESoundProp)PropId;
+		if(Prop == ESoundProp::POS_X) Src.m_Position.x = Value;
+		else if(Prop == ESoundProp::POS_Y) Src.m_Position.y = Value;
+		else if(Prop == ESoundProp::LOOP) Src.m_Loop = Value;
+		else if(Prop == ESoundProp::PAN) Src.m_Pan = Value;
+		else if(Prop == ESoundProp::TIME_DELAY) Src.m_TimeDelay = Value;
+		else if(Prop == ESoundProp::FALLOFF) Src.m_Falloff = Value;
+		else if(Prop == ESoundProp::POS_ENV) Src.m_PosEnv = Value;
+		else if(Prop == ESoundProp::POS_ENV_OFFSET) Src.m_PosEnvOffset = Value;
+		else if(Prop == ESoundProp::SOUND_ENV) Src.m_SoundEnv = Value;
+		else if(Prop == ESoundProp::SOUND_ENV_OFFSET) Src.m_SoundEnvOffset = Value;
+		else if(PropId == 20) Src.m_Shape.m_Type = Value; // shape type
+		else if(PropId == 21) Src.m_Shape.m_Circle.m_Radius = Value; // width/radius
+		else if(PropId == 22) Src.m_Shape.m_Rectangle.m_Height = Value; // height
 		Editor()->Map()->OnModify();
 		m_ApplyingRemote = false;
 		break;
@@ -1856,6 +2049,114 @@ void CDuoSession::NotifyExternImage(int ImageIdx)
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
 	SendStructExternImage(ImageIdx);
+}
+
+void CDuoSession::SendStructAddSound(const char *pName, const uint8_t *pData, int DataSize)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_STRUCT_ADD_SOUND);
+	int NameLen = str_length(pName);
+	WriteString(v, pName, NameLen);
+	WriteS32(v, DataSize);
+	if(DataSize > 0 && pData)
+		WriteBytes(v, pData, DataSize);
+	SendFrame(v);
+}
+
+void CDuoSession::SendStructDelSound(int SoundIdx)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_STRUCT_DEL_SOUND);
+	WriteS32(v, SoundIdx);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyAddSound(const char *pName, const uint8_t *pData, int DataSize)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructAddSound(pName, pData, DataSize);
+}
+
+void CDuoSession::NotifyDelSound(int SoundIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote)
+		return;
+	SendStructDelSound(SoundIdx);
+}
+
+void CDuoSession::SendStructSetSound(int GroupIdx, int LayerIdx, int SoundIdx)
+{
+	if(m_Socket == nullptr) return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_STRUCT_SET_SOUND);
+	WriteS32(v, GroupIdx); WriteS32(v, LayerIdx); WriteS32(v, SoundIdx);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifySetSound(int GroupIdx, int LayerIdx, int SoundIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendStructSetSound(GroupIdx, LayerIdx, SoundIdx);
+}
+
+void CDuoSession::SendStructAddSoundSource(int GroupIdx, int LayerIdx, int SourceIdx)
+{
+	if(m_Socket == nullptr) return;
+	auto &vGroups = Editor()->Map()->m_vpGroups;
+	if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size()) return;
+	auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
+	if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size()) return;
+	if(vLayers[LayerIdx]->m_Type != LAYERTYPE_SOUNDS) return;
+	auto pSounds = std::static_pointer_cast<CLayerSounds>(vLayers[LayerIdx]);
+	if(SourceIdx < 0 || SourceIdx >= (int)pSounds->m_vSources.size()) return;
+
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_STRUCT_ADD_SOUND_SOURCE);
+	WriteS32(v, GroupIdx); WriteS32(v, LayerIdx); WriteS32(v, SourceIdx);
+	WriteSoundSource(v, pSounds->m_vSources[SourceIdx]);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyAddSoundSource(int GroupIdx, int LayerIdx, int SourceIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendStructAddSoundSource(GroupIdx, LayerIdx, SourceIdx);
+}
+
+void CDuoSession::SendStructDelSoundSource(int GroupIdx, int LayerIdx, int SourceIdx)
+{
+	if(m_Socket == nullptr) return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_STRUCT_DEL_SOUND_SOURCE);
+	WriteS32(v, GroupIdx); WriteS32(v, LayerIdx); WriteS32(v, SourceIdx);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyDelSoundSource(int GroupIdx, int LayerIdx, int SourceIdx)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendStructDelSoundSource(GroupIdx, LayerIdx, SourceIdx);
+}
+
+void CDuoSession::SendStructEditSoundSource(int GroupIdx, int LayerIdx, int SourceIdx, int PropId, int Value)
+{
+	if(m_Socket == nullptr) return;
+	std::vector<uint8_t> v;
+	WriteHeader(v, PACKET_STRUCT_EDIT_SOUND_SOURCE);
+	WriteS32(v, GroupIdx); WriteS32(v, LayerIdx); WriteS32(v, SourceIdx);
+	WriteU8(v, (uint8_t)PropId); WriteS32(v, Value);
+	SendFrame(v);
+}
+
+void CDuoSession::NotifyEditSoundSource(int GroupIdx, int LayerIdx, int SourceIdx, int PropId, int Value)
+{
+	if(m_State != STATE_LIVE || m_ApplyingRemote) return;
+	SendStructEditSoundSource(GroupIdx, LayerIdx, SourceIdx, PropId, Value);
 }
 
 void CDuoSession::SendQuadAdd(int GroupIdx, int LayerIdx, int QuadIdx, const CQuad &Quad)

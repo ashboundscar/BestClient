@@ -300,7 +300,11 @@ void CEditorActionSoundPlace::Redo()
 {
 	std::shared_ptr<CLayerSounds> pLayerSounds = std::static_pointer_cast<CLayerSounds>(m_pLayer);
 	for(auto &Brush : m_vBrush)
+	{
 		pLayerSounds->m_vSources.push_back(Brush);
+		int SourceIdx = (int)pLayerSounds->m_vSources.size() - 1;
+		Editor()->m_DuoSession.NotifyAddSoundSource(m_GroupIndex, m_LayerIndex, SourceIdx);
+	}
 
 	Map()->OnModify();
 }
@@ -1845,6 +1849,7 @@ void CEditorActionDeleteSoundSource::Undo()
 void CEditorActionDeleteSoundSource::Redo()
 {
 	std::shared_ptr<CLayerSounds> pLayerSounds = std::static_pointer_cast<CLayerSounds>(m_pLayer);
+	Editor()->m_DuoSession.NotifyDelSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex);
 	pLayerSounds->m_vSources.erase(pLayerSounds->m_vSources.begin() + m_SourceIndex);
 	Map()->m_SelectedSoundSource--;
 	Map()->OnModify();
@@ -1901,6 +1906,10 @@ void CEditorActionEditSoundSourceShape::Redo()
 	}
 
 	Map()->OnModify();
+	// sync shape type + default size to partner
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 20, pSource->m_Shape.m_Type);
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 21, pSource->m_Shape.m_Circle.m_Radius);
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 22, pSource->m_Shape.m_Rectangle.m_Height);
 }
 
 void CEditorActionEditSoundSourceShape::Save()
@@ -1986,6 +1995,7 @@ void CEditorActionEditSoundSourceProp::Apply(int Value)
 	}
 
 	Map()->OnModify();
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, (int)m_Prop, Value);
 }
 
 CEditorActionEditRectSoundSourceShapeProp::CEditorActionEditRectSoundSourceShapeProp(CEditorMap *pMap, int GroupIndex, int LayerIndex, int SourceIndex, ERectangleShapeProp Prop, int Previous, int Current) :
@@ -2016,10 +2026,12 @@ void CEditorActionEditRectSoundSourceShapeProp::Apply(int Value)
 	if(m_Prop == ERectangleShapeProp::RECTANGLE_WIDTH)
 	{
 		pSource->m_Shape.m_Rectangle.m_Width = Value;
+		Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 21, Value);
 	}
 	else if(m_Prop == ERectangleShapeProp::RECTANGLE_HEIGHT)
 	{
 		pSource->m_Shape.m_Rectangle.m_Height = Value;
+		Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 22, Value);
 	}
 
 	Map()->OnModify();
@@ -2052,6 +2064,7 @@ void CEditorActionEditCircleSoundSourceShapeProp::Apply(int Value)
 	if(m_Prop == ECircleShapeProp::CIRCLE_RADIUS)
 	{
 		pSource->m_Shape.m_Circle.m_Radius = Value;
+		Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 21, Value);
 	}
 
 	Map()->OnModify();
@@ -2078,6 +2091,8 @@ void CEditorActionNewEmptySound::Redo()
 {
 	std::shared_ptr<CLayerSounds> pLayerSounds = std::static_pointer_cast<CLayerSounds>(m_pLayer);
 	pLayerSounds->NewSource(m_X, m_Y);
+	int SourceIdx = (int)pLayerSounds->m_vSources.size() - 1;
+	Editor()->m_DuoSession.NotifyAddSoundSource(m_GroupIndex, m_LayerIndex, SourceIdx);
 
 	Map()->OnModify();
 }
@@ -2153,10 +2168,14 @@ void CEditorActionMoveSoundSource::Undo()
 {
 	dbg_assert(m_pLayer->m_Type == LAYERTYPE_SOUNDS, "Layer type does not match a sound layer");
 	std::static_pointer_cast<CLayerSounds>(m_pLayer)->m_vSources[m_SourceIndex].m_Position = m_OriginalPosition;
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, (int)ESoundProp::POS_X, m_OriginalPosition.x);
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, (int)ESoundProp::POS_Y, m_OriginalPosition.y);
 }
 
 void CEditorActionMoveSoundSource::Redo()
 {
 	dbg_assert(m_pLayer->m_Type == LAYERTYPE_SOUNDS, "Layer type does not match a sound layer");
 	std::static_pointer_cast<CLayerSounds>(m_pLayer)->m_vSources[m_SourceIndex].m_Position = m_CurrentPosition;
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, (int)ESoundProp::POS_X, m_CurrentPosition.x);
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, (int)ESoundProp::POS_Y, m_CurrentPosition.y);
 }

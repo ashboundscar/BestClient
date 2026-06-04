@@ -3971,6 +3971,7 @@ bool CEditor::AddSound(const char *pFilename, int StorageType, void *pUser)
 	pSound->m_pData = pData;
 	str_copy(pSound->m_aName, aBuf);
 	pEditor->Map()->m_vpSounds.push_back(pSound);
+	pEditor->m_DuoSession.NotifyAddSound(pSound->m_aName, static_cast<const uint8_t *>(pData), (int)DataSize);
 
 	pEditor->Map()->SelectSound(pSound);
 	pEditor->OnDialogClose();
