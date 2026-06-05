@@ -90,21 +90,7 @@ void CLayerTiles::SetTile(int x, int y, CTile Tile)
 	if(Editor()->m_DuoSession.IsLive())
 	{
 		int GroupIdx = -1, LayerIdx = -1;
-		for(int g = 0; g < (int)Map()->m_vpGroups.size(); g++)
-		{
-			auto &vLayers = Map()->m_vpGroups[g]->m_vpLayers;
-			for(int l = 0; l < (int)vLayers.size(); l++)
-			{
-				if(vLayers[l].get() == this)
-				{
-					GroupIdx = g;
-					LayerIdx = l;
-					break;
-				}
-			}
-			if(GroupIdx >= 0)
-				break;
-		}
+		Editor()->m_DuoSession.FindGroupAndLayer(this, GroupIdx, LayerIdx);
 		if(GroupIdx >= 0 && LayerIdx >= 0)
 			Editor()->m_DuoSession.NotifyTileEdit(GroupIdx, LayerIdx, x, y, Tile.m_Index, Tile.m_Flags);
 	}

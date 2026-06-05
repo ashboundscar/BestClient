@@ -12,7 +12,7 @@
 #include <game/editor/mapitems/layer_sounds.h>
 #include <game/editor/mapitems/map.h>
 
-static int GetLayerSubType(const std::shared_ptr<CLayer> &pLayer)
+int GetLayerSubType(const std::shared_ptr<CLayer> &pLayer)
 {
 	if(pLayer->m_Type != LAYERTYPE_TILES)
 		return 0;
@@ -264,7 +264,11 @@ void CEditorActionQuadPlace::Undo()
 {
 	std::shared_ptr<CLayerQuads> pLayerQuads = std::static_pointer_cast<CLayerQuads>(m_pLayer);
 	for(size_t k = 0; k < m_vBrush.size(); k++)
+	{
+		int QuadIdx = (int)pLayerQuads->m_vQuads.size() - 1;
+		Editor()->m_DuoSession.NotifyDelQuad(m_GroupIndex, m_LayerIndex, QuadIdx);
 		pLayerQuads->m_vQuads.pop_back();
+	}
 
 	Map()->OnModify();
 }
@@ -291,7 +295,11 @@ void CEditorActionSoundPlace::Undo()
 {
 	std::shared_ptr<CLayerSounds> pLayerSounds = std::static_pointer_cast<CLayerSounds>(m_pLayer);
 	for(size_t k = 0; k < m_vBrush.size(); k++)
+	{
+		int SourceIdx = (int)pLayerSounds->m_vSources.size() - 1;
+		Editor()->m_DuoSession.NotifyDelSoundSource(m_GroupIndex, m_LayerIndex, SourceIdx);
 		pLayerSounds->m_vSources.pop_back();
+	}
 
 	Map()->OnModify();
 }
@@ -323,7 +331,9 @@ void CEditorActionDeleteQuad::Undo()
 	for(size_t k = 0; k < m_vQuadsIndices.size(); k++)
 	{
 		pLayerQuads->m_vQuads.insert(pLayerQuads->m_vQuads.begin() + m_vQuadsIndices[k], m_vDeletedQuads[k]);
+		Editor()->m_DuoSession.NotifyAddQuad(m_GroupIndex, m_LayerIndex, m_vQuadsIndices[k], m_vDeletedQuads[k]);
 	}
+	Map()->OnModify();
 }
 
 void CEditorActionDeleteQuad::Redo()
@@ -813,6 +823,8 @@ void CEditorActionEditGroupProp::Undo()
 	if(m_Prop == EGroupProp::ORDER)
 	{
 		Map()->m_SelectedGroup = Map()->MoveGroup(m_Current, m_Previous);
+		// receiver does MoveGroup(GroupIdx, Value): GroupIdx = source index
+		Editor()->m_DuoSession.NotifyGroupProp(m_Current, (int)EGroupProp::ORDER, m_Previous);
 	}
 	else
 		Apply(m_Previous);
@@ -825,6 +837,7 @@ void CEditorActionEditGroupProp::Redo()
 	if(m_Prop == EGroupProp::ORDER)
 	{
 		Map()->m_SelectedGroup = Map()->MoveGroup(m_Previous, m_Current);
+		Editor()->m_DuoSession.NotifyGroupProp(m_Previous, (int)EGroupProp::ORDER, m_Current);
 	}
 	else
 		Apply(m_Current);
@@ -854,6 +867,7 @@ void CEditorActionEditGroupProp::Apply(int Value)
 		pGroup->m_ClipH = Value;
 
 	Map()->OnModify();
+	Editor()->m_DuoSession.NotifyGroupProp(m_GroupIndex, (int)m_Prop, Value);
 }
 
 template<typename E>
@@ -880,6 +894,7 @@ void CEditorActionEditLayerProp::Undo()
 
 	if(m_Prop == ELayerProp::ORDER)
 	{
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_Current, (int)ELayerProp::ORDER, m_Previous);
 		Map()->SelectLayer(pCurrentGroup->MoveLayer(m_Current, m_Previous));
 	}
 	else
@@ -892,6 +907,7 @@ void CEditorActionEditLayerProp::Redo()
 
 	if(m_Prop == ELayerProp::ORDER)
 	{
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_Previous, (int)ELayerProp::ORDER, m_Current);
 		Map()->SelectLayer(pCurrentGroup->MoveLayer(m_Previous, m_Current));
 	}
 	else
@@ -902,13 +918,25 @@ void CEditorActionEditLayerProp::Apply(int Value)
 {
 	if(m_Prop == ELayerProp::GROUP)
 	{
-		auto pCurrentGroup = Map()->m_vpGroups[Value == m_Previous ? m_Current : m_Previous];
+		int SrcGroupIdx = (Value == m_Previous) ? m_Current : m_Previous;
+		auto pCurrentGroup = Map()->m_vpGroups[SrcGroupIdx];
 		auto pPreviousGroup = Map()->m_vpGroups[Value];
-		pCurrentGroup->m_vpLayers.erase(pCurrentGroup->m_vpLayers.begin() + pCurrentGroup->m_vpLayers.size() - 1);
+		int SrcLayerIdx = (int)pCurrentGroup->m_vpLayers.size() - 1;
+		Editor()->m_DuoSession.NotifyDelLayer(SrcGroupIdx, SrcLayerIdx);
+		pCurrentGroup->m_vpLayers.erase(pCurrentGroup->m_vpLayers.begin() + SrcLayerIdx);
+		int DstLayerIdx;
 		if(Value == m_Previous)
+		{
 			pPreviousGroup->m_vpLayers.insert(pPreviousGroup->m_vpLayers.begin() + m_LayerIndex, m_pLayer);
+			DstLayerIdx = m_LayerIndex;
+		}
 		else
+		{
 			pPreviousGroup->m_vpLayers.push_back(m_pLayer);
+			DstLayerIdx = (int)pPreviousGroup->m_vpLayers.size() - 1;
+		}
+		Editor()->m_DuoSession.NotifyAddLayer(Value, DstLayerIdx, m_pLayer->m_Type, m_pLayer->m_aName, GetLayerSubType(m_pLayer));
+		Editor()->m_DuoSession.SyncLayerContents(Value, DstLayerIdx);
 		Map()->m_SelectedGroup = Value;
 		Map()->SelectLayer(m_LayerIndex);
 	}
@@ -1032,6 +1060,16 @@ void CEditorActionEditLayerTilesProp::Undo()
 	}
 
 	Map()->OnModify();
+	if(m_Prop == ETilesProp::WIDTH)
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_LayerIndex, (int)ETilesProp::WIDTH, m_Previous);
+	else if(m_Prop == ETilesProp::HEIGHT)
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_LayerIndex, (int)ETilesProp::HEIGHT, m_Previous);
+	else if(m_Prop == ETilesProp::SHIFT)
+		Editor()->m_DuoSession.NotifyFullSync();
+	else if(m_Prop == ETilesProp::IMAGE)
+		Editor()->m_DuoSession.NotifySetImage(m_GroupIndex, m_LayerIndex, pLayerTiles->m_Image);
+	else if(m_Prop == ETilesProp::COLOR || m_Prop == ETilesProp::COLOR_ENV || m_Prop == ETilesProp::COLOR_ENV_OFFSET || m_Prop == ETilesProp::AUTOMAPPER || m_Prop == ETilesProp::SEED || m_Prop == ETilesProp::LIVE_GAMETILES)
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_LayerIndex, (int)m_Prop, m_Previous);
 }
 
 void CEditorActionEditLayerTilesProp::Redo()
@@ -1116,6 +1154,16 @@ void CEditorActionEditLayerTilesProp::Redo()
 	}
 
 	Map()->OnModify();
+	if(m_Prop == ETilesProp::WIDTH)
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_LayerIndex, (int)ETilesProp::WIDTH, m_Current);
+	else if(m_Prop == ETilesProp::HEIGHT)
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_LayerIndex, (int)ETilesProp::HEIGHT, m_Current);
+	else if(m_Prop == ETilesProp::SHIFT)
+		Editor()->m_DuoSession.NotifyFullSync();
+	else if(m_Prop == ETilesProp::IMAGE)
+		Editor()->m_DuoSession.NotifySetImage(m_GroupIndex, m_LayerIndex, pLayerTiles->m_Image);
+	else if(m_Prop == ETilesProp::COLOR || m_Prop == ETilesProp::COLOR_ENV || m_Prop == ETilesProp::COLOR_ENV_OFFSET || m_Prop == ETilesProp::AUTOMAPPER || m_Prop == ETilesProp::SEED || m_Prop == ETilesProp::LIVE_GAMETILES)
+		Editor()->m_DuoSession.NotifyLayerProp(m_GroupIndex, m_LayerIndex, (int)m_Prop, m_Current);
 }
 
 void CEditorActionEditLayerTilesProp::RestoreLayer(int Layer, const std::shared_ptr<CLayerTiles> &pLayerTiles)
@@ -1216,6 +1264,17 @@ void CEditorActionEditLayersGroupAndOrder::Undo()
 
 	Map()->m_vSelectedLayers = m_LayerIndices;
 	Map()->m_SelectedGroup = m_GroupIndex;
+
+	// Sync to partner: delete from the new group (descending index order so the
+	// receiver's indices stay valid), then re-add into the old group (ascending).
+	for(int i = (int)m_NewLayerIndices.size() - 1; i >= 0; --i)
+		Editor()->m_DuoSession.NotifyDelLayer(m_NewGroupIndex, m_NewLayerIndices[i]);
+	for(size_t k = 0; k < vpLayers.size(); ++k)
+	{
+		Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, m_LayerIndices[k], vpLayers[k]->m_Type, vpLayers[k]->m_aName, GetLayerSubType(vpLayers[k]));
+		Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, m_LayerIndices[k]);
+	}
+	Map()->OnModify();
 }
 
 void CEditorActionEditLayersGroupAndOrder::Redo()
@@ -1237,9 +1296,18 @@ void CEditorActionEditLayersGroupAndOrder::Redo()
 
 	Map()->m_vSelectedLayers = m_NewLayerIndices;
 	Map()->m_SelectedGroup = m_NewGroupIndex;
-}
 
-// -----------------------------------
+	// Sync to partner: delete from the old group (descending), re-add into the
+	// new group (ascending) so the receiver's indices stay valid each step.
+	for(int i = (int)m_LayerIndices.size() - 1; i >= 0; --i)
+		Editor()->m_DuoSession.NotifyDelLayer(m_GroupIndex, m_LayerIndices[i]);
+	for(size_t k = 0; k < vpLayers.size(); ++k)
+	{
+		Editor()->m_DuoSession.NotifyAddLayer(m_NewGroupIndex, m_NewLayerIndices[k], vpLayers[k]->m_Type, vpLayers[k]->m_aName, GetLayerSubType(vpLayers[k]));
+		Editor()->m_DuoSession.SyncLayerContents(m_NewGroupIndex, m_NewLayerIndices[k]);
+	}
+	Map()->OnModify();
+}
 
 CEditorActionAppendMap::CEditorActionAppendMap(CEditorMap *pMap, const char *pMapName, const SPrevInfo &PrevInfo, std::vector<int> &vImageIndexMap) :
 	IEditorAction(pMap), m_PrevInfo(PrevInfo), m_vImageIndexMap(vImageIndexMap)
@@ -1305,6 +1373,7 @@ void CEditorActionAppendMap::Undo()
 	{
 		Map()->m_vpImages.pop_back();
 	}
+	Editor()->m_DuoSession.StartMapTransfer();
 }
 
 void CEditorActionAppendMap::Redo()
@@ -1315,6 +1384,7 @@ void CEditorActionAppendMap::Redo()
 	};
 	// Redo is just re-appending the same map
 	Map()->Append(m_aMapName, IStorage::TYPE_ALL, true, ErrorHandler);
+	Editor()->m_DuoSession.StartMapTransfer();
 }
 
 // ---------------------------
@@ -1362,6 +1432,7 @@ void CEditorActionTileArt::Undo()
 	{
 		Map()->m_vpImages.pop_back();
 	}
+	Editor()->m_DuoSession.StartMapTransfer();
 }
 
 void CEditorActionTileArt::Redo()
@@ -1374,6 +1445,7 @@ void CEditorActionTileArt::Redo()
 
 	IStorage::StripPathAndExtension(m_aTileArtFile, Editor()->m_aTileArtFilename, sizeof(Editor()->m_aTileArtFilename));
 	Editor()->AddTileArt(true);
+	Editor()->m_DuoSession.StartMapTransfer();
 }
 
 // ---------------------------
@@ -1388,6 +1460,7 @@ void CEditorActionQuadArt::Undo()
 {
 	// Delete added group
 	Map()->m_vpGroups.pop_back();
+	Editor()->m_DuoSession.StartMapTransfer();
 }
 
 void CEditorActionQuadArt::Redo()
@@ -1401,6 +1474,7 @@ void CEditorActionQuadArt::Redo()
 		return;
 	}
 	Editor()->AddQuadArt(true);
+	Editor()->m_DuoSession.StartMapTransfer();
 }
 
 // ---------------------------------
@@ -1444,30 +1518,35 @@ void CEditorCommandAction::Undo()
 	{
 		Map()->m_vSettings.insert(Map()->m_vSettings.begin() + m_CommandIndex, m_PreviousCommand.c_str());
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingAdd(m_PreviousCommand.c_str());
 		break;
 	}
 	case EType::ADD:
 	{
 		Map()->m_vSettings.erase(Map()->m_vSettings.begin() + m_CommandIndex);
 		*m_pSelectedCommandIndex = Map()->m_vSettings.size() - 1;
+		Editor()->m_DuoSession.NotifySettingDel(m_CommandIndex);
 		break;
 	}
 	case EType::EDIT:
 	{
 		str_copy(Map()->m_vSettings[m_CommandIndex].m_aCommand, m_PreviousCommand.c_str());
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingEdit(m_CommandIndex, m_PreviousCommand.c_str());
 		break;
 	}
 	case EType::MOVE_DOWN:
 	{
 		std::swap(Map()->m_vSettings[m_CommandIndex], Map()->m_vSettings[m_CommandIndex + 1]);
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingMove(m_CommandIndex + 1, -1);
 		break;
 	}
 	case EType::MOVE_UP:
 	{
 		std::swap(Map()->m_vSettings[m_CommandIndex], Map()->m_vSettings[m_CommandIndex - 1]);
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingMove(m_CommandIndex - 1, 1);
 		break;
 	}
 	}
@@ -1481,30 +1560,35 @@ void CEditorCommandAction::Redo()
 	{
 		Map()->m_vSettings.erase(Map()->m_vSettings.begin() + m_CommandIndex);
 		*m_pSelectedCommandIndex = Map()->m_vSettings.size() - 1;
+		Editor()->m_DuoSession.NotifySettingDel(m_CommandIndex);
 		break;
 	}
 	case EType::ADD:
 	{
 		Map()->m_vSettings.insert(Map()->m_vSettings.begin() + m_CommandIndex, m_PreviousCommand.c_str());
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingAdd(m_PreviousCommand.c_str());
 		break;
 	}
 	case EType::EDIT:
 	{
 		str_copy(Map()->m_vSettings[m_CommandIndex].m_aCommand, m_CurrentCommand.c_str());
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingEdit(m_CommandIndex, m_CurrentCommand.c_str());
 		break;
 	}
 	case EType::MOVE_DOWN:
 	{
 		std::swap(Map()->m_vSettings[m_CommandIndex], Map()->m_vSettings[m_CommandIndex + 1]);
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingMove(m_CommandIndex, 1);
 		break;
 	}
 	case EType::MOVE_UP:
 	{
 		std::swap(Map()->m_vSettings[m_CommandIndex], Map()->m_vSettings[m_CommandIndex - 1]);
 		*m_pSelectedCommandIndex = m_CommandIndex;
+		Editor()->m_DuoSession.NotifySettingMove(m_CommandIndex, -1);
 		break;
 	}
 	}
@@ -1825,6 +1909,7 @@ void CEditorActionEditLayerSoundsProp::Apply(int Value)
 	}
 
 	Map()->OnModify();
+	Editor()->m_DuoSession.NotifySetSound(m_GroupIndex, m_LayerIndex, pLayerSounds->m_Sound);
 }
 
 // ---
@@ -1843,6 +1928,7 @@ void CEditorActionDeleteSoundSource::Undo()
 	std::shared_ptr<CLayerSounds> pLayerSounds = std::static_pointer_cast<CLayerSounds>(m_pLayer);
 	pLayerSounds->m_vSources.insert(pLayerSounds->m_vSources.begin() + m_SourceIndex, m_Source);
 	Map()->m_SelectedSoundSource = m_SourceIndex;
+	Editor()->m_DuoSession.NotifyAddSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex);
 	Map()->OnModify();
 }
 
@@ -1880,6 +1966,10 @@ void CEditorActionEditSoundSourceShape::Undo()
 	pSource->m_Shape = m_SavedShape;
 
 	Map()->OnModify();
+	// sync restored shape type + size to partner (mirrors Redo)
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 20, pSource->m_Shape.m_Type);
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 21, pSource->m_Shape.m_Circle.m_Radius);
+	Editor()->m_DuoSession.NotifyEditSoundSource(m_GroupIndex, m_LayerIndex, m_SourceIndex, 22, pSource->m_Shape.m_Rectangle.m_Height);
 }
 
 void CEditorActionEditSoundSourceShape::Redo()
@@ -2082,6 +2172,8 @@ void CEditorActionNewEmptySound::Undo()
 {
 	// Undo is simply deleting the added source
 	std::shared_ptr<CLayerSounds> pLayerSounds = std::static_pointer_cast<CLayerSounds>(m_pLayer);
+	int SourceIdx = (int)pLayerSounds->m_vSources.size() - 1;
+	Editor()->m_DuoSession.NotifyDelSoundSource(m_GroupIndex, m_LayerIndex, SourceIdx);
 	pLayerSounds->m_vSources.pop_back();
 
 	Map()->OnModify();
@@ -2107,6 +2199,8 @@ void CEditorActionNewEmptyQuad::Undo()
 {
 	// Undo is simply deleting the added quad
 	std::shared_ptr<CLayerQuads> pLayerQuads = std::static_pointer_cast<CLayerQuads>(m_pLayer);
+	int QuadIdx = (int)pLayerQuads->m_vQuads.size() - 1;
+	Editor()->m_DuoSession.NotifyDelQuad(m_GroupIndex, m_LayerIndex, QuadIdx);
 	pLayerQuads->m_vQuads.pop_back();
 
 	Map()->OnModify();
@@ -2145,6 +2239,8 @@ CEditorActionNewQuad::CEditorActionNewQuad(CEditorMap *pMap, int GroupIndex, int
 void CEditorActionNewQuad::Undo()
 {
 	std::shared_ptr<CLayerQuads> pLayerQuads = std::static_pointer_cast<CLayerQuads>(m_pLayer);
+	int QuadIdx = (int)pLayerQuads->m_vQuads.size() - 1;
+	Editor()->m_DuoSession.NotifyDelQuad(m_GroupIndex, m_LayerIndex, QuadIdx);
 	pLayerQuads->m_vQuads.pop_back();
 }
 

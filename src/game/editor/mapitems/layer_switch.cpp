@@ -171,6 +171,20 @@ void CLayerSwitch::BrushDraw(CLayer *pBrush, vec2 WorldPos)
 				m_pTiles[TgtIndex].m_Index};
 
 			RecordStateChange(fx, fy, Previous, Current);
+
+			if(Editor()->m_DuoSession.IsLive())
+			{
+				int GroupIdx = -1, LayerIdx = -1;
+				Editor()->m_DuoSession.FindGroupAndLayer(this, GroupIdx, LayerIdx);
+				if(GroupIdx >= 0)
+					Editor()->m_DuoSession.NotifyTileEditSwitch(GroupIdx, LayerIdx, fx, fy,
+						m_pTiles[TgtIndex].m_Index,
+						m_pTiles[TgtIndex].m_Flags,
+						m_pSwitchTile[TgtIndex].m_Number,
+						m_pSwitchTile[TgtIndex].m_Type,
+						m_pSwitchTile[TgtIndex].m_Flags,
+						m_pSwitchTile[TgtIndex].m_Delay);
+			}
 		}
 	FlagModified(sx, sy, pSwitchLayer->m_Width, pSwitchLayer->m_Height);
 }

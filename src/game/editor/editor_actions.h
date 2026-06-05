@@ -19,6 +19,8 @@
 class CEditorMap;
 class IEditorEnvelopeReference;
 
+int GetLayerSubType(const std::shared_ptr<CLayer> &pLayer);
+
 class CEditorActionLayerBase : public IEditorAction
 {
 public:

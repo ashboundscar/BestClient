@@ -6344,7 +6344,7 @@ void CEditor::RenderMenubar(CUIRect MenuBar)
 		DoButtonLogic(&s_ChangedIndicator, 0, &ChangedIndicator, BUTTONFLAG_NONE, "This map has unsaved changes."); // just for the tooltip, result unused
 	}
 
-	// Duo status log in menubar — show most recent entry
+		// Duo status log in menubar — show most recent entry
 	if(m_DuoSession.m_State >= CDuoSession::STATE_CONNECTING || m_DuoSession.m_LogCount > 0)
 	{
 		if(m_DuoSession.m_LogCount > 0)
@@ -6366,6 +6366,24 @@ void CEditor::RenderMenubar(CUIRect MenuBar)
 			LogProps.m_MaxWidth = LogRect.w;
 			LogProps.m_EllipsisAtEnd = true;
 			Ui()->DoLabel(&LogRect, pMsg, 10.0f, TEXTALIGN_ML, LogProps);
+			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
+		}
+
+		// Duo tile latency indicator
+		if(m_DuoSession.m_State == CDuoSession::STATE_LIVE && m_DuoSession.m_TileRelayLatencyMs >= 0)
+		{
+			CUIRect LatencyRect;
+			MenuBar.VSplitLeft(60.0f, &LatencyRect, &MenuBar);
+			char aLatBuf[32];
+			str_format(aLatBuf, sizeof(aLatBuf), "%d ms", m_DuoSession.m_TileRelayLatencyMs);
+			int Ms = m_DuoSession.m_TileRelayLatencyMs;
+			if(Ms < 100)
+				TextRender()->TextColor(0.3f, 1.0f, 0.5f, 1.0f);  // green: good
+			else if(Ms < 300)
+				TextRender()->TextColor(1.0f, 0.8f, 0.2f, 1.0f);  // yellow: ok
+			else
+				TextRender()->TextColor(1.0f, 0.3f, 0.3f, 1.0f);  // red: bad
+			Ui()->DoLabel(&LatencyRect, aLatBuf, 10.0f, TEXTALIGN_ML);
 			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
 		}
 	}

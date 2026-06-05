@@ -7,6 +7,7 @@
 #include <game/mapitems.h>
 #include <base/net.h>
 #include <base/system.h>
+#include <map>
 #include <set>
 #include <utility>
 #include <vector>
@@ -20,6 +21,14 @@ public:
 	void OnRender(CUIRect View) override;
 
 	void NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags);
+	// Tele layer
+	void NotifyTileEditTele(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Number, uint8_t Type);
+	// Speedup layer
+	void NotifyTileEditSpeedup(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Force, uint8_t MaxSpeed, int16_t Angle);
+	// Switch layer
+	void NotifyTileEditSwitch(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags, uint8_t Number, uint8_t SwitchType, uint8_t SwitchFlags, uint8_t Delay);
+	// Tune layer
+	void NotifyTileEditTune(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Number, uint8_t Type);
 	void NotifyStrokeEnd(); // call when mouse button released after drawing
 	void NotifyFullSync();  // call after undo/redo — checks all tile layers
 	void NotifyAddGroup(int InsertIdx = -1);
@@ -56,6 +65,7 @@ public:
 	void NotifyEditorSettings();
 	void StartMapTransfer(); // called when STATE_LIVE and we are creator
 	bool IsLive() const { return m_State == STATE_LIVE; }
+	bool FindGroupAndLayer(const void *pLayerPtr, int &GroupIdx, int &LayerIdx) const;
 
 	static CUi::EPopupMenuFunctionResult PopupDuo(void *pContext, CUIRect View, bool Active);
 	static CUi::EPopupMenuFunctionResult PopupDuoMain(void *pContext, CUIRect View, bool Active);
@@ -96,6 +106,10 @@ public:
 	std::vector<uint8_t> m_vRecvBuf;
 	int m_RecvBufLen = 0;
 
+	// TCP outbound queue — SendFrame enqueues, DrainSendBuf drains non-blocking
+	std::vector<uint8_t> m_vSendBuf;
+	int m_SendBufOffset = 0;
+
 	// set while applying a remote packet — prevents re-broadcasting back
 	bool m_ApplyingRemote = false;
 	// set while owner is loading a new map to transfer — prevents OnReset from disconnecting
@@ -124,6 +138,26 @@ public:
 	int m_DbgQuadSent = 0;
 	int m_DbgQuadRecv = 0;
 
+	// e2e tile latency: time from FlushTileEdits to receiving TILE_RELAY, in ms
+	int64_t m_LastTileEditSentTime = 0;   // time_get() when last batch was flushed
+	int m_TileRelayLatencyMs = -1;        // -1 = no measurement yet
+
+	// deferred SYNC_REQUEST: when we receive SYNC_CHECK with a mismatched CRC,
+	// wait 500ms before sending SYNC_REQUEST — gives TILE_RELAY packets time to arrive
+	struct SPendingSyncRequest
+	{
+		int m_GroupIdx = -1;
+		int m_LayerIdx = -1;
+		int64_t m_RequestAfter = 0; // time_get() value after which to send
+	};
+	std::vector<SPendingSyncRequest> m_vPendingSyncRequests;
+
+	// layer index cache — maps CLayer pointer to (GroupIdx, LayerIdx)
+	// invalidated by NotifyAddLayer/NotifyDelLayer/NotifyAddGroup/NotifyDelGroup
+	mutable std::map<const void *, std::pair<int, int>> m_LayerIndexCache;
+	mutable bool m_LayerCacheValid = false;
+	void InvalidateLayerCache() { m_LayerCacheValid = false; m_LayerIndexCache.clear(); }
+
 	// map transfer — receiver side
 	bool m_MapTransferActive = false;
 	int m_MapTransferTotal = 0;
@@ -139,6 +173,15 @@ public:
 		int m_TileY;
 		uint8_t m_Index;
 		uint8_t m_Flags;
+		// ExtraType: 0=none, 1=tele, 2=speedup, 3=switch, 4=tune
+		uint8_t m_ExtraType = 0;
+		uint8_t m_ExNumber = 0;
+		uint8_t m_ExType = 0;
+		uint8_t m_ExForce = 0;
+		uint8_t m_ExMaxSpeed = 0;
+		int16_t m_ExAngle = 0;
+		uint8_t m_ExSwitchFlags = 0;
+		uint8_t m_ExDelay = 0;
 	};
 	std::vector<STileEditEntry> m_vPendingTileEdits;
 
@@ -149,11 +192,13 @@ public:
 	void Disconnect();
 	void OpenSocket();
 	void CloseSocket();
+	void DrainSendBuf();
 	void SendFrame(const std::vector<uint8_t> &vPayload);
 	void SendHello();
 	void SendHeartbeat();
 	void SendCursor(float WorldX, float WorldY);
 	void SendTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags);
+	void SendTileEditExtra(const STileEditEntry &Entry);
 	void FlushTileEdits();
 	void SendSyncCheck(int GroupIdx, int LayerIdx);
 	void SendSyncRequest(int GroupIdx, int LayerIdx);
@@ -201,7 +246,7 @@ public:
 	void AppendAuth(std::vector<uint8_t> &vPacket) const;
 
 private:
-	static uint32_t CalcLayerCRC(const uint8_t *pTiles, int Count);
+	static uint32_t CalcLayerCRC(const uint8_t *pTiles, int Count, uint32_t InitCrc = 0xFFFFFFFFu);
 };
 
 #endif // GAME_EDITOR_DUO_SESSION_H

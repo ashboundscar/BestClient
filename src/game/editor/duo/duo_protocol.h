@@ -149,7 +149,7 @@ public:
 	CPacketReader(const uint8_t *pData, int Size) :
 		m_pData(pData), m_Size(Size), m_Offset(0) {}
 
-	bool HasBytes(int n) const { return m_Offset + n <= m_Size; }
+	bool HasBytes(int n) const { return n >= 0 && (uint32_t)m_Offset + (uint32_t)n <= (uint32_t)m_Size; }
 	int Remaining() const { return m_Size - m_Offset; }
 
 	uint8_t ReadU8()

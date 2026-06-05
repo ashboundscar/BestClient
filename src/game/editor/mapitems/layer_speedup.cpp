@@ -169,6 +169,18 @@ void CLayerSpeedup::BrushDraw(CLayer *pBrush, vec2 WorldPos)
 				m_pTiles[TgtIndex].m_Index};
 
 			RecordStateChange(fx, fy, Previous, Current);
+
+			if(Editor()->m_DuoSession.IsLive())
+			{
+				int GroupIdx = -1, LayerIdx = -1;
+				Editor()->m_DuoSession.FindGroupAndLayer(this, GroupIdx, LayerIdx);
+				if(GroupIdx >= 0)
+					Editor()->m_DuoSession.NotifyTileEditSpeedup(GroupIdx, LayerIdx, fx, fy,
+						m_pTiles[TgtIndex].m_Index,
+						m_pSpeedupTile[TgtIndex].m_Force,
+						m_pSpeedupTile[TgtIndex].m_MaxSpeed,
+						m_pSpeedupTile[TgtIndex].m_Angle);
+			}
 		}
 	FlagModified(sx, sy, pSpeedupLayer->m_Width, pSpeedupLayer->m_Height);
 }

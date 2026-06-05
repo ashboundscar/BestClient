@@ -165,6 +165,17 @@ void CLayerTele::BrushDraw(CLayer *pBrush, vec2 WorldPos)
 				m_pTiles[TgtIndex].m_Index};
 
 			RecordStateChange(fx, fy, Previous, Current);
+
+			if(Editor()->m_DuoSession.IsLive())
+			{
+				int GroupIdx = -1, LayerIdx = -1;
+				Editor()->m_DuoSession.FindGroupAndLayer(this, GroupIdx, LayerIdx);
+				if(GroupIdx >= 0)
+					Editor()->m_DuoSession.NotifyTileEditTele(GroupIdx, LayerIdx, fx, fy,
+						m_pTiles[TgtIndex].m_Index,
+						m_pTeleTile[TgtIndex].m_Number,
+						m_pTeleTile[TgtIndex].m_Type);
+			}
 		}
 	FlagModified(sx, sy, pTeleLayer->m_Width, pTeleLayer->m_Height);
 }

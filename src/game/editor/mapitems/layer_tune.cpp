@@ -153,6 +153,17 @@ void CLayerTune::BrushDraw(CLayer *pBrush, vec2 WorldPos)
 				m_pTiles[TgtIndex].m_Index};
 
 			RecordStateChange(fx, fy, Previous, Current);
+
+			if(Editor()->m_DuoSession.IsLive())
+			{
+				int GroupIdx = -1, LayerIdx = -1;
+				Editor()->m_DuoSession.FindGroupAndLayer(this, GroupIdx, LayerIdx);
+				if(GroupIdx >= 0)
+					Editor()->m_DuoSession.NotifyTileEditTune(GroupIdx, LayerIdx, fx, fy,
+						m_pTiles[TgtIndex].m_Index,
+						m_pTuneTile[TgtIndex].m_Number,
+						m_pTuneTile[TgtIndex].m_Type);
+			}
 		}
 	FlagModified(sx, sy, pTuneLayer->m_Width, pTuneLayer->m_Height);
 }

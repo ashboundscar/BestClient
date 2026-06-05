@@ -4,6 +4,10 @@
 #include <game/editor/editor_actions.h>
 #include <game/editor/mapitems.h>
 #include <game/editor/mapitems/layer_tiles.h>
+#include <game/editor/mapitems/layer_tele.h>
+#include <game/editor/mapitems/layer_speedup.h>
+#include <game/editor/mapitems/layer_switch.h>
+#include <game/editor/mapitems/layer_tune.h>
 #include <game/editor/mapitems/layer_quads.h>
 #include <game/editor/mapitems/layer_sounds.h>
 #include <game/editor/mapitems/image.h>
@@ -182,6 +186,9 @@ void CDuoSession::OnUpdate()
 	// Flush batched tile edits
 	if(m_State == STATE_LIVE)
 		FlushTileEdits();
+
+	// Drain outbound TCP buffer non-blocking
+	DrainSendBuf();
 }
 
 void CDuoSession::OnRender(CUIRect View)
@@ -314,6 +321,9 @@ void CDuoSession::CloseSocket()
 		net_tcp_close(m_Socket);
 		m_Socket = nullptr;
 	}
+	m_vSendBuf.clear();
+	m_SendBufOffset = 0;
+	m_vPendingSyncRequests.clear();
 }
 
 void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
@@ -321,36 +331,47 @@ void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
 	if(m_Socket == nullptr)
 		return;
 	uint32_t Size = (uint32_t)vPayload.size();
-	uint8_t aLen[4];
-	aLen[0] = (Size >> 24) & 0xFF;
-	aLen[1] = (Size >> 16) & 0xFF;
-	aLen[2] = (Size >> 8) & 0xFF;
-	aLen[3] = Size & 0xFF;
+	// enqueue length prefix + payload into outbound buffer
+	m_vSendBuf.push_back((Size >> 24) & 0xFF);
+	m_vSendBuf.push_back((Size >> 16) & 0xFF);
+	m_vSendBuf.push_back((Size >> 8) & 0xFF);
+	m_vSendBuf.push_back(Size & 0xFF);
+	m_vSendBuf.insert(m_vSendBuf.end(), vPayload.begin(), vPayload.end());
+}
 
-	// switch to blocking for the duration of this send so large payloads
-	// don't get partial writes or WOULDBLOCK on a non-blocking socket
-	net_set_blocking(m_Socket);
-
-	auto SendAll = [&](const uint8_t *pData, int Len) -> bool {
-		int Sent = 0;
-		while(Sent < Len)
-		{
-			int Ret = net_tcp_send(m_Socket, pData + Sent, Len - Sent);
-			if(Ret <= 0)
-				return false;
-			Sent += Ret;
-		}
-		return true;
-	};
-
-	bool Ok = SendAll(aLen, 4) && SendAll(vPayload.data(), (int)vPayload.size());
-	net_set_non_blocking(m_Socket);
-
-	if(!Ok)
+void CDuoSession::DrainSendBuf()
+{
+	if(m_Socket == nullptr || m_vSendBuf.empty())
+		return;
+	const uint8_t *pData = m_vSendBuf.data() + m_SendBufOffset;
+	int Remaining = (int)m_vSendBuf.size() - m_SendBufOffset;
+	while(Remaining > 0)
 	{
-		str_copy(m_aErrorMsg, "Connection lost");
-		m_State = STATE_ERROR;
-		CloseSocket();
+		int Sent = net_tcp_send(m_Socket, pData, Remaining);
+		if(Sent > 0)
+		{
+			pData += Sent;
+			m_SendBufOffset += Sent;
+			Remaining -= Sent;
+		}
+		else if(Sent == 0)
+		{
+			// connection closed
+			str_copy(m_aErrorMsg, "Connection lost");
+			m_State = STATE_ERROR;
+			CloseSocket();
+			return;
+		}
+		else
+		{
+			// WOULDBLOCK — come back next frame
+			break;
+		}
+	}
+	if(m_SendBufOffset >= (int)m_vSendBuf.size())
+	{
+		m_vSendBuf.clear();
+		m_SendBufOffset = 0;
 	}
 }
 
@@ -399,6 +420,48 @@ void CDuoSession::SendTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY,
 	WriteS32(vPacket, TileY);
 	WriteU8(vPacket, Index);
 	WriteU8(vPacket, Flags);
+	// ExtraType=0: plain tile, no extra bytes
+	WriteU8(vPacket, 0);
+	SendFrame(vPacket);
+}
+
+void CDuoSession::SendTileEditExtra(const STileEditEntry &Entry)
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_TILE_EDIT);
+	WriteS32(vPacket, Entry.m_GroupIdx);
+	WriteS32(vPacket, Entry.m_LayerIdx);
+	WriteS32(vPacket, Entry.m_TileX);
+	WriteS32(vPacket, Entry.m_TileY);
+	WriteU8(vPacket, Entry.m_Index);
+	WriteU8(vPacket, Entry.m_Flags);
+	WriteU8(vPacket, Entry.m_ExtraType);
+	if(Entry.m_ExtraType == 1) // tele
+	{
+		WriteU8(vPacket, Entry.m_ExNumber);
+		WriteU8(vPacket, Entry.m_ExType);
+	}
+	else if(Entry.m_ExtraType == 2) // speedup
+	{
+		WriteU8(vPacket, Entry.m_ExForce);
+		WriteU8(vPacket, Entry.m_ExMaxSpeed);
+		WriteU8(vPacket, (uint8_t)(Entry.m_ExAngle & 0xFF));
+		WriteU8(vPacket, (uint8_t)((Entry.m_ExAngle >> 8) & 0xFF));
+	}
+	else if(Entry.m_ExtraType == 3) // switch
+	{
+		WriteU8(vPacket, Entry.m_ExNumber);
+		WriteU8(vPacket, Entry.m_ExType);
+		WriteU8(vPacket, Entry.m_ExSwitchFlags);
+		WriteU8(vPacket, Entry.m_ExDelay);
+	}
+	else if(Entry.m_ExtraType == 4) // tune
+	{
+		WriteU8(vPacket, Entry.m_ExNumber);
+		WriteU8(vPacket, Entry.m_ExType);
+	}
 	SendFrame(vPacket);
 }
 
@@ -406,8 +469,14 @@ void CDuoSession::FlushTileEdits()
 {
 	if(m_Socket == nullptr || m_vPendingTileEdits.empty())
 		return;
+	m_LastTileEditSentTime = time_get();
 	for(const auto &Edit : m_vPendingTileEdits)
-		SendTileEdit(Edit.m_GroupIdx, Edit.m_LayerIdx, Edit.m_TileX, Edit.m_TileY, Edit.m_Index, Edit.m_Flags);
+	{
+		if(Edit.m_ExtraType == 0)
+			SendTileEdit(Edit.m_GroupIdx, Edit.m_LayerIdx, Edit.m_TileX, Edit.m_TileY, Edit.m_Index, Edit.m_Flags);
+		else
+			SendTileEditExtra(Edit);
+	}
 	m_vPendingTileEdits.clear();
 }
 
@@ -645,6 +714,7 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		int32_t TileY = Reader.ReadS32();
 		uint8_t TileIndex = Reader.ReadU8();
 		uint8_t TileFlags = Reader.ReadU8();
+		uint8_t ExtraType = Reader.HasBytes(1) ? Reader.ReadU8() : 0;
 
 		auto &vGroups = Editor()->Map()->m_vpGroups;
 		if(GroupIdx >= 0 && GroupIdx < (int)vGroups.size())
@@ -657,12 +727,82 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 					auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
 					if(TileX >= 0 && TileX < pTiles->m_Width && TileY >= 0 && TileY < pTiles->m_Height)
 					{
+						int TgtIndex = TileY * pTiles->m_Width + TileX;
 						CTile Tile;
 						Tile.m_Index = TileIndex;
 						Tile.m_Flags = TileFlags & 0x0F;
 						Tile.m_Skip = 0;
 						Tile.m_Reserved = 0;
-						pTiles->SetTileIgnoreHistory(TileX, TileY, Tile);
+						m_ApplyingRemote = true;
+						if(ExtraType == 1) // tele
+						{
+							uint8_t Number = Reader.ReadU8();
+							uint8_t Type = Reader.ReadU8();
+							auto pTele = std::dynamic_pointer_cast<CLayerTele>(pTiles);
+							if(pTele)
+							{
+								pTele->m_pTeleTile[TgtIndex].m_Number = Number;
+								pTele->m_pTeleTile[TgtIndex].m_Type = Type;
+								pTele->m_pTiles[TgtIndex] = Tile;
+							}
+						}
+						else if(ExtraType == 2) // speedup
+						{
+							uint8_t Force = Reader.ReadU8();
+							uint8_t MaxSpeed = Reader.ReadU8();
+							uint8_t AngleLo = Reader.ReadU8();
+							uint8_t AngleHi = Reader.ReadU8();
+							int16_t Angle = (int16_t)(AngleLo | (AngleHi << 8));
+							auto pSpeedup = std::dynamic_pointer_cast<CLayerSpeedup>(pTiles);
+							if(pSpeedup)
+							{
+								pSpeedup->m_pSpeedupTile[TgtIndex].m_Force = Force;
+								pSpeedup->m_pSpeedupTile[TgtIndex].m_MaxSpeed = MaxSpeed;
+								pSpeedup->m_pSpeedupTile[TgtIndex].m_Angle = Angle;
+								pSpeedup->m_pSpeedupTile[TgtIndex].m_Type = TileIndex;
+								pSpeedup->m_pTiles[TgtIndex] = Tile;
+							}
+						}
+						else if(ExtraType == 3) // switch
+						{
+							uint8_t Number = Reader.ReadU8();
+							uint8_t Type = Reader.ReadU8();
+							uint8_t SwitchFlags = Reader.ReadU8();
+							uint8_t Delay = Reader.ReadU8();
+							auto pSwitch = std::dynamic_pointer_cast<CLayerSwitch>(pTiles);
+							if(pSwitch)
+							{
+								pSwitch->m_pSwitchTile[TgtIndex].m_Number = Number;
+								pSwitch->m_pSwitchTile[TgtIndex].m_Type = Type;
+								pSwitch->m_pSwitchTile[TgtIndex].m_Flags = SwitchFlags;
+								pSwitch->m_pSwitchTile[TgtIndex].m_Delay = Delay;
+								pSwitch->m_pTiles[TgtIndex] = Tile;
+							}
+						}
+						else if(ExtraType == 4) // tune
+						{
+							uint8_t Number = Reader.ReadU8();
+							uint8_t Type = Reader.ReadU8();
+							auto pTune = std::dynamic_pointer_cast<CLayerTune>(pTiles);
+							if(pTune)
+							{
+								pTune->m_pTuneTile[TgtIndex].m_Number = Number;
+								pTune->m_pTuneTile[TgtIndex].m_Type = Type;
+								pTune->m_pTiles[TgtIndex] = Tile;
+							}
+						}
+						else
+						{
+							pTiles->SetTileIgnoreHistory(TileX, TileY, Tile);
+						}
+						m_ApplyingRemote = false;
+						// measure e2e tile latency
+						if(m_LastTileEditSentTime != 0)
+						{
+							int64_t Elapsed = time_get() - m_LastTileEditSentTime;
+							int Ms = (int)(Elapsed * 1000 / time_freq());
+							m_TileRelayLatencyMs = Ms;
+						}
 					}
 				}
 			}
@@ -710,8 +850,45 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
 		int Count = pTiles->m_Width * pTiles->m_Height * (int)sizeof(CTile);
 		uint32_t OurCrc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTiles->m_pTiles), Count);
+
+		if(auto pTele = std::dynamic_pointer_cast<CLayerTele>(pTiles))
+		{
+			int ExCount = pTele->m_Width * pTele->m_Height * (int)sizeof(CTeleTile);
+			OurCrc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTele->m_pTeleTile), ExCount, OurCrc);
+		}
+		else if(auto pSpeedup = std::dynamic_pointer_cast<CLayerSpeedup>(pTiles))
+		{
+			int ExCount = pSpeedup->m_Width * pSpeedup->m_Height * (int)sizeof(CSpeedupTile);
+			OurCrc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pSpeedup->m_pSpeedupTile), ExCount, OurCrc);
+		}
+		else if(auto pSwitch = std::dynamic_pointer_cast<CLayerSwitch>(pTiles))
+		{
+			int ExCount = pSwitch->m_Width * pSwitch->m_Height * (int)sizeof(CSwitchTile);
+			OurCrc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pSwitch->m_pSwitchTile), ExCount, OurCrc);
+		}
+		else if(auto pTune = std::dynamic_pointer_cast<CLayerTune>(pTiles))
+		{
+			int ExCount = pTune->m_Width * pTune->m_Height * (int)sizeof(CTuneTile);
+			OurCrc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTune->m_pTuneTile), ExCount, OurCrc);
+		}
+
 		if(OurCrc != TheirCrc)
-			SendSyncRequest(GroupIdx, LayerIdx);
+		{
+			// defer by 500ms — TILE_RELAY packets for this stroke may still be in flight
+			int64_t RequestAfter = time_get() + time_freq() / 2;
+			bool Found = false;
+			for(auto &Req : m_vPendingSyncRequests)
+			{
+				if(Req.m_GroupIdx == GroupIdx && Req.m_LayerIdx == LayerIdx)
+				{
+					Req.m_RequestAfter = RequestAfter;
+					Found = true;
+					break;
+				}
+			}
+			if(!Found)
+				m_vPendingSyncRequests.push_back({GroupIdx, LayerIdx, RequestAfter});
+		}
 		break;
 	}
 	case PACKET_SYNC_REQUEST:
@@ -730,9 +907,13 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		int32_t Width    = Reader.ReadS32();
 		int32_t Height   = Reader.ReadS32();
 		int32_t Row      = Reader.ReadS32();
-		int RowBytes = Width * (int)sizeof(CTile);
-		if(!Reader.HasBytes(RowBytes) || Width <= 0 || Height <= 0 || Row < 0 || Row >= Height)
+		// Validate wire-supplied dimensions BEFORE deriving any byte count from
+		// them — Width * sizeof(CTile) would overflow int for a hostile Width.
+		if(Width <= 0 || Width > 10000 || Height <= 0 || Height > 10000 || Row < 0 || Row >= Height)
 			break;
+
+		// ExtraType byte: 0=CTile row, 1=tele, 2=speedup, 3=switch, 4=tune
+		uint8_t ExtraType = Reader.HasBytes(1) ? Reader.ReadU8() : 0;
 
 		auto &vGroups = Editor()->Map()->m_vpGroups;
 		if(GroupIdx < 0 || GroupIdx >= (int)vGroups.size())
@@ -745,7 +926,46 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
 		if(pTiles->m_Width != Width || pTiles->m_Height != Height)
 			break;
-		Reader.ReadBytes(reinterpret_cast<uint8_t *>(pTiles->m_pTiles + Row * Width), RowBytes);
+
+		if(ExtraType == 0) // CTile row
+		{
+			int RowBytes = Width * (int)sizeof(CTile);
+			if(!Reader.HasBytes(RowBytes))
+				break;
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pTiles->m_pTiles + Row * Width), RowBytes);
+		}
+		else if(ExtraType == 1) // tele
+		{
+			auto pTele = std::dynamic_pointer_cast<CLayerTele>(pTiles);
+			if(!pTele) break;
+			int RowBytes = Width * (int)sizeof(CTeleTile);
+			if(!Reader.HasBytes(RowBytes)) break;
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pTele->m_pTeleTile + Row * Width), RowBytes);
+		}
+		else if(ExtraType == 2) // speedup
+		{
+			auto pSpeedup = std::dynamic_pointer_cast<CLayerSpeedup>(pTiles);
+			if(!pSpeedup) break;
+			int RowBytes = Width * (int)sizeof(CSpeedupTile);
+			if(!Reader.HasBytes(RowBytes)) break;
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pSpeedup->m_pSpeedupTile + Row * Width), RowBytes);
+		}
+		else if(ExtraType == 3) // switch
+		{
+			auto pSwitch = std::dynamic_pointer_cast<CLayerSwitch>(pTiles);
+			if(!pSwitch) break;
+			int RowBytes = Width * (int)sizeof(CSwitchTile);
+			if(!Reader.HasBytes(RowBytes)) break;
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pSwitch->m_pSwitchTile + Row * Width), RowBytes);
+		}
+		else if(ExtraType == 4) // tune
+		{
+			auto pTune = std::dynamic_pointer_cast<CLayerTune>(pTiles);
+			if(!pTune) break;
+			int RowBytes = Width * (int)sizeof(CTuneTile);
+			if(!Reader.HasBytes(RowBytes)) break;
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pTune->m_pTuneTile + Row * Width), RowBytes);
+		}
 		break;
 	}
 	case PACKET_STRUCT_ADD_GROUP:
@@ -773,7 +993,22 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		if(vGroups[GroupIdx] == Editor()->Map()->m_pGameGroup)
 			break;
 		m_ApplyingRemote = true;
-		Editor()->Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionGroup>(Editor()->Map(), GroupIdx, true));
+		// Null any special-layer map pointers owned by layers in this group,
+		// otherwise DeleteGroup leaves dangling references (DeleteGroup does no
+		// such cleanup, unlike the DEL_LAYER path).
+		for(auto &pLayer : vGroups[GroupIdx]->m_vpLayers)
+		{
+			if(pLayer->m_Type != LAYERTYPE_TILES)
+				continue;
+			auto pTiles = std::static_pointer_cast<CLayerTiles>(pLayer);
+			if(pTiles->m_HasFront)        Editor()->Map()->m_pFrontLayer   = nullptr;
+			else if(pTiles->m_HasTele)    Editor()->Map()->m_pTeleLayer    = nullptr;
+			else if(pTiles->m_HasSpeedup) Editor()->Map()->m_pSpeedupLayer = nullptr;
+			else if(pTiles->m_HasSwitch)  Editor()->Map()->m_pSwitchLayer  = nullptr;
+			else if(pTiles->m_HasTune)    Editor()->Map()->m_pTuneLayer    = nullptr;
+		}
+		// NOTE: do NOT record into the undo history (see DEL_LAYER above) —
+		// a joiner-side undo of a remote delete would echo back to the owner.
 		Editor()->Map()->DeleteGroup(GroupIdx);
 		Editor()->Map()->m_SelectedGroup = maximum(0, GroupIdx - 1);
 		m_ApplyingRemote = false;
@@ -808,8 +1043,15 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			Editor()->AddQuadsLayer();
 		else if(LayerType == LAYERTYPE_SOUNDS)
 			Editor()->AddSoundLayer();
+		// The Add*Layer helpers always append; move the new layer to the index
+		// the sender used, mirroring the ADD_GROUP handler. Without this, every
+		// subsequent index-addressed packet hits the wrong layer on the receiver.
+		{
+			int NewIdx = (int)vGroups[GroupIdx]->m_vpLayers.size() - 1;
+			if(LayerIdx >= 0 && LayerIdx < NewIdx)
+				vGroups[GroupIdx]->MoveLayer(NewIdx, LayerIdx);
+		}
 		m_ApplyingRemote = false;
-		(void)LayerIdx;
 		break;
 	}
 	case PACKET_STRUCT_DEL_LAYER:
@@ -838,7 +1080,11 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			else if(pTiles->m_HasSwitch)  Editor()->Map()->m_pSwitchLayer  = nullptr;
 			else if(pTiles->m_HasTune)    Editor()->Map()->m_pTuneLayer    = nullptr;
 		}
-		Editor()->Map()->m_EditorHistory.RecordAction(std::make_shared<CEditorActionDeleteLayer>(Editor()->Map(), GroupIdx, LayerIdx));
+		// NOTE: do NOT record this into the undo history. A remote structural
+		// delete is owned by the initiator; if the joiner could undo it, the
+		// action's Undo()/Redo() would fire NotifyAddLayer/NotifyDelLayer back
+		// to the owner (m_ApplyingRemote is false at undo time), creating a
+		// duplicate layer and then an out-of-bounds delete on the owner — a crash.
 		vGroups[GroupIdx]->DeleteLayer(LayerIdx);
 		Editor()->Map()->SelectPreviousLayer();
 		m_ApplyingRemote = false;
@@ -926,15 +1172,51 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		auto &vLayers = vGroups[GroupIdx]->m_vpLayers;
 		if(LayerIdx < 0 || LayerIdx >= (int)vLayers.size())
 			break;
+		// Handle generic layer props (ORDER, HQ) before the tiles-only path
+		// These props are only sent for non-tiles layers; tiles use ETilesProp values.
 		if(vLayers[LayerIdx]->m_Type != LAYERTYPE_TILES)
-			break;
+		{
+			if(PropId == (int)ELayerProp::ORDER)
+			{
+				m_ApplyingRemote = true;
+				int NewIdx = Value;
+				if(NewIdx >= 0 && NewIdx < (int)vLayers.size())
+					vGroups[GroupIdx]->MoveLayer(LayerIdx, NewIdx);
+				Editor()->Map()->OnModify();
+				m_ApplyingRemote = false;
+				break;
+			}
+			if(PropId == (int)ELayerProp::HQ)
+			{
+				m_ApplyingRemote = true;
+				vLayers[LayerIdx]->m_Flags = Value;
+				Editor()->Map()->OnModify();
+				m_ApplyingRemote = false;
+				break;
+			}
+			break; // unknown prop for non-tiles layer
+		}
 		auto pTiles = std::static_pointer_cast<CLayerTiles>(vLayers[LayerIdx]);
 		m_ApplyingRemote = true;
 		ETilesProp Prop = static_cast<ETilesProp>(PropId);
 		if(Prop == ETilesProp::WIDTH)
+		{
+			if(Value <= 0 || Value > 10000)
+			{
+				m_ApplyingRemote = false;
+				break;
+			}
 			pTiles->Resize(Value, pTiles->m_Height);
+		}
 		else if(Prop == ETilesProp::HEIGHT)
+		{
+			if(Value <= 0 || Value > 10000)
+			{
+				m_ApplyingRemote = false;
+				break;
+			}
 			pTiles->Resize(pTiles->m_Width, Value);
+		}
 		else if(Prop == ETilesProp::COLOR)
 			pTiles->m_Color = UnpackColor(Value);
 		else if(Prop == ETilesProp::AUTOMAPPER)
@@ -1562,7 +1844,7 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 		int Offset = Reader.ReadS32();
 		int DataLen = Reader.ReadU16();
 		if(!Reader.HasBytes(DataLen)) break;
-		if(Offset < 0 || Offset + DataLen > m_MapTransferTotal) break;
+		if(Offset < 0 || (size_t)Offset + (size_t)DataLen > m_vMapTransferBuf.size()) break;
 		Reader.ReadBytes(m_vMapTransferBuf.data() + Offset, DataLen);
 		m_MapTransferReceived = minimum(m_MapTransferReceived + DataLen, m_MapTransferTotal);
 		break;
@@ -1669,6 +1951,41 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	}
 }
 
+bool CDuoSession::FindGroupAndLayer(const void *pLayerPtr, int &GroupIdx, int &LayerIdx) const
+{
+	// Check cache first
+	if(m_LayerCacheValid)
+	{
+		auto It = m_LayerIndexCache.find(pLayerPtr);
+		if(It != m_LayerIndexCache.end())
+		{
+			GroupIdx = It->second.first;
+			LayerIdx = It->second.second;
+			return true;
+		}
+	}
+	// Rebuild cache on miss
+	m_LayerIndexCache.clear();
+	auto &vGroups = Editor()->Map()->m_vpGroups;
+	for(int g = 0; g < (int)vGroups.size(); g++)
+	{
+		auto &vLayers = vGroups[g]->m_vpLayers;
+		for(int l = 0; l < (int)vLayers.size(); l++)
+			m_LayerIndexCache[vLayers[l].get()] = {g, l};
+	}
+	m_LayerCacheValid = true;
+	auto It = m_LayerIndexCache.find(pLayerPtr);
+	if(It != m_LayerIndexCache.end())
+	{
+		GroupIdx = It->second.first;
+		LayerIdx = It->second.second;
+		return true;
+	}
+	GroupIdx = -1;
+	LayerIdx = -1;
+	return false;
+}
+
 void CDuoSession::NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags)
 {
 	if(m_State != STATE_LIVE)
@@ -1677,7 +1994,58 @@ void CDuoSession::NotifyTileEdit(int GroupIdx, int LayerIdx, int TileX, int Tile
 	m_DirtyLayers.emplace(GroupIdx, LayerIdx);
 }
 
-uint32_t CDuoSession::CalcLayerCRC(const uint8_t *pTiles, int Count)
+void CDuoSession::NotifyTileEditTele(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Number, uint8_t Type)
+{
+	if(m_State != STATE_LIVE)
+		return;
+	STileEditEntry Entry{GroupIdx, LayerIdx, TileX, TileY, Index, 0};
+	Entry.m_ExtraType = 1;
+	Entry.m_ExNumber = Number;
+	Entry.m_ExType = Type;
+	m_vPendingTileEdits.push_back(Entry);
+	m_DirtyLayers.emplace(GroupIdx, LayerIdx);
+}
+
+void CDuoSession::NotifyTileEditSpeedup(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Force, uint8_t MaxSpeed, int16_t Angle)
+{
+	if(m_State != STATE_LIVE)
+		return;
+	STileEditEntry Entry{GroupIdx, LayerIdx, TileX, TileY, Index, 0};
+	Entry.m_ExtraType = 2;
+	Entry.m_ExForce = Force;
+	Entry.m_ExMaxSpeed = MaxSpeed;
+	Entry.m_ExAngle = Angle;
+	m_vPendingTileEdits.push_back(Entry);
+	m_DirtyLayers.emplace(GroupIdx, LayerIdx);
+}
+
+void CDuoSession::NotifyTileEditSwitch(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags, uint8_t Number, uint8_t SwitchType, uint8_t SwitchFlags, uint8_t Delay)
+{
+	if(m_State != STATE_LIVE)
+		return;
+	STileEditEntry Entry{GroupIdx, LayerIdx, TileX, TileY, Index, Flags};
+	Entry.m_ExtraType = 3;
+	Entry.m_ExNumber = Number;
+	Entry.m_ExType = SwitchType;
+	Entry.m_ExSwitchFlags = SwitchFlags;
+	Entry.m_ExDelay = Delay;
+	m_vPendingTileEdits.push_back(Entry);
+	m_DirtyLayers.emplace(GroupIdx, LayerIdx);
+}
+
+void CDuoSession::NotifyTileEditTune(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Number, uint8_t Type)
+{
+	if(m_State != STATE_LIVE)
+		return;
+	STileEditEntry Entry{GroupIdx, LayerIdx, TileX, TileY, Index, 0};
+	Entry.m_ExtraType = 4;
+	Entry.m_ExNumber = Number;
+	Entry.m_ExType = Type;
+	m_vPendingTileEdits.push_back(Entry);
+	m_DirtyLayers.emplace(GroupIdx, LayerIdx);
+}
+
+uint32_t CDuoSession::CalcLayerCRC(const uint8_t *pTiles, int Count, uint32_t InitCrc)
 {
 	// CRC-32 (ISO 3309)
 	static uint32_t s_aTable[256] = {};
@@ -1693,7 +2061,7 @@ uint32_t CDuoSession::CalcLayerCRC(const uint8_t *pTiles, int Count)
 		}
 		s_Init = true;
 	}
-	uint32_t crc = 0xFFFFFFFFu;
+	uint32_t crc = InitCrc ^ 0xFFFFFFFFu;
 	for(int i = 0; i < Count; i++)
 		crc = s_aTable[(crc ^ pTiles[i]) & 0xFF] ^ (crc >> 8);
 	return crc ^ 0xFFFFFFFFu;
@@ -1728,6 +2096,7 @@ void CDuoSession::NotifyAddGroup(int InsertIdx)
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
+	InvalidateLayerCache();
 	SendStructAddGroup(InsertIdx);
 }
 
@@ -1735,6 +2104,7 @@ void CDuoSession::NotifyDelGroup(int GroupIdx)
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
+	InvalidateLayerCache();
 	SendStructDelGroup(GroupIdx);
 }
 
@@ -1742,6 +2112,7 @@ void CDuoSession::NotifyAddLayer(int GroupIdx, int LayerIdx, int LayerType, cons
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
+	InvalidateLayerCache();
 	SendStructAddLayer(GroupIdx, LayerIdx, LayerType, pName, SubType);
 }
 
@@ -1749,6 +2120,7 @@ void CDuoSession::NotifyDelLayer(int GroupIdx, int LayerIdx)
 {
 	if(m_State != STATE_LIVE || m_ApplyingRemote)
 		return;
+	InvalidateLayerCache();
 	SendStructDelLayer(GroupIdx, LayerIdx);
 }
 
@@ -1819,6 +2191,28 @@ void CDuoSession::SendSyncCheck(int GroupIdx, int LayerIdx)
 	int Count = pTiles->m_Width * pTiles->m_Height * (int)sizeof(CTile);
 	uint32_t Crc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTiles->m_pTiles), Count);
 
+	// include special tile arrays in CRC
+	if(auto pTele = std::dynamic_pointer_cast<CLayerTele>(pTiles))
+	{
+		int ExCount = pTele->m_Width * pTele->m_Height * (int)sizeof(CTeleTile);
+		Crc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTele->m_pTeleTile), ExCount, Crc);
+	}
+	else if(auto pSpeedup = std::dynamic_pointer_cast<CLayerSpeedup>(pTiles))
+	{
+		int ExCount = pSpeedup->m_Width * pSpeedup->m_Height * (int)sizeof(CSpeedupTile);
+		Crc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pSpeedup->m_pSpeedupTile), ExCount, Crc);
+	}
+	else if(auto pSwitch = std::dynamic_pointer_cast<CLayerSwitch>(pTiles))
+	{
+		int ExCount = pSwitch->m_Width * pSwitch->m_Height * (int)sizeof(CSwitchTile);
+		Crc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pSwitch->m_pSwitchTile), ExCount, Crc);
+	}
+	else if(auto pTune = std::dynamic_pointer_cast<CLayerTune>(pTiles))
+	{
+		int ExCount = pTune->m_Width * pTune->m_Height * (int)sizeof(CTuneTile);
+		Crc = CalcLayerCRC(reinterpret_cast<const uint8_t *>(pTune->m_pTuneTile), ExCount, Crc);
+	}
+
 	std::vector<uint8_t> vPacket;
 	WriteHeader(vPacket, PACKET_SYNC_CHECK);
 	WriteS32(vPacket, GroupIdx);
@@ -1865,7 +2259,41 @@ void CDuoSession::SendSyncData(int GroupIdx, int LayerIdx)
 		WriteS32(vPacket, W);
 		WriteS32(vPacket, H);
 		WriteS32(vPacket, row);
+		WriteU8(vPacket, 0); // ExtraType=0: CTile row
 		WriteBytes(vPacket, reinterpret_cast<const uint8_t *>(pTiles->m_pTiles + row * W), RowBytes);
+		SendFrame(vPacket);
+		if(m_Socket == nullptr)
+			return;
+	}
+
+	// send special tile arrays if applicable
+	auto pTele = std::dynamic_pointer_cast<CLayerTele>(pTiles);
+	auto pSpeedup = std::dynamic_pointer_cast<CLayerSpeedup>(pTiles);
+	auto pSwitch = std::dynamic_pointer_cast<CLayerSwitch>(pTiles);
+	auto pTune = std::dynamic_pointer_cast<CLayerTune>(pTiles);
+	uint8_t ExtraType = pTele ? 1 : pSpeedup ? 2 : pSwitch ? 3 : pTune ? 4 : 0;
+	if(ExtraType == 0)
+		return;
+
+	const uint8_t *pExData = nullptr;
+	int ExItemSize = 0;
+	if(pTele) { pExData = reinterpret_cast<const uint8_t *>(pTele->m_pTeleTile); ExItemSize = (int)sizeof(CTeleTile); }
+	else if(pSpeedup) { pExData = reinterpret_cast<const uint8_t *>(pSpeedup->m_pSpeedupTile); ExItemSize = (int)sizeof(CSpeedupTile); }
+	else if(pSwitch) { pExData = reinterpret_cast<const uint8_t *>(pSwitch->m_pSwitchTile); ExItemSize = (int)sizeof(CSwitchTile); }
+	else if(pTune) { pExData = reinterpret_cast<const uint8_t *>(pTune->m_pTuneTile); ExItemSize = (int)sizeof(CTuneTile); }
+
+	int ExRowBytes = W * ExItemSize;
+	for(int row = 0; row < H; row++)
+	{
+		std::vector<uint8_t> vPacket;
+		WriteHeader(vPacket, PACKET_SYNC_DATA);
+		WriteS32(vPacket, GroupIdx);
+		WriteS32(vPacket, LayerIdx);
+		WriteS32(vPacket, W);
+		WriteS32(vPacket, H);
+		WriteS32(vPacket, row);
+		WriteU8(vPacket, ExtraType);
+		WriteBytes(vPacket, pExData + row * ExRowBytes, ExRowBytes);
 		SendFrame(vPacket);
 		if(m_Socket == nullptr)
 			return;
@@ -2486,6 +2914,35 @@ void CDuoSession::OnBackgroundUpdate()
 	{
 		m_LastLocalActivity = Current;
 		SendActivity(Current);
+	}
+
+	// process deferred SYNC_REQUESTs — send only if CRC still mismatches after the delay
+	if(!m_vPendingSyncRequests.empty())
+	{
+		int64_t Now2 = time_get();
+		for(int i = (int)m_vPendingSyncRequests.size() - 1; i >= 0; --i)
+		{
+			auto &Req = m_vPendingSyncRequests[i];
+			if(Now2 < Req.m_RequestAfter)
+				continue;
+			// re-check CRC: if TILE_RELAY packets arrived in the meantime, no need to request
+			auto &vGroups2 = Editor()->Map()->m_vpGroups;
+			bool Stale = Req.m_GroupIdx < 0 || Req.m_GroupIdx >= (int)vGroups2.size();
+			if(!Stale)
+			{
+				auto &vLayers2 = vGroups2[Req.m_GroupIdx]->m_vpLayers;
+				Stale = Req.m_LayerIdx < 0 || Req.m_LayerIdx >= (int)vLayers2.size();
+				if(!Stale && vLayers2[Req.m_LayerIdx]->m_Type == LAYERTYPE_TILES)
+				{
+					// we don't have TheirCrc here anymore, so just send the request —
+					// the extra round-trip (check → request → data) only happens after 500ms
+					SendSyncRequest(Req.m_GroupIdx, Req.m_LayerIdx);
+				}
+			}
+			m_vPendingSyncRequests.erase(m_vPendingSyncRequests.begin() + i);
+			if(m_Socket == nullptr)
+				break;
+		}
 	}
 }
 
