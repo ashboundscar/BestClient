@@ -321,6 +321,8 @@ void CDuoSession::CloseSocket()
 		net_tcp_close(m_Socket);
 		m_Socket = nullptr;
 	}
+	m_vSendBufPrio.clear();
+	m_SendBufPrioOffset = 0;
 	m_vSendBuf.clear();
 	m_SendBufOffset = 0;
 	m_vPendingSyncRequests.clear();
@@ -331,7 +333,6 @@ void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
 	if(m_Socket == nullptr)
 		return;
 	uint32_t Size = (uint32_t)vPayload.size();
-	// enqueue length prefix + payload into outbound buffer
 	m_vSendBuf.push_back((Size >> 24) & 0xFF);
 	m_vSendBuf.push_back((Size >> 16) & 0xFF);
 	m_vSendBuf.push_back((Size >> 8) & 0xFF);
@@ -339,34 +340,49 @@ void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
 	m_vSendBuf.insert(m_vSendBuf.end(), vPayload.begin(), vPayload.end());
 }
 
+void CDuoSession::SendFramePrio(const std::vector<uint8_t> &vPayload)
+{
+	if(m_Socket == nullptr)
+		return;
+	uint32_t Size = (uint32_t)vPayload.size();
+	m_vSendBufPrio.push_back((Size >> 24) & 0xFF);
+	m_vSendBufPrio.push_back((Size >> 16) & 0xFF);
+	m_vSendBufPrio.push_back((Size >> 8) & 0xFF);
+	m_vSendBufPrio.push_back(Size & 0xFF);
+	m_vSendBufPrio.insert(m_vSendBufPrio.end(), vPayload.begin(), vPayload.end());
+}
+
 void CDuoSession::DrainSendBuf()
 {
-	if(m_Socket == nullptr || m_vSendBuf.empty())
+	if(m_Socket == nullptr)
+		return;
+
+	// drain priority queue first (ping/pong/cursor)
+	if(!m_vSendBufPrio.empty())
+	{
+		const uint8_t *pData = m_vSendBufPrio.data() + m_SendBufPrioOffset;
+		int Remaining = (int)m_vSendBufPrio.size() - m_SendBufPrioOffset;
+		while(Remaining > 0)
+		{
+			int Sent = net_tcp_send(m_Socket, pData, Remaining);
+			if(Sent > 0) { pData += Sent; m_SendBufPrioOffset += Sent; Remaining -= Sent; }
+			else if(Sent == 0) { str_copy(m_aErrorMsg, "Connection lost"); m_State = STATE_ERROR; CloseSocket(); return; }
+			else break;
+		}
+		if(m_SendBufPrioOffset >= (int)m_vSendBufPrio.size()) { m_vSendBufPrio.clear(); m_SendBufPrioOffset = 0; }
+	}
+
+	// drain normal queue
+	if(m_vSendBuf.empty())
 		return;
 	const uint8_t *pData = m_vSendBuf.data() + m_SendBufOffset;
 	int Remaining = (int)m_vSendBuf.size() - m_SendBufOffset;
 	while(Remaining > 0)
 	{
 		int Sent = net_tcp_send(m_Socket, pData, Remaining);
-		if(Sent > 0)
-		{
-			pData += Sent;
-			m_SendBufOffset += Sent;
-			Remaining -= Sent;
-		}
-		else if(Sent == 0)
-		{
-			// connection closed
-			str_copy(m_aErrorMsg, "Connection lost");
-			m_State = STATE_ERROR;
-			CloseSocket();
-			return;
-		}
-		else
-		{
-			// WOULDBLOCK — come back next frame
-			break;
-		}
+		if(Sent > 0) { pData += Sent; m_SendBufOffset += Sent; Remaining -= Sent; }
+		else if(Sent == 0) { str_copy(m_aErrorMsg, "Connection lost"); m_State = STATE_ERROR; CloseSocket(); return; }
+		else break;
 	}
 	if(m_SendBufOffset >= (int)m_vSendBuf.size())
 	{
@@ -405,7 +421,7 @@ void CDuoSession::SendCursor(float WorldX, float WorldY)
 	WriteHeader(vPacket, PACKET_CURSOR);
 	WriteS32(vPacket, static_cast<int32_t>(WorldX * 1000.0f));
 	WriteS32(vPacket, static_cast<int32_t>(WorldY * 1000.0f));
-	SendFrame(vPacket);
+	SendFramePrio(vPacket);
 }
 
 void CDuoSession::SendTileEdit(int GroupIdx, int LayerIdx, int TileX, int TileY, uint8_t Index, uint8_t Flags)
@@ -487,6 +503,16 @@ void CDuoSession::SendGoodbye()
 	std::vector<uint8_t> vPacket;
 	WriteHeader(vPacket, PACKET_GOODBYE);
 	SendFrame(vPacket);
+}
+
+void CDuoSession::SendPing()
+{
+	if(m_Socket == nullptr)
+		return;
+	std::vector<uint8_t> vPacket;
+	WriteHeader(vPacket, PACKET_PING);
+	SendFramePrio(vPacket);
+	m_LastPingSentTime = time_get();
 }
 
 void CDuoSession::AppendAuth(std::vector<uint8_t> &vPacket) const
@@ -1946,6 +1972,25 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 			m_HasRemoteCursor = false;
 		break;
 	}
+	case PACKET_PING:
+	{
+		// partner sent ping — reply with pong so they can measure RTT
+		std::vector<uint8_t> vPong;
+		WriteHeader(vPong, PACKET_PONG);
+		SendFramePrio(vPong);
+		break;
+	}
+	case PACKET_PONG:
+	{
+		// our ping came back — measure RTT
+		if(m_LastPingSentTime != 0)
+		{
+			int64_t Elapsed = time_get() - m_LastPingSentTime;
+			m_PingMs = (int)(Elapsed * 1000 / time_freq());
+			m_LastPingSentTime = 0;
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -2888,6 +2933,13 @@ void CDuoSession::OnBackgroundUpdate()
 	{
 		SendHeartbeat();
 		m_LastHeartbeatTime = Now;
+	}
+
+	// Ping every 2 seconds to measure RTT
+	if(m_State == STATE_LIVE && m_LastPingSentTime == 0 && Now - m_LastPingTime > Freq * 2)
+	{
+		SendPing();
+		m_LastPingTime = Now;
 	}
 
 	// Determine current activity and send if changed

@@ -6352,7 +6352,6 @@ void CEditor::RenderMenubar(CUIRect MenuBar)
 			CUIRect LogRect;
 			MenuBar.VSplitLeft(200.0f, &LogRect, &MenuBar);
 			const char *pMsg = m_DuoSession.m_aLog[0].m_aText;
-			// red for disconnect/error, blue for partner activity, green for map loaded/session
 			bool IsError = str_find(pMsg, "lost") != nullptr || str_find(pMsg, "disconnected") != nullptr || str_find(pMsg, "full") != nullptr || str_find(pMsg, "not found") != nullptr;
 			bool IsMap = str_find(pMsg, "Map loaded") != nullptr;
 			bool IsSession = str_find(pMsg, "Session") != nullptr || str_find(pMsg, "reconnected") != nullptr || str_find(pMsg, "created") != nullptr;
@@ -6368,24 +6367,32 @@ void CEditor::RenderMenubar(CUIRect MenuBar)
 			Ui()->DoLabel(&LogRect, pMsg, 10.0f, TEXTALIGN_ML, LogProps);
 			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
 		}
+	}
 
-		// Duo tile latency indicator
-		if(m_DuoSession.m_State == CDuoSession::STATE_LIVE && m_DuoSession.m_TileRelayLatencyMs >= 0)
+	// Duo ping indicator — always visible while STATE_LIVE
+	if(m_DuoSession.m_State == CDuoSession::STATE_LIVE)
+	{
+		CUIRect PingRect;
+		MenuBar.VSplitLeft(55.0f, &PingRect, &MenuBar);
+		char aPingBuf[32];
+		if(m_DuoSession.m_PingMs >= 0)
 		{
-			CUIRect LatencyRect;
-			MenuBar.VSplitLeft(60.0f, &LatencyRect, &MenuBar);
-			char aLatBuf[32];
-			str_format(aLatBuf, sizeof(aLatBuf), "%d ms", m_DuoSession.m_TileRelayLatencyMs);
-			int Ms = m_DuoSession.m_TileRelayLatencyMs;
+			str_format(aPingBuf, sizeof(aPingBuf), "%d ms", m_DuoSession.m_PingMs);
+			int Ms = m_DuoSession.m_PingMs;
 			if(Ms < 100)
-				TextRender()->TextColor(0.3f, 1.0f, 0.5f, 1.0f);  // green: good
+				TextRender()->TextColor(0.3f, 1.0f, 0.5f, 1.0f);
 			else if(Ms < 300)
-				TextRender()->TextColor(1.0f, 0.8f, 0.2f, 1.0f);  // yellow: ok
+				TextRender()->TextColor(1.0f, 0.8f, 0.2f, 1.0f);
 			else
-				TextRender()->TextColor(1.0f, 0.3f, 0.3f, 1.0f);  // red: bad
-			Ui()->DoLabel(&LatencyRect, aLatBuf, 10.0f, TEXTALIGN_ML);
-			TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
+				TextRender()->TextColor(1.0f, 0.3f, 0.3f, 1.0f);
 		}
+		else
+		{
+			str_copy(aPingBuf, "-- ms");
+			TextRender()->TextColor(0.6f, 0.6f, 0.6f, 1.0f);
+		}
+		Ui()->DoLabel(&PingRect, aPingBuf, 10.0f, TEXTALIGN_ML);
+		TextRender()->TextColor(1.0f, 1.0f, 1.0f, 1.0f);
 	}
 
 	char aBuf[IO_MAX_PATH_LENGTH + 32];

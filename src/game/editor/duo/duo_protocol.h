@@ -71,6 +71,8 @@ enum EPacketType : uint8_t
 	PACKET_STRUCT_EDIT_SOUND_SOURCE = 50, // GroupIdx(4)+LayerIdx(4)+SourceIdx(4)+PropId(1)+Value(4)
 	// PropId values for EDIT_SOUND_SOURCE beyond ESoundProp:
 	// 20 = shape type, 21 = shape width/radius, 22 = shape height
+	PACKET_PING = 51, // no payload — forwarded to partner by server
+	PACKET_PONG = 52, // no payload — reply to PING
 };
 
 enum EActivity : uint8_t

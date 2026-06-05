@@ -107,6 +107,10 @@ public:
 	int m_RecvBufLen = 0;
 
 	// TCP outbound queue — SendFrame enqueues, DrainSendBuf drains non-blocking
+	// Priority queue for ping/pong/cursor — always drained first
+	std::vector<uint8_t> m_vSendBufPrio;
+	int m_SendBufPrioOffset = 0;
+	// Normal queue for tile edits, sync data, etc.
 	std::vector<uint8_t> m_vSendBuf;
 	int m_SendBufOffset = 0;
 
@@ -141,6 +145,11 @@ public:
 	// e2e tile latency: time from FlushTileEdits to receiving TILE_RELAY, in ms
 	int64_t m_LastTileEditSentTime = 0;   // time_get() when last batch was flushed
 	int m_TileRelayLatencyMs = -1;        // -1 = no measurement yet
+
+	// ping/pong RTT measurement — sent every ~2s while STATE_LIVE
+	int64_t m_LastPingSentTime = 0;
+	int64_t m_LastPingTime = 0;
+	int m_PingMs = -1;                    // -1 = no measurement yet
 
 	// deferred SYNC_REQUEST: when we receive SYNC_CHECK with a mismatched CRC,
 	// wait 500ms before sending SYNC_REQUEST — gives TILE_RELAY packets time to arrive
@@ -194,6 +203,7 @@ public:
 	void CloseSocket();
 	void DrainSendBuf();
 	void SendFrame(const std::vector<uint8_t> &vPayload);
+	void SendFramePrio(const std::vector<uint8_t> &vPayload); // ping/pong/cursor — bypasses normal queue
 	void SendHello();
 	void SendHeartbeat();
 	void SendCursor(float WorldX, float WorldY);
@@ -234,6 +244,7 @@ public:
 	void SendSettingEdit(int CmdIdx, const char *pCmd);
 	void SendSettingMove(int CmdIdx, int Direction);
 	void SendGoodbye();
+	void SendPing();
 	void SendMapStart(const char *pName, int TotalSize);
 	void SendMapChunk(int Offset, const uint8_t *pData, int DataLen);
 	void SendMapEnd();
