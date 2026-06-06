@@ -782,8 +782,18 @@ void CVoiceChat::OnUpdate()
 	LoadMutedNamesFromFile();
 	if(str_comp(m_aLastPersistedMutedNames, g_Config.m_BcVoiceChatMutedNames) != 0)
 	{
-		SaveMutedNamesToFile();
 		str_copy(m_aLastPersistedMutedNames, g_Config.m_BcVoiceChatMutedNames, sizeof(m_aLastPersistedMutedNames));
+		m_MutedListDirty = true;
+	}
+	if(m_MutedListDirty)
+	{
+		const int64_t Now = time_get();
+		if(m_LastMuteSaveTime == 0 || Now - m_LastMuteSaveTime >= time_freq())
+		{
+			SaveMutedNamesToFile();
+			m_LastMuteSaveTime = Now;
+			m_MutedListDirty = false;
+		}
 	}
 
 	const std::string EffectiveServerAddr = EffectiveServerAddress();

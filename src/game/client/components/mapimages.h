@@ -10,6 +10,8 @@
 #include <game/map/render_interfaces.h>
 #include <game/mapitems.h>
 
+#include <deque>
+
 enum EMapImageModType
 {
 	MAP_IMAGE_MOD_TYPE_DDNET = 0,
@@ -53,6 +55,7 @@ public:
 	void OnMapLoadImpl(class CLayers *pLayers, class IMap *pMap);
 	void OnMapLoad() override;
 	void OnInit() override;
+	void OnRender() override;
 	void Unload();
 	void LoadBackground(class CLayers *pLayers, class IMap *pMap);
 
@@ -70,6 +73,16 @@ public:
 	void ChangeEntitiesPath(const char *pPath);
 
 private:
+	// Deferred (background) image loading — drained 2 images per frame in OnRender.
+	// Only used for external quad-layer-only images (non-critical decorative assets).
+	struct SDeferredImage
+	{
+		int m_Index;
+		char m_aPath[IO_MAX_PATH_LENGTH];
+		int m_LoadFlag;
+	};
+	std::deque<SDeferredImage> m_DeferredImages;
+
 	bool m_aEntitiesIsLoaded[MAP_IMAGE_MOD_TYPE_COUNT * 2];
 	bool m_SpeedupArrowIsLoaded;
 	IGraphics::CTextureHandle m_aaEntitiesTextures[MAP_IMAGE_MOD_TYPE_COUNT * 2][MAP_IMAGE_ENTITY_LAYER_TYPE_COUNT];

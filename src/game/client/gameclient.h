@@ -314,6 +314,7 @@ private:
 
 	int m_aCheckInfo[NUM_DUMMIES];
 	unsigned long m_OptimizerDdnetPrevPriorityClass = 0;
+	unsigned long m_OptimizerDdnetLastSetPriorityClass = 0; // cache: last value passed to SetPriorityClass for current process
 	bool m_OptimizerDdnetPriorityHighActive = false;
 	bool m_OptimizerDiscordPriorityBelowNormalActive = false;
 	float m_OptimizerDiscordPriorityLastUpdateTime = -1.0f;

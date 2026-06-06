@@ -806,6 +806,14 @@ class CGraphics_Threaded : public IEngineGraphics
 	EDrawing m_Drawing;
 	bool m_DoScreenshot;
 	char m_aScreenshotName[IO_MAX_PATH_LENGTH];
+	// Deferred screenshot readback: avoids blocking WaitForIdle() in ScreenshotDirect().
+	// The image pointer is stable (member address), so the backend can write into it
+	// across frames. On the next Swap() we check IsIdle() and schedule the save job.
+	// m_aPendingScreenshotName captures the name at enqueue time so a subsequent
+	// TakeScreenshot() call cannot overwrite it before the save job is dispatched.
+	CImageInfo m_PendingScreenshotImage;
+	char m_aPendingScreenshotName[IO_MAX_PATH_LENGTH] = {};
+	bool m_HasPendingScreenshot = false;
 
 	CTextureHandle m_NullTexture;
 
@@ -821,6 +829,10 @@ class CGraphics_Threaded : public IEngineGraphics
 	// is a non full windowed (in a sense that the viewport won't include the whole window),
 	// forced viewport, so that it justifies our UI ratio needs
 	bool m_IsForcedViewport = false;
+
+	// deferred resize: set by GotResized() so WaitForIdle() runs at frame boundary (Swap)
+	// instead of blocking the main thread in the event handler
+	bool m_PendingResizeListenerNotify = false;
 
 	struct SVertexArrayInfo
 	{

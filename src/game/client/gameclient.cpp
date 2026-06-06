@@ -482,11 +482,20 @@ void CGameClient::OptimizerUpdateProcessPriorities()
 	else if(!WantDdnetHigh && m_OptimizerDdnetPriorityHighActive)
 	{
 		SetPriorityClass(GetCurrentProcess(), (DWORD)m_OptimizerDdnetPrevPriorityClass);
+		m_OptimizerDdnetLastSetPriorityClass = m_OptimizerDdnetPrevPriorityClass;
 		m_OptimizerDdnetPriorityHighActive = false;
 	}
 
 	if(m_OptimizerDdnetPriorityHighActive)
-		SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+	{
+		// Only call SetPriorityClass when the priority isn't already HIGH_PRIORITY_CLASS
+		// to avoid a redundant kernel API call every frame.
+		if(m_OptimizerDdnetLastSetPriorityClass != (unsigned long)HIGH_PRIORITY_CLASS)
+		{
+			SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+			m_OptimizerDdnetLastSetPriorityClass = (unsigned long)HIGH_PRIORITY_CLASS;
+		}
+	}
 
 	static const wchar_t *const s_apDiscordExeNames[] = {L"Discord.exe", L"DiscordPTB.exe", L"DiscordCanary.exe"};
 	const bool WantDiscordBelow = OptimizerEnabled() && g_Config.m_BcOptimizerDiscordPriorityBelowNormal != 0;
@@ -506,7 +515,8 @@ void CGameClient::OptimizerUpdateProcessPriorities()
 	if(m_OptimizerDiscordPriorityBelowNormalActive)
 	{
 		const float Now = Client()->LocalTime();
-		if(m_OptimizerDiscordPriorityLastUpdateTime < 0.0f || (Now - m_OptimizerDiscordPriorityLastUpdateTime) >= 2.0f)
+		// Throttle the expensive process enumeration to at most once every 5 seconds.
+		if(m_OptimizerDiscordPriorityLastUpdateTime < 0.0f || (Now - m_OptimizerDiscordPriorityLastUpdateTime) >= 5.0f)
 		{
 			SetPriorityClassForProcessNames(s_apDiscordExeNames, std::size(s_apDiscordExeNames), BELOW_NORMAL_PRIORITY_CLASS);
 			m_OptimizerDiscordPriorityLastUpdateTime = Now;

@@ -780,9 +780,14 @@ void CGraffity::StopNetwork()
 
 void CGraffity::JoinNetworkThreadIfNeeded()
 {
+	// Non-blocking: m_NetworkRunning is set to false as the last statement of
+	// NetworkMain, so the thread has already exited its logic. Detach instead
+	// of join to avoid stalling the main thread waiting for OS thread teardown.
+	// StopNetwork (called from OnShutdown) owns the blocking join for orderly
+	// shutdown; joinable() returns false after detach, so no double-join.
 	if(!m_NetworkRunning.load() && m_NetworkThread.joinable())
 	{
-		m_NetworkThread.join();
+		m_NetworkThread.detach();
 		m_vPlacedGraffities.clear();
 	}
 }

@@ -79,7 +79,7 @@ bool CPacketChunkUnpacker::UnpackNextChunk(CNetChunk *pChunk)
 		if((Header.m_Flags & NET_CHUNKFLAG_VITAL) != 0)
 		{
 			// anti spoof: ignore unknown sequence
-			if(Header.m_Sequence == (m_pConnection->m_Ack + 1) % NET_MAX_SEQUENCE || m_pConnection->m_UnknownSeq)
+			if(Header.m_Sequence == ((m_pConnection->m_Ack + 1) & (NET_MAX_SEQUENCE - 1)) || m_pConnection->m_UnknownSeq)
 			{
 				m_pConnection->m_UnknownSeq = false;
 
@@ -94,7 +94,7 @@ bool CPacketChunkUnpacker::UnpackNextChunk(CNetChunk *pChunk)
 
 				// out of sequence, request resend
 				if(g_Config.m_Debug)
-					dbg_msg("conn", "asking for resend %d %d", Header.m_Sequence, (m_pConnection->m_Ack + 1) % NET_MAX_SEQUENCE);
+					dbg_msg("conn", "asking for resend %d %d", Header.m_Sequence, (m_pConnection->m_Ack + 1) & (NET_MAX_SEQUENCE - 1));
 				m_pConnection->SignalResend();
 				continue; // take the next chunk in the packet
 			}
@@ -201,9 +201,11 @@ void CNetBase::SendPacket(NETSOCKET Socket, NETADDR *pAddr, CNetPacketConstruct 
 		pPacket->m_DataSize += sizeof(SecurityToken);
 	}
 
-	// only compress non-control packets
+	// only compress non-control packets; skip compression for small packets
+	// where the overhead of Huffman compression exceeds any potential gain
+	static const int NET_COMPRESSION_MIN_SIZE = 64;
 	int CompressedSize = -1;
-	if((pPacket->m_Flags & NET_PACKETFLAG_CONTROL) == 0)
+	if((pPacket->m_Flags & NET_PACKETFLAG_CONTROL) == 0 && pPacket->m_DataSize >= NET_COMPRESSION_MIN_SIZE)
 	{
 		CompressedSize = ms_Huffman.Compress(pPacket->m_aChunkData, pPacket->m_DataSize, &aBuffer[HeaderSize], NET_MAX_PACKETSIZE - HeaderSize);
 	}

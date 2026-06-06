@@ -286,6 +286,8 @@ private:
 	bool m_PeerListDirty = true;
 	bool m_SnapMappingDirty = true;
 	bool m_TalkingStateDirty = true;
+	bool m_MutedListDirty = false;
+	int64_t m_LastMuteSaveTime = 0;
 	CUi::SDropDownState m_InputDeviceDropDownState;
 	CUi::SDropDownState m_OutputDeviceDropDownState;
 

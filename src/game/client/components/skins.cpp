@@ -257,24 +257,46 @@ static void CheckMetrics(CSkin::CSkinMetricVariable &Metrics, const uint8_t *pIm
 	int MaxX = -1;
 	int MinX = CheckWidth + 1;
 
+	// Precompute row base pointer offset to avoid repeated multiply in inner loop
+	const int BaseOffset = ImgY * ImgWidth + ImgX * 4;
+
 	for(int y = 0; y < CheckHeight; y++)
 	{
+		const int RowOffset = BaseOffset + y * ImgWidth;
+		// Scan left-to-right to find leftmost non-transparent pixel in this row
+		int RowMinX = CheckWidth;
 		for(int x = 0; x < CheckWidth; x++)
 		{
-			int OffsetAlpha = (y + ImgY) * ImgWidth + (x + ImgX) * 4 + 3;
-			uint8_t AlphaValue = pImg[OffsetAlpha];
-			if(AlphaValue > 0)
+			if(pImg[RowOffset + x * 4 + 3] > 0)
 			{
-				if(MaxY < y)
-					MaxY = y;
-				if(MinY > y)
-					MinY = y;
-				if(MaxX < x)
-					MaxX = x;
-				if(MinX > x)
-					MinX = x;
+				RowMinX = x;
+				break;
 			}
 		}
+		// Row is fully transparent — skip right-to-left scan
+		if(RowMinX == CheckWidth)
+			continue;
+
+		// Scan right-to-left to find rightmost non-transparent pixel in this row
+		int RowMaxX = RowMinX;
+		for(int x = CheckWidth - 1; x > RowMinX; x--)
+		{
+			if(pImg[RowOffset + x * 4 + 3] > 0)
+			{
+				RowMaxX = x;
+				break;
+			}
+		}
+
+		// Update global bounds
+		if(y > MaxY)
+			MaxY = y;
+		if(y < MinY)
+			MinY = y;
+		if(RowMinX < MinX)
+			MinX = RowMinX;
+		if(RowMaxX > MaxX)
+			MaxX = RowMaxX;
 	}
 
 	Metrics.m_Width = std::clamp((MaxX - MinX) + 1, 1, CheckWidth);
@@ -358,6 +380,16 @@ bool CSkins::LoadSkinData(const char *pName, CSkinLoadData &Data) const
 	CheckMetrics(Data.m_Metrics.m_Feet, Data.m_Info.m_pData, Pitch, FeetOffsetX, FeetOffsetY, FeetWidth, FeetHeight);
 	CheckMetrics(Data.m_Metrics.m_Feet, Data.m_Info.m_pData, Pitch, FeetOutlineOffsetX, FeetOutlineOffsetY, FeetOutlineWidth, FeetOutlineHeight);
 
+	// Bounds check: prevent excessive allocation and iteration for oversized skins.
+	// Standard skin is 256x128. Cap at 1024x1024 to guard against OOB and hangs.
+	static constexpr size_t MaxSkinPixels = 1024 * 1024;
+	if(Data.m_Info.m_Width == 0 || Data.m_Info.m_Height == 0 ||
+		Data.m_Info.m_Width > MaxSkinPixels / Data.m_Info.m_Height)
+	{
+		log_warn("skins", "Skin '%s' is too large for grayscale conversion (%" PRIzu "x%" PRIzu "), rejecting", pName, Data.m_Info.m_Width, Data.m_Info.m_Height);
+		Data.m_Info.Free();
+		return false;
+	}
 	Data.m_InfoGrayscale = Data.m_Info.DeepCopy();
 	ConvertToGrayscale(Data.m_InfoGrayscale);
 

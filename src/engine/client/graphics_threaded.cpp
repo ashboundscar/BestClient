@@ -704,26 +704,46 @@ public:
 
 void CGraphics_Threaded::ScreenshotDirect(bool *pSwapped)
 {
+	// Drain a previously queued screenshot once the GPU has finished writing it.
+	// This is the deferred-readback path: no WaitForIdle() — we simply check
+	// IsIdle() which is true at frame boundary after the previous KickCommandBuffer().
+	if(m_HasPendingScreenshot)
+	{
+		if(IsIdle())
+		{
+			m_HasPendingScreenshot = false;
+			if(m_PendingScreenshotImage.m_pData)
+			{
+				m_pEngine->AddJob(std::make_shared<CScreenshotSaveJob>(m_pStorage, m_aPendingScreenshotName, std::move(m_PendingScreenshotImage)));
+			}
+		}
+		// If not idle yet, leave m_HasPendingScreenshot set; will be retried next frame.
+		// Do NOT enqueue a new screenshot command while one is still pending.
+		return;
+	}
+
 	if(!m_DoScreenshot)
 		return;
 	m_DoScreenshot = false;
 	if(!WindowActive())
 		return;
 
-	CImageInfo Image;
+	// Snapshot the name now so a subsequent TakeScreenshot() cannot overwrite it
+	// before the save job is dispatched on the next Swap().
+	str_copy(m_aPendingScreenshotName, m_aScreenshotName);
 
+	// Pass address of stable member so the backend can write the result without
+	// requiring the main thread to block via WaitForIdle().
+	m_PendingScreenshotImage = CImageInfo{};
 	CCommandBuffer::SCommand_TrySwapAndScreenshot Cmd;
-	Cmd.m_pImage = &Image;
+	Cmd.m_pImage = &m_PendingScreenshotImage;
 	Cmd.m_pSwapped = pSwapped;
 	AddCmd(Cmd);
 
 	KickCommandBuffer();
-	WaitForIdle();
-
-	if(Image.m_pData)
-	{
-		m_pEngine->AddJob(std::make_shared<CScreenshotSaveJob>(m_pStorage, m_aScreenshotName, std::move(Image)));
-	}
+	// No WaitForIdle() here — result will be collected on the next Swap() call
+	// once IsIdle() returns true (i.e., the backend has finished the command buffer).
+	m_HasPendingScreenshot = true;
 }
 
 void CGraphics_Threaded::TextureSet(CTextureHandle TextureId)
@@ -2844,15 +2864,15 @@ void CGraphics_Threaded::GotResized(int w, int h, int RefreshRate)
 
 	UpdateViewport(0, 0, m_ScreenWidth, m_ScreenHeight, true);
 
-	// kick the command buffer and wait
+	// Kick the command buffer so the viewport change reaches the graphics thread,
+	// but do NOT WaitForIdle() here — this runs on the main (game-logic) thread and
+	// blocking it on the graphics thread creates a priority inversion.
+	// The wait and resize-listener notifications are deferred to Swap() at the next
+	// frame boundary where a WaitForIdle() is already safe.
 	KickCommandBuffer();
-	WaitForIdle();
 
 	if(PrevCanvasWidth != m_ScreenWidth || PrevCanvasHeight != m_ScreenHeight)
-	{
-		for(auto &ResizeListener : m_vResizeListeners)
-			ResizeListener();
-	}
+		m_PendingResizeListenerNotify = true;
 }
 
 bool CGraphics_Threaded::IsScreenKeyboardShown()
@@ -2964,6 +2984,17 @@ void CGraphics_Threaded::TakeCustomScreenshot(const char *pFilename)
 
 void CGraphics_Threaded::Swap()
 {
+	// Drain pending resize notifications deferred from GotResized().
+	// WaitForIdle() here is safe because Swap() is the frame-boundary call,
+	// not a hot event-handler path, so it does not cause priority inversion.
+	if(m_PendingResizeListenerNotify)
+	{
+		WaitForIdle();
+		m_PendingResizeListenerNotify = false;
+		for(auto &ResizeListener : m_vResizeListeners)
+			ResizeListener();
+	}
+
 	bool Swapped = false;
 	ScreenshotDirect(&Swapped);
 	ReadPixelDirect(&Swapped);

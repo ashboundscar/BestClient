@@ -153,6 +153,20 @@ int CNetConnection::QueueChunkEx(int Flags, int DataSize, const void *pData, int
 	{
 		// save packet if we need to resend
 		CNetChunkResend *pResend = m_Buffer.Allocate(sizeof(CNetChunkResend) + DataSize);
+		if(!pResend)
+		{
+			// Buffer is full. Evict stale entries (older than 3 seconds) to reclaim
+			// space rather than silently dropping a fresh vital chunk.
+			// Entries that old will trigger a connection timeout in Update() anyway,
+			// so removing them here is safe and does not affect reliability semantics.
+			const int64_t StaleTimeout = time_freq() * 3;
+			const int64_t Now = time_get();
+			while(m_Buffer.First() && (Now - m_Buffer.First()->m_FirstSendTime) > StaleTimeout)
+				m_Buffer.PopFirst();
+
+			pResend = m_Buffer.Allocate(sizeof(CNetChunkResend) + DataSize);
+		}
+
 		if(pResend)
 		{
 			pResend->m_Sequence = Sequence;
@@ -165,7 +179,7 @@ int CNetConnection::QueueChunkEx(int Flags, int DataSize, const void *pData, int
 		}
 		else
 		{
-			// out of buffer, don't save the packet and hope nobody will ask for resend
+			// Buffer still full after evicting stale entries; silent drop unavoidable.
 			return -1;
 		}
 	}
@@ -176,7 +190,7 @@ int CNetConnection::QueueChunkEx(int Flags, int DataSize, const void *pData, int
 int CNetConnection::QueueChunk(int Flags, int DataSize, const void *pData)
 {
 	if(Flags & NET_CHUNKFLAG_VITAL)
-		m_Sequence = (m_Sequence + 1) % NET_MAX_SEQUENCE;
+		m_Sequence = (m_Sequence + 1) & (NET_MAX_SEQUENCE - 1);
 	return QueueChunkEx(Flags, DataSize, pData, m_Sequence);
 }
 
