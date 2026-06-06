@@ -690,6 +690,8 @@ void CGraffity::BeginPlacement(int Index)
 void CGraffity::QueueOutbound(std::string Line)
 {
 	std::lock_guard<std::mutex> Lock(m_NetMutex);
+	if(m_vOutboundLines.size() >= 256)
+		return;
 	m_vOutboundLines.push_back(std::move(Line));
 	m_NetCv.notify_all();
 }
