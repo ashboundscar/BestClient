@@ -257,7 +257,7 @@ static void CheckMetrics(CSkin::CSkinMetricVariable &Metrics, const uint8_t *pIm
 	int MaxX = -1;
 	int MinX = CheckWidth + 1;
 
-	// Precompute row base pointer offset to avoid repeated multiply in inner loop
+	// ImgWidth is pitch in bytes (pixels * 4). ImgX is in pixels, so offset by ImgX*4.
 	const int BaseOffset = ImgY * ImgWidth + ImgX * 4;
 
 	for(int y = 0; y < CheckHeight; y++)

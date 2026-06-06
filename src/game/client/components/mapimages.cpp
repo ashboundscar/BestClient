@@ -97,14 +97,6 @@ void CMapImages::OnMapLoadImpl(class CLayers *pLayers, IMap *pMap)
 
 	const int TextureLoadFlag = Graphics()->Uses2DTextureArrays() ? IGraphics::TEXLOAD_TO_2D_ARRAY_TEXTURE : IGraphics::TEXLOAD_TO_3D_TEXTURE;
 
-	// Clear any pending deferred images from a previous map load.
-	m_DeferredImages.clear();
-
-	// Two-pass loading:
-	//   Pass 1 (priority): tile-layer images (flag & 1) — gameplay-critical, load immediately.
-	//                      Also embedded quad-only images — their raw data must be consumed now.
-	//   Pass 2 (deferred): external quad-layer-only images (flag == 2, External) — pushed into
-	//                      m_DeferredImages and loaded 2 per frame via OnRender.
 	bool ShowWarning = false;
 	for(int i = 0; i < m_Count; i++)
 	{
@@ -154,23 +146,8 @@ void CMapImages::OnMapLoadImpl(class CLayers *pLayers, IMap *pMap)
 			}
 			str_format(aPath, sizeof(aPath), "mapres/%s%s.png", pName, Translated ? "_0.7" : "");
 			pMap->UnloadData(pImg->m_ImageName);
-
-			const bool IsTileLayer = (aTextureUsedByTileOrQuadLayerFlag[i] & 1) != 0;
-			if(IsTileLayer)
-			{
-				// Priority: load immediately — needed for tile rendering this frame.
-				m_aTextures[i] = Graphics()->LoadTexture(aPath, IStorage::TYPE_ALL, LoadFlag);
-				ShowWarning = ShowWarning || m_aTextures[i].IsNullTexture();
-			}
-			else
-			{
-				// Deferred: quad-layer-only decorative image, schedule for background load.
-				SDeferredImage Deferred;
-				Deferred.m_Index = i;
-				str_copy(Deferred.m_aPath, aPath);
-				Deferred.m_LoadFlag = LoadFlag;
-				m_DeferredImages.push_back(Deferred);
-			}
+			m_aTextures[i] = Graphics()->LoadTexture(aPath, IStorage::TYPE_ALL, LoadFlag);
+			ShowWarning = ShowWarning || m_aTextures[i].IsNullTexture();
 		}
 		else
 		{
@@ -205,22 +182,6 @@ void CMapImages::OnMapLoadImpl(class CLayers *pLayers, IMap *pMap)
 	}
 }
 
-void CMapImages::OnRender()
-{
-	// Drain deferred (decorative) image queue — load up to 2 external images per frame
-	// to avoid stalling the render thread while keeping background loading progressing.
-	constexpr int MaxPerFrame = 2;
-	for(int Loaded = 0; Loaded < MaxPerFrame && !m_DeferredImages.empty(); ++Loaded)
-	{
-		const SDeferredImage &Deferred = m_DeferredImages.front();
-		m_aTextures[Deferred.m_Index] = Graphics()->LoadTexture(Deferred.m_aPath, IStorage::TYPE_ALL, Deferred.m_LoadFlag);
-		if(m_aTextures[Deferred.m_Index].IsNullTexture())
-		{
-			log_error("mapimages", "Deferred load failed for map image %d: '%s'", Deferred.m_Index, Deferred.m_aPath);
-		}
-		m_DeferredImages.pop_front();
-	}
-}
 
 void CMapImages::OnMapLoad()
 {
