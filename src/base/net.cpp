@@ -1156,6 +1156,9 @@ int net_udp_recv(NETSOCKET sock, NETADDR *addr, unsigned char **data)
 			update_stats(bytes);
 			return bytes;
 		}
+		// No data available on non-blocking socket — not a real error
+		if(bytes < 0 && net_would_block())
+			return 0;
 	}
 
 	if(sock->ipv6sock >= 0)
@@ -1170,6 +1173,9 @@ int net_udp_recv(NETSOCKET sock, NETADDR *addr, unsigned char **data)
 			update_stats(bytes);
 			return bytes;
 		}
+		// No data available on non-blocking socket — not a real error
+		if(bytes < 0 && net_would_block())
+			return 0;
 	}
 #endif
 

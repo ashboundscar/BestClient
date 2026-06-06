@@ -26,6 +26,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <map>
@@ -399,7 +400,12 @@ class CCommandProcessorFragment_Vulkan : public CCommandProcessorFragment_GLBase
 				else if(pThisParent != nullptr)
 					pOtherHeapObj = pThisHeapObj->m_pParent->m_pLeft.get();
 
-				if((pThisParent != nullptr && pOtherHeapObj == nullptr) || (pOtherHeapObj != nullptr && !pOtherHeapObj->m_InUse))
+				// Coalesce: merge with sibling only when it is a free leaf node (no children).
+				// A sibling with children was further subdivided and may still have active
+				// sub-allocations, so m_InUse alone is not sufficient — we must also confirm
+				// it has no children before merging, to avoid touching live allocations.
+				const bool SiblingIsFreeLeaf = pOtherHeapObj != nullptr && !pOtherHeapObj->m_InUse && pOtherHeapObj->m_pLeft == nullptr;
+				if((pThisParent != nullptr && pOtherHeapObj == nullptr) || SiblingIsFreeLeaf)
 				{
 					// merge them
 					if(pOtherHeapObj != nullptr)
@@ -1167,6 +1173,8 @@ private:
 	SPipelineContainer m_QuadGroupedPipeline;
 
 	std::vector<VkPipeline> m_vLastPipeline;
+	std::vector<VkViewport> m_vLastViewport;
+	std::vector<VkRect2D> m_vLastScissor;
 
 	std::vector<VkCommandPool> m_vCommandPools;
 
@@ -2314,6 +2322,8 @@ protected:
 					std::unique_lock<std::mutex> Lock(pRenderThread->m_Mutex);
 					pRenderThread->m_Cond.wait(Lock, [&pRenderThread] { return !pRenderThread->m_IsRendering; });
 					m_vLastPipeline[ThreadIndex + 1] = VK_NULL_HANDLE;
+					m_vLastViewport[ThreadIndex + 1] = VkViewport{};
+					m_vLastScissor[ThreadIndex + 1] = VkRect2D{};
 				}
 			}
 		}
@@ -2576,18 +2586,24 @@ protected:
 
 		for(auto &LastPipe : m_vLastPipeline)
 			LastPipe = VK_NULL_HANDLE;
+		for(auto &LastVp : m_vLastViewport)
+			LastVp = VkViewport{};
+		for(auto &LastSc : m_vLastScissor)
+			LastSc = VkRect2D{};
 
 		return true;
 	}
 
 	void UploadStagingBuffers()
 	{
-		if(!m_vNonFlushedStagingBufferRange.empty())
+		static constexpr uint32_t FlushBatchSize = 32;
+		const size_t TotalRanges = m_vNonFlushedStagingBufferRange.size();
+		for(size_t Offset = 0; Offset < TotalRanges; Offset += FlushBatchSize)
 		{
-			vkFlushMappedMemoryRanges(m_VKDevice, m_vNonFlushedStagingBufferRange.size(), m_vNonFlushedStagingBufferRange.data());
-
-			m_vNonFlushedStagingBufferRange.clear();
+			const uint32_t BatchCount = (uint32_t)std::min<size_t>(FlushBatchSize, TotalRanges - Offset);
+			vkFlushMappedMemoryRanges(m_VKDevice, BatchCount, m_vNonFlushedStagingBufferRange.data() + Offset);
 		}
+		m_vNonFlushedStagingBufferRange.clear();
 	}
 
 	template<bool FlushForRendering>
@@ -3476,8 +3492,16 @@ protected:
 		size_t DynamicStateIndex = GetDynamicModeIndexFromExecBuffer(ExecBuffer);
 		if(DynamicStateIndex == VULKAN_BACKEND_CLIP_MODE_DYNAMIC_SCISSOR_AND_VIEWPORT)
 		{
-			vkCmdSetViewport(CommandBuffer, 0, 1, &ExecBuffer.m_Viewport);
-			vkCmdSetScissor(CommandBuffer, 0, 1, &ExecBuffer.m_Scissor);
+			if(std::memcmp(&m_vLastViewport[RenderThreadIndex], &ExecBuffer.m_Viewport, sizeof(VkViewport)) != 0)
+			{
+				vkCmdSetViewport(CommandBuffer, 0, 1, &ExecBuffer.m_Viewport);
+				m_vLastViewport[RenderThreadIndex] = ExecBuffer.m_Viewport;
+			}
+			if(std::memcmp(&m_vLastScissor[RenderThreadIndex], &ExecBuffer.m_Scissor, sizeof(VkRect2D)) != 0)
+			{
+				vkCmdSetScissor(CommandBuffer, 0, 1, &ExecBuffer.m_Scissor);
+				m_vLastScissor[RenderThreadIndex] = ExecBuffer.m_Scissor;
+			}
 		}
 	}
 
@@ -5806,6 +5830,8 @@ public:
 		m_vImageLastFrameCheck.clear();
 
 		m_vLastPipeline.clear();
+		m_vLastViewport.clear();
+		m_vLastScissor.clear();
 
 		for(size_t i = 0; i < m_ThreadCount; ++i)
 		{
@@ -6598,6 +6624,8 @@ public:
 		}
 
 		m_vLastPipeline.resize(m_ThreadCount, VK_NULL_HANDLE);
+		m_vLastViewport.resize(m_ThreadCount, VkViewport{});
+		m_vLastScissor.resize(m_ThreadCount, VkRect2D{});
 
 		m_vvFrameDelayedBufferCleanup.resize(m_SwapChainImageCount);
 		m_vvFrameDelayedTextureCleanup.resize(m_SwapChainImageCount);

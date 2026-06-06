@@ -1041,7 +1041,8 @@ void CGameClient::OnUpdate()
 
 	for(auto &pComponent : m_vpAll)
 	{
-		pComponent->OnUpdate();
+		if(pComponent->IsComponentActive())
+			pComponent->OnUpdate();
 	}
 }
 
@@ -1404,6 +1405,8 @@ void CGameClient::OnRender()
 	// render all systems
 	for(auto &pComponent : m_vpAll)
 	{
+		if(!pComponent->IsComponentActive())
+			continue;
 		if(pComponent == &m_MusicPlayer)
 			m_Graffity.RenderOverlayWorld();
 		if(UseGameNoHudAspect && !HudAspectDisabled && pComponent == &m_MusicPlayer)
@@ -4620,7 +4623,16 @@ void CGameClient::UpdatePrediction()
 	// advance the gameworld to the current gametick
 	if(pLocalChar && absolute(m_GameWorld.GameTick() - Client()->GameTick(g_Config.m_ClDummy)) < Client()->GameTickSpeed())
 	{
-		for(int Tick = m_GameWorld.GameTick() + 1; Tick <= Client()->GameTick(g_Config.m_ClDummy); Tick++)
+		// cap catch-up ticks per frame to prevent spiral-of-death spikes under network jitter
+		const int MaxCatchupTicks = Client()->GameTickSpeed() / 2;
+		const int TargetTick = Client()->GameTick(g_Config.m_ClDummy);
+		const int StartTick = maximum(m_GameWorld.GameTick() + 1, TargetTick - MaxCatchupTicks + 1);
+		if(StartTick > m_GameWorld.GameTick() + 1)
+		{
+			// skip old ticks: anchor world state to StartTick-1 so resimulation begins correctly
+			m_GameWorld.m_GameTick = StartTick - 1;
+		}
+		for(int Tick = StartTick; Tick <= TargetTick; Tick++)
 		{
 			CNetObj_PlayerInput *pInput = (CNetObj_PlayerInput *)Client()->GetInput(Tick);
 			CNetObj_PlayerInput *pDummyInput = nullptr;

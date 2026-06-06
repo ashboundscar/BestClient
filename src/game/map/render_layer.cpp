@@ -163,6 +163,16 @@ bool CRenderLayerTile::CTileLayerVisuals::Init(unsigned int Width, unsigned int 
 		if(Width >= std::numeric_limits<std::ptrdiff_t>::max() || Height >= std::numeric_limits<std::ptrdiff_t>::max())
 			return false;
 
+	// Guard against multiplication overflow before computing the total tile count.
+	// Both Width and Height are unsigned int, so the product can silently wrap on
+	// 32-bit targets or produce an enormous allocation on 64-bit ones.
+	static constexpr size_t s_MaxTiles = (size_t)4096 * 4096; // 16M tiles ~64 MB worst case
+	if((size_t)Width > s_MaxTiles / (size_t)Height)
+	{
+		log_warn("render_layer", "tile layer too large (%ux%u, max %zu tiles), skipping", Width, Height, s_MaxTiles);
+		return false;
+	}
+
 	m_vTilesOfLayer.resize((size_t)Height * (size_t)Width);
 
 	m_vBorderTop.resize(Width);

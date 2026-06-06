@@ -568,6 +568,21 @@ void CNetTokenCache::AddToken(const NETADDR *pAddr, TOKEN Token)
 		}
 	}
 
+	if((int)m_TokenCache.size() >= NET_TOKENCACHE_SIZE)
+	{
+		// First try to free expired entries to avoid evicting valid tokens
+		int64_t Now = time_get();
+		m_TokenCache.erase(
+			std::remove_if(m_TokenCache.begin(), m_TokenCache.end(), [&](const CAddressInfo &Entry) {
+				return Entry.m_Expiry <= Now;
+			}),
+			m_TokenCache.end());
+
+		// If still at capacity, evict the oldest entry (front of vector)
+		if((int)m_TokenCache.size() >= NET_TOKENCACHE_SIZE)
+			m_TokenCache.erase(m_TokenCache.begin());
+	}
+
 	CAddressInfo Info;
 	Info.m_Addr = *pAddr,
 	Info.m_Token = Token,

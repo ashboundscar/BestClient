@@ -205,6 +205,10 @@ int CHuffman::Compress(const void *pInput, int InputSize, void *pOutput, int Out
 //***************************************************************
 int CHuffman::Decompress(const void *pInput, int InputSize, void *pOutput, int OutputSize) const
 {
+	// validate input parameters to prevent unbounded iteration on malformed data
+	if(InputSize <= 0 || OutputSize <= 0 || !pInput || !pOutput)
+		return -1;
+
 	// setup buffer pointers
 	unsigned char *pDst = (unsigned char *)pOutput;
 	unsigned char *pSrc = (unsigned char *)pInput;

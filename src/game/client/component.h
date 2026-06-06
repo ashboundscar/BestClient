@@ -170,6 +170,14 @@ public:
 	virtual int Sizeof() const = 0;
 
 	/**
+	 * Returns whether this component is active and should receive OnUpdate/OnRender calls.
+	 * Components can override this or call SetComponentActive(false) to opt out of the
+	 * main update/render loops without being removed from m_vpAll.
+	 */
+	bool IsComponentActive() const { return m_ComponentActive; }
+	void SetComponentActive(bool Active) { m_ComponentActive = Active; }
+
+	/**
 	 * This method is called when the client changes state, e.g from offline to online.
 	 * @see IClient::STATE_CONNECTING
 	 * @see IClient::STATE_LOADING
@@ -300,6 +308,9 @@ public:
 	{
 		return false;
 	}
+
+private:
+	bool m_ComponentActive = true;
 };
 
 #endif
