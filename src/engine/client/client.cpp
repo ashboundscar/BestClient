@@ -3749,12 +3749,33 @@ void CClient::Run()
 			SleepTimeInNanoSeconds = (std::chrono::nanoseconds(1s) / (int64_t)g_Config.m_ClRefreshRate) - (Now - LastTime);
 			auto SleepTimeInNanoSecondsInner = SleepTimeInNanoSeconds;
 			auto NowInner = Now;
+			// Busy-wait guard: only spin the last 200us for frame precision; sleep the rest.
+			// This prevents near-100% CPU usage when net_socket_read_wait returns early
+			// due to incoming packets, which causes rapid re-entry into the loop.
+			static constexpr std::chrono::nanoseconds BusyWaitThreshold = std::chrono::microseconds(200);
 			while(std::chrono::duration_cast<std::chrono::microseconds>(SleepTimeInNanoSecondsInner) > 0us)
 			{
-				net_socket_read_wait(m_aNetClient[CONN_MAIN].m_Socket, SleepTimeInNanoSecondsInner);
-				auto NowInnerCalc = time_get_nanoseconds();
-				SleepTimeInNanoSecondsInner -= (NowInnerCalc - NowInner);
-				NowInner = NowInnerCalc;
+				if(SleepTimeInNanoSecondsInner > BusyWaitThreshold)
+				{
+					// Sleep most of the remaining time, keeping BusyWaitThreshold for precise spin-finish.
+					auto SleepDuration = SleepTimeInNanoSecondsInner - BusyWaitThreshold;
+					int GotData = net_socket_read_wait(m_aNetClient[CONN_MAIN].m_Socket, SleepDuration);
+					auto NowInnerCalc = time_get_nanoseconds();
+					SleepTimeInNanoSecondsInner -= (NowInnerCalc - NowInner);
+					NowInner = NowInnerCalc;
+					// If socket had data but significant time remains, yield to avoid
+					// tight spin on high-traffic connections.
+					if(GotData && SleepTimeInNanoSecondsInner > BusyWaitThreshold)
+						std::this_thread::yield();
+				}
+				else
+				{
+					// Final busy-wait window: spin without yielding for accurate frame timing.
+					net_socket_read_wait(m_aNetClient[CONN_MAIN].m_Socket, SleepTimeInNanoSecondsInner);
+					auto NowInnerCalc = time_get_nanoseconds();
+					SleepTimeInNanoSecondsInner -= (NowInnerCalc - NowInner);
+					NowInner = NowInnerCalc;
+				}
 			}
 			Slept = true;
 		}

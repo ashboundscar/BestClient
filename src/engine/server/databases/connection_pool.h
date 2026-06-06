@@ -101,6 +101,10 @@ public:
 private:
 	static bool ExecSqlFunc(IDbConnection *pConnection, struct CSqlExecData *pData, Write w);
 
+	// Attempts to enqueue pData. Returns true on success.
+	// Returns false and logs an error if the ring buffer is full (overflow protection).
+	bool TryEnqueue(std::unique_ptr<struct CSqlExecData> pData);
+
 	// Only the main thread accesses this variable. It points to the index,
 	// where the next query is added to the queue.
 	int m_InsertIdx = 0;
@@ -124,6 +128,12 @@ private:
 
 		// spsc queue with additional backup worker to look at queries first.
 		std::unique_ptr<struct CSqlExecData> m_aQueries[512];
+
+		// Number of slots currently occupied in m_aQueries.
+		// Incremented by the main thread before writing, decremented by the
+		// worker thread after consuming an entry. Prevents ring-buffer overflow
+		// when the worker falls behind and the main thread would lap it.
+		std::atomic_int m_NumUsedSlots{0};
 	};
 
 	std::shared_ptr<CSharedData> m_pShared;

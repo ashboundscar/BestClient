@@ -71,7 +71,7 @@ void CGraphicsBackend_Threaded::ThreadFunc(void *pUser)
 			pSelf->m_pProcessor->RunBuffer(pSelf->m_pBuffer);
 
 			pSelf->m_pBuffer = nullptr;
-			pSelf->m_BufferInProcess.store(false, std::memory_order_relaxed);
+			pSelf->m_BufferInProcess.store(false, std::memory_order_release);
 			pSelf->m_BufferSwapCond.notify_all();
 
 #if defined(CONF_VIDEORECORDER)
@@ -144,7 +144,7 @@ void CGraphicsBackend_Threaded::RunBuffer(CCommandBuffer *pBuffer)
 		if(Error.m_ErrorType == GFX_ERROR_TYPE_NONE)
 		{
 			m_pBuffer = pBuffer;
-			m_BufferInProcess.store(true, std::memory_order_relaxed);
+			m_BufferInProcess.store(true, std::memory_order_release);
 			m_BufferSwapCond.notify_all();
 		}
 	}
@@ -167,7 +167,7 @@ bool CGraphicsBackend_Threaded::IsIdle() const
 #if defined(CONF_PLATFORM_EMSCRIPTEN)
 	return true;
 #else
-	return !m_BufferInProcess.load(std::memory_order_relaxed);
+	return !m_BufferInProcess.load(std::memory_order_acquire);
 #endif
 }
 
