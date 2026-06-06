@@ -40,6 +40,7 @@ namespace
 	constexpr float WHEEL_ITEM_RADIUS = 104.0f;
 	constexpr float WHEEL_CIRCLE_RADIUS = 138.0f;
 	constexpr float GRAFFITY_FADE_IN_TIME = 0.18f;
+	constexpr int64_t GRAFFITY_HELLO_RESYNC_INTERVAL = 20;
 	constexpr int DEFAULT_GRAFFITY_SERVER_PORT = 8781;
 	constexpr int GRAFFITY_AUTH_KEY_SIZE = 32;
 	constexpr int GRAFFITY_AUTH_HEX_SIZE = SHA256_DIGEST_LENGTH * 2 + 1;
@@ -115,6 +116,21 @@ namespace
 		uint8_t aDigest[SHA256_DIGEST_LENGTH];
 		HmacSha256(aKey, sizeof(aKey), reinterpret_cast<const uint8_t *>(Payload.data()), (int)Payload.size(), aDigest);
 		LowerHex(aDigest, sizeof(aDigest), pOut, OutSize);
+	}
+
+	std::string BuildGraffityHelloMessage(const std::string &GameServerAddress, const std::string &OwnerId, int64_t Timestamp)
+	{
+		char aAuth[GRAFFITY_AUTH_HEX_SIZE];
+		ComputeGraffityHelloAuth(aAuth, sizeof(aAuth), GameServerAddress.c_str(), OwnerId.c_str(), Timestamp);
+
+		char aHello[768];
+		str_format(aHello, sizeof(aHello),
+			"{\"type\":\"hello\",\"server_address\":\"%s\",\"owner_id\":\"%s\",\"timestamp\":%" PRId64 ",\"auth\":\"%s\"}",
+			GameServerAddress.c_str(),
+			OwnerId.c_str(),
+			Timestamp,
+			aAuth);
+		return aHello;
 	}
 
 	std::string DefaultGraffityServerAddress()
@@ -216,6 +232,12 @@ void CGraffity::ConGraffity(IConsole::IResult *pResult, void *pUserData)
 	}
 	if(pSelf->GameClient()->m_Scoreboard.IsActive())
 		return;
+	if(!pSelf->GraffityEnabled())
+	{
+		pSelf->CloseWheel();
+		pSelf->CancelPlacement();
+		return;
+	}
 	if(g_Config.m_BcGraffityHoldWheel)
 		pSelf->OpenWheel();
 	else
@@ -287,8 +309,9 @@ void CGraffity::OnUpdate()
 		CloseWheel();
 		CancelPlacement();
 	}
-	else if(!GraffityEnabled() && m_PlacementActive)
+	else if(!GraffityEnabled())
 	{
+		CloseWheel();
 		CancelPlacement();
 	}
 }
@@ -592,6 +615,8 @@ void CGraffity::PlaySprayApplySound()
 
 void CGraffity::OpenWheel()
 {
+	if(!GraffityEnabled())
+		return;
 	if(Client()->State() != IClient::STATE_ONLINE || GameClient()->m_Snap.m_SpecInfo.m_Active || !GameClient()->m_Snap.m_pLocalCharacter)
 		return;
 	if(IsLocalhostGameServer())
@@ -613,6 +638,12 @@ void CGraffity::OpenWheel()
 
 void CGraffity::ToggleWheel()
 {
+	if(!GraffityEnabled())
+	{
+		CloseWheel();
+		CancelPlacement();
+		return;
+	}
 	if(m_PlacementActive)
 	{
 		CancelPlacement();
@@ -782,16 +813,8 @@ void CGraffity::StopNetwork()
 
 void CGraffity::JoinNetworkThreadIfNeeded()
 {
-	// Non-blocking: m_NetworkRunning is set to false as the last statement of
-	// NetworkMain, so the thread has already exited its logic. Detach instead
-	// of join to avoid stalling the main thread waiting for OS thread teardown.
-	// StopNetwork (called from OnShutdown) owns the blocking join for orderly
-	// shutdown; joinable() returns false after detach, so no double-join.
 	if(!m_NetworkRunning.load() && m_NetworkThread.joinable())
-	{
-		m_NetworkThread.detach();
-		m_vPlacedGraffities.clear();
-	}
+		m_NetworkThread.join();
 }
 
 void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
@@ -826,22 +849,11 @@ void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
 	m_NetworkConnected = true;
 	m_aLastError[0] = '\0';
 
-	const int64_t HelloTimestamp = ::time(nullptr);
-	char aAuth[GRAFFITY_AUTH_HEX_SIZE];
-	ComputeGraffityHelloAuth(aAuth, sizeof(aAuth), GameServerAddress.c_str(), OwnerId.c_str(), HelloTimestamp);
-
-	char aHello[768];
-	str_format(aHello, sizeof(aHello),
-		"{\"type\":\"hello\",\"server_address\":\"%s\",\"owner_id\":\"%s\",\"timestamp\":%" PRId64 ",\"auth\":\"%s\"}",
-		GameServerAddress.c_str(),
-		OwnerId.c_str(),
-		HelloTimestamp,
-		aAuth);
-	QueueOutbound(aHello);
-
 	std::string PendingRecv;
 	PendingRecv.reserve(4096);
 	std::array<char, 2048> aBuffer{};
+	bool HelloSent = false;
+	int64_t NextHelloTick = 0;
 
 	while(!m_StopThread.load())
 	{
@@ -851,6 +863,14 @@ void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
 			if(m_vOutboundLines.empty())
 				m_NetCv.wait_for(Lock, std::chrono::milliseconds(25));
 			vOutbound.swap(m_vOutboundLines);
+		}
+
+		const int64_t Now = time_get();
+		if(!HelloSent || Now >= NextHelloTick)
+		{
+			vOutbound.insert(vOutbound.begin(), BuildGraffityHelloMessage(GameServerAddress, OwnerId, ::time(nullptr)));
+			HelloSent = true;
+			NextHelloTick = Now + time_freq() * GRAFFITY_HELLO_RESYNC_INTERVAL;
 		}
 
 		for(const std::string &Line : vOutbound)
@@ -879,6 +899,11 @@ void CGraffity::NetworkMain(std::string GameServerAddress, std::string OwnerId)
 			if(net_would_block())
 				continue;
 
+			str_copy(m_aLastError, "Graffity server disconnected", sizeof(m_aLastError));
+			break;
+		}
+		if(Received == 0)
+		{
 			str_copy(m_aLastError, "Graffity server disconnected", sizeof(m_aLastError));
 			break;
 		}
