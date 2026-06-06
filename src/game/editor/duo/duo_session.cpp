@@ -326,12 +326,20 @@ void CDuoSession::CloseSocket()
 	m_vSendBuf.clear();
 	m_SendBufOffset = 0;
 	m_vPendingSyncRequests.clear();
+	m_vPendingSyncResponses.clear();
 }
 
 void CDuoSession::SendFrame(const std::vector<uint8_t> &vPayload)
 {
 	if(m_Socket == nullptr)
 		return;
+	if((int)(m_vSendBuf.size() - m_SendBufOffset) + (int)(m_vSendBufPrio.size() - m_SendBufPrioOffset) > 4 * 1024 * 1024)
+	{
+		str_copy(m_aErrorMsg, "Send buffer overflow");
+		m_State = STATE_ERROR;
+		CloseSocket();
+		return;
+	}
 	uint32_t Size = (uint32_t)vPayload.size();
 	m_vSendBuf.push_back((Size >> 24) & 0xFF);
 	m_vSendBuf.push_back((Size >> 16) & 0xFF);
@@ -367,7 +375,8 @@ void CDuoSession::DrainSendBuf()
 			int Sent = net_tcp_send(m_Socket, pData, Remaining);
 			if(Sent > 0) { pData += Sent; m_SendBufPrioOffset += Sent; Remaining -= Sent; }
 			else if(Sent == 0) { str_copy(m_aErrorMsg, "Connection lost"); m_State = STATE_ERROR; CloseSocket(); return; }
-			else break;
+			else if(net_would_block()) break;
+			else { str_copy(m_aErrorMsg, "Connection lost"); m_State = STATE_ERROR; CloseSocket(); return; }
 		}
 		if(m_SendBufPrioOffset >= (int)m_vSendBufPrio.size()) { m_vSendBufPrio.clear(); m_SendBufPrioOffset = 0; }
 	}
@@ -382,7 +391,8 @@ void CDuoSession::DrainSendBuf()
 		int Sent = net_tcp_send(m_Socket, pData, Remaining);
 		if(Sent > 0) { pData += Sent; m_SendBufOffset += Sent; Remaining -= Sent; }
 		else if(Sent == 0) { str_copy(m_aErrorMsg, "Connection lost"); m_State = STATE_ERROR; CloseSocket(); return; }
-		else break;
+		else if(net_would_block()) break;
+		else { str_copy(m_aErrorMsg, "Connection lost"); m_State = STATE_ERROR; CloseSocket(); return; }
 	}
 	if(m_SendBufOffset >= (int)m_vSendBuf.size())
 	{
@@ -575,6 +585,13 @@ void CDuoSession::ProcessNetwork()
 		if(MsgLen == 0)
 		{
 			m_RecvBufLen = 0;
+			return;
+		}
+		if(MsgLen > 8 * 1024 * 1024)
+		{
+			str_copy(m_aErrorMsg, "Protocol error: oversized packet");
+			m_State = STATE_ERROR;
+			CloseSocket();
 			return;
 		}
 		if(Offset + 4 + (int)MsgLen > m_RecvBufLen)
@@ -919,10 +936,20 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 	}
 	case PACKET_SYNC_REQUEST:
 	{
-		// partner detected desync — send them our full layer
+		// partner detected desync — queue for OnBackgroundUpdate() to avoid large sends in recv path
 		int32_t GroupIdx = Reader.ReadS32();
 		int32_t LayerIdx = Reader.ReadS32();
-		SendSyncData(GroupIdx, LayerIdx);
+		bool Found = false;
+		for(auto &Resp : m_vPendingSyncResponses)
+		{
+			if(Resp.m_GroupIdx == GroupIdx && Resp.m_LayerIdx == LayerIdx)
+			{
+				Found = true;
+				break;
+			}
+		}
+		if(!Found)
+			m_vPendingSyncResponses.push_back({GroupIdx, LayerIdx});
 		break;
 	}
 	case PACKET_SYNC_DATA:
@@ -2125,6 +2152,10 @@ void CDuoSession::NotifyFullSync()
 {
 	if(m_State != STATE_LIVE)
 		return;
+	int64_t Now = time_get();
+	if(Now - m_LastFullSyncTime < time_freq())
+		return;
+	m_LastFullSyncTime = Now;
 	auto &vGroups = Editor()->Map()->m_vpGroups;
 	for(int g = 0; g < (int)vGroups.size(); g++)
 	{
@@ -2966,6 +2997,14 @@ void CDuoSession::OnBackgroundUpdate()
 	{
 		m_LastLocalActivity = Current;
 		SendActivity(Current);
+	}
+
+	// process deferred SYNC_DATA responses — send one per tick, only if send buffer has room
+	if(!m_vPendingSyncResponses.empty() && (int)(m_vSendBuf.size() - m_SendBufOffset) < 512 * 1024)
+	{
+		auto Resp = m_vPendingSyncResponses.front();
+		m_vPendingSyncResponses.erase(m_vPendingSyncResponses.begin());
+		SendSyncData(Resp.m_GroupIdx, Resp.m_LayerIdx);
 	}
 
 	// process deferred SYNC_REQUESTs — send only if CRC still mismatches after the delay

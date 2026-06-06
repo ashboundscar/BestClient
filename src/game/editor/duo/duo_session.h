@@ -161,6 +161,16 @@ public:
 	};
 	std::vector<SPendingSyncRequest> m_vPendingSyncRequests;
 
+	// deferred SYNC_DATA responses: queued in HandleMessage, sent in OnBackgroundUpdate
+	struct SPendingSyncResponse
+	{
+		int m_GroupIdx = -1;
+		int m_LayerIdx = -1;
+	};
+	std::vector<SPendingSyncResponse> m_vPendingSyncResponses;
+
+	int64_t m_LastFullSyncTime = 0;
+
 	// layer index cache — maps CLayer pointer to (GroupIdx, LayerIdx)
 	// invalidated by NotifyAddLayer/NotifyDelLayer/NotifyAddGroup/NotifyDelGroup
 	mutable std::map<const void *, std::pair<int, int>> m_LayerIndexCache;
