@@ -732,6 +732,18 @@ void CMenus::RenderSettingsTClientSettings(CUIRect MainView)
 			Ui()->DoEditBox(&s_MinimizedReply, &MinimizedReply, EditBoxFontSize);
 		}
 		Column.HSplitTop(MarginExtraSmall, nullptr, &Column);
+
+		DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_TcAutoReplyFocusMode, TCLocalize("Auto reply in focus mode (chat hidden)"), &g_Config.m_TcAutoReplyFocusMode, &Column, LineSize);
+		CUIRect FocusModeReply;
+		Column.HSplitTop(LineSize + MarginExtraSmall, &FocusModeReply, &Column);
+		if(g_Config.m_TcAutoReplyFocusMode)
+		{
+			FocusModeReply.HSplitTop(MarginExtraSmall, nullptr, &FocusModeReply);
+			static CLineInput s_FocusModeReply(g_Config.m_TcAutoReplyFocusModeMessage, sizeof(g_Config.m_TcAutoReplyFocusModeMessage));
+			s_FocusModeReply.SetEmptyText("I am in focus mode, chat is hidden");
+			Ui()->DoEditBox(&s_FocusModeReply, &FocusModeReply, EditBoxFontSize);
+		}
+		Column.HSplitTop(MarginExtraSmall, nullptr, &Column);
 		s_SectionBoxes.back().h = Column.y - s_SectionBoxes.back().y;
 	}
 

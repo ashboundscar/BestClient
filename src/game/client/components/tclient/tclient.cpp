@@ -203,6 +203,17 @@ void CTClient::OnMessage(int MsgType, void *pRawMsg)
 			SendNonDuplicateMessage(0, aBuf);
 			return;
 		}
+
+		if(g_Config.m_TcAutoReplyFocusMode && g_Config.m_ClFocusMode && g_Config.m_ClFocusModeHideChat)
+		{
+			char aBuf[256];
+			if(pMsg->m_Team == TEAM_WHISPER_RECV || ServerCommandExists("w"))
+				str_format(aBuf, sizeof(aBuf), "/w %s %s", aPlayerName, g_Config.m_TcAutoReplyFocusModeMessage);
+			else
+				str_format(aBuf, sizeof(aBuf), "%s: %s", aPlayerName, g_Config.m_TcAutoReplyFocusModeMessage);
+			SendNonDuplicateMessage(0, aBuf);
+			return;
+		}
 	}
 
 	if(MsgType == NETMSGTYPE_SV_VOTESET)
