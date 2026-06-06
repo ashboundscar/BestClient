@@ -5491,8 +5491,11 @@ public:
 	{
 		for(size_t i = 0; i < SetCount; ++i)
 		{
-			vkFreeDescriptorSets(m_VKDevice, pSets[i].m_pPools->m_vPools[pSets[i].m_PoolIndex].m_Pool, 1, &pSets[i].m_Descriptor);
-			pSets[i].m_Descriptor = VK_NULL_HANDLE;
+			// Route through FreeDescriptorSetFromPool so that the pool's m_CurSize
+			// is decremented. Freeing the VkDescriptorSet directly without adjusting
+			// the accounting leaks pool slots on every swap chain recreation, which
+			// eventually forces unbounded allocation of new descriptor pools.
+			FreeDescriptorSetFromPool(pSets[i]);
 		}
 	}
 
