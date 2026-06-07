@@ -3082,6 +3082,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		const bool IsFngServer = IsOnline && GameClient()->m_GameInfo.m_PredictFNG;
 		const bool Is0xFServer = IsOnline && str_comp_nocase(GameClient()->m_GameInfo.m_aGameType, "0xf") == 0;
 		const bool IsBlockedCameraServer = IsFngServer || Is0xFServer;
+		(void)IsBlockedCameraServer;
 
 		CUIRect LeftView, RightView;
 		MainView.VSplitMid(&LeftView, &RightView, MarginBetweenViews);
@@ -4238,7 +4239,7 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			const float KeyboardExpandedHeight = LineSize * s_KeyboardPhase;
 			const float MouseExpandedHeight = (LineSize * 2.0f + MarginSmall) * s_MousePhase;
 			const float ContentHeight = LineSize + MarginSmall + LineSize + KeyboardExpandedHeight + MarginSmall + LineSize + MouseExpandedHeight;
-			CUIRect Content, Label, Button;
+			CUIRect Content, Label;
 			BeginBlock(Column, ContentHeight, Content);
 
 			Content.HSplitTop(LineSize, &Label, &Content);
