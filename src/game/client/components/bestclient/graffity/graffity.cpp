@@ -297,6 +297,13 @@ void CGraffity::OnStateChange(int NewState, int OldState)
 
 void CGraffity::OnUpdate()
 {
+	if(!GraffityEnabled())
+	{
+		CloseWheel();
+		CancelPlacement();
+		return;
+	}
+
 	if(!m_TexturesLoaded)
 		LoadTextures();
 
@@ -305,11 +312,6 @@ void CGraffity::OnUpdate()
 	DrainInbound();
 
 	if((Client()->State() != IClient::STATE_ONLINE) || GameClient()->m_Snap.m_SpecInfo.m_Active || !GameClient()->m_Snap.m_pLocalCharacter)
-	{
-		CloseWheel();
-		CancelPlacement();
-	}
-	else if(!GraffityEnabled())
 	{
 		CloseWheel();
 		CancelPlacement();
