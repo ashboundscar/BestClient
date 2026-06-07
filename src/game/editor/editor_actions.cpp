@@ -1269,10 +1269,10 @@ void CEditorActionEditLayersGroupAndOrder::Undo()
 	// receiver's indices stay valid), then re-add into the old group (ascending).
 	for(int i = (int)m_NewLayerIndices.size() - 1; i >= 0; --i)
 		Editor()->m_DuoSession.NotifyDelLayer(m_NewGroupIndex, m_NewLayerIndices[i]);
-	for(size_t k = 0; k < vpLayers.size(); ++k)
+	for(size_t s = 0; s < vpLayers.size(); ++s)
 	{
-		Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, m_LayerIndices[k], vpLayers[k]->m_Type, vpLayers[k]->m_aName, GetLayerSubType(vpLayers[k]));
-		Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, m_LayerIndices[k]);
+		Editor()->m_DuoSession.NotifyAddLayer(m_GroupIndex, m_LayerIndices[s], vpLayers[s]->m_Type, vpLayers[s]->m_aName, GetLayerSubType(vpLayers[s]));
+		Editor()->m_DuoSession.SyncLayerContents(m_GroupIndex, m_LayerIndices[s]);
 	}
 	Map()->OnModify();
 }
@@ -1301,10 +1301,10 @@ void CEditorActionEditLayersGroupAndOrder::Redo()
 	// new group (ascending) so the receiver's indices stay valid each step.
 	for(int i = (int)m_LayerIndices.size() - 1; i >= 0; --i)
 		Editor()->m_DuoSession.NotifyDelLayer(m_GroupIndex, m_LayerIndices[i]);
-	for(size_t k = 0; k < vpLayers.size(); ++k)
+	for(size_t s = 0; s < vpLayers.size(); ++s)
 	{
-		Editor()->m_DuoSession.NotifyAddLayer(m_NewGroupIndex, m_NewLayerIndices[k], vpLayers[k]->m_Type, vpLayers[k]->m_aName, GetLayerSubType(vpLayers[k]));
-		Editor()->m_DuoSession.SyncLayerContents(m_NewGroupIndex, m_NewLayerIndices[k]);
+		Editor()->m_DuoSession.NotifyAddLayer(m_NewGroupIndex, m_NewLayerIndices[s], vpLayers[s]->m_Type, vpLayers[s]->m_aName, GetLayerSubType(vpLayers[s]));
+		Editor()->m_DuoSession.SyncLayerContents(m_NewGroupIndex, m_NewLayerIndices[s]);
 	}
 	Map()->OnModify();
 }

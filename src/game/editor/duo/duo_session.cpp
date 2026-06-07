@@ -780,12 +780,12 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 						if(ExtraType == 1) // tele
 						{
 							uint8_t Number = Reader.ReadU8();
-							uint8_t Type = Reader.ReadU8();
+							uint8_t TileType = Reader.ReadU8();
 							auto pTele = std::dynamic_pointer_cast<CLayerTele>(pTiles);
 							if(pTele)
 							{
 								pTele->m_pTeleTile[TgtIndex].m_Number = Number;
-								pTele->m_pTeleTile[TgtIndex].m_Type = Type;
+								pTele->m_pTeleTile[TgtIndex].m_Type = TileType;
 								pTele->m_pTiles[TgtIndex] = Tile;
 							}
 						}
@@ -809,14 +809,14 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 						else if(ExtraType == 3) // switch
 						{
 							uint8_t Number = Reader.ReadU8();
-							uint8_t Type = Reader.ReadU8();
+							uint8_t TileType = Reader.ReadU8();
 							uint8_t SwitchFlags = Reader.ReadU8();
 							uint8_t Delay = Reader.ReadU8();
 							auto pSwitch = std::dynamic_pointer_cast<CLayerSwitch>(pTiles);
 							if(pSwitch)
 							{
 								pSwitch->m_pSwitchTile[TgtIndex].m_Number = Number;
-								pSwitch->m_pSwitchTile[TgtIndex].m_Type = Type;
+								pSwitch->m_pSwitchTile[TgtIndex].m_Type = TileType;
 								pSwitch->m_pSwitchTile[TgtIndex].m_Flags = SwitchFlags;
 								pSwitch->m_pSwitchTile[TgtIndex].m_Delay = Delay;
 								pSwitch->m_pTiles[TgtIndex] = Tile;
@@ -825,12 +825,12 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 						else if(ExtraType == 4) // tune
 						{
 							uint8_t Number = Reader.ReadU8();
-							uint8_t Type = Reader.ReadU8();
+							uint8_t TileType = Reader.ReadU8();
 							auto pTune = std::dynamic_pointer_cast<CLayerTune>(pTiles);
 							if(pTune)
 							{
 								pTune->m_pTuneTile[TgtIndex].m_Number = Number;
-								pTune->m_pTuneTile[TgtIndex].m_Type = Type;
+								pTune->m_pTuneTile[TgtIndex].m_Type = TileType;
 								pTune->m_pTiles[TgtIndex] = Tile;
 							}
 						}
@@ -1468,19 +1468,19 @@ void CDuoSession::HandleMessage(const uint8_t *pData, int Size)
 				goto skip_add_sound;
 		}
 		{
-			void *pData = malloc(DataSize);
-			if(!pData)
+			void *pSoundData = malloc(DataSize);
+			if(!pSoundData)
 				break;
-			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pData), DataSize);
-			const int SoundId = Editor()->Sound()->LoadOpusFromMem(pData, (unsigned)DataSize, true, aName);
+			Reader.ReadBytes(reinterpret_cast<uint8_t *>(pSoundData), DataSize);
+			const int SoundId = Editor()->Sound()->LoadOpusFromMem(pSoundData, (unsigned)DataSize, true, aName);
 			if(SoundId == -1)
 			{
-				free(pData);
+				free(pSoundData);
 				break;
 			}
 			auto pSound = std::make_shared<CEditorSound>(Editor()->Map());
 			pSound->m_SoundId = SoundId;
-			pSound->m_pData = pData;
+			pSound->m_pData = pSoundData;
 			pSound->m_DataSize = (unsigned)DataSize;
 			str_copy(pSound->m_aName, aName, sizeof(pSound->m_aName));
 			m_ApplyingRemote = true;
