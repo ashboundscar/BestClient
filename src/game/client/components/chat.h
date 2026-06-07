@@ -354,6 +354,7 @@ public:
 	static constexpr float MESSAGE_TEE_PADDING_RIGHT = 0.5f;
 
 	bool IsActive() const { return m_Mode != MODE_NONE; }
+	bool m_JustSentMessage; // true for 1 tick after sending, lets PLAYERFLAG_CHATTING pass through for silent typing
 	void AddLine(int ClientId, int Team, const char *pLine);
 	void EnableMode(int Team);
 	void DisableMode();
