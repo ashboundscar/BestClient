@@ -79,6 +79,7 @@ class CScoreboard : public CComponent
 		CButtonContainer m_VoteKickButton;
 		CButtonContainer m_ClipNameButton;
 		CButtonContainer m_SwapButton;
+		CButtonContainer m_CopySkinButton;
 		CButtonContainer m_VoiceMuteButton;
 		CButtonContainer m_VoiceVolumeSlider;
 		CButtonContainer m_WarListWarButton;

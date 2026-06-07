@@ -363,8 +363,8 @@ float CScoreboard::GetPopupHeight(int ClientId, bool IsLocal, bool IsSpectating)
 
 	if(!IsLocal)
 	{
-		// Profile, whisper, vote kick, clip name, swap.
-		Height += (ItemSpacing * 2.0f + ButtonSize) * 5.0f;
+		// Profile, whisper, vote kick, clip name, swap, copy skin.
+		Height += (ItemSpacing * 2.0f + ButtonSize) * 6.0f;
 		// Voice mute and voice volume slider.
 		Height += (ItemSpacing * 2.0f + ButtonSize) * 2.0f;
 		// War list quick actions: enemy/team/helper.
@@ -1748,6 +1748,28 @@ CUi::EPopupMenuFunctionResult CScoreboard::CScoreboardPopupContext::Render(void 
 			char aSwapBuf[256];
 			str_format(aSwapBuf, sizeof(aSwapBuf), "say /swap %s", Client.m_aName);
 			pScoreboard->Console()->ExecuteLine(aSwapBuf, IConsole::CLIENT_ID_UNSPECIFIED);
+		}
+
+		View.HSplitTop(ItemSpacing * 2, nullptr, &View);
+		View.HSplitTop(ButtonSize, &Container, &View);
+		if(pUi->DoButton_PopupMenu(&pPopupContext->m_CopySkinButton, Localize("Copy Skin"), &Container, FontSize, TEXTALIGN_MC))
+		{
+			if(g_Config.m_ClDummy == 1)
+			{
+				str_copy(g_Config.m_ClDummySkin, Client.m_aSkinName, sizeof(g_Config.m_ClDummySkin));
+				g_Config.m_ClDummyUseCustomColor = Client.m_UseCustomColor;
+				g_Config.m_ClDummyColorBody = Client.m_ColorBody;
+				g_Config.m_ClDummyColorFeet = Client.m_ColorFeet;
+				pScoreboard->GameClient()->SendDummyInfo(false);
+			}
+			else
+			{
+				str_copy(g_Config.m_ClPlayerSkin, Client.m_aSkinName, sizeof(g_Config.m_ClPlayerSkin));
+				g_Config.m_ClPlayerUseCustomColor = Client.m_UseCustomColor;
+				g_Config.m_ClPlayerColorBody = Client.m_ColorBody;
+				g_Config.m_ClPlayerColorFeet = Client.m_ColorFeet;
+				pScoreboard->GameClient()->SendInfo(false);
+			}
 		}
 
 		View.HSplitTop(ItemSpacing * 2, nullptr, &View);
