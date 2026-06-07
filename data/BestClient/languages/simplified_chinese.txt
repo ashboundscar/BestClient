@@ -28,9 +28,6 @@ Enable
 3D Particles
 == 3D粒子
 
-Orbit Aura
-== Arua效果
-
 Media Background
 == 媒体背景
 
@@ -39,9 +36,6 @@ Map offset
 
 Sweat Weapon
 == 闪耀的武器
-
-Magic Particles
-== 魔法粒子
 
 Aspect Ratio
 == 宽高比
@@ -64,26 +58,8 @@ Cover accent color
 Dominant cover color
 == 封面主色调
 
-Visualizer mode
-== 可视化模式
-
-Visualizer sensitivity
-== 可视化器灵敏度
-
-Visualizer smoothing
-== 可视化平滑
-
-Camera Drift
-== 摄像机漂移
-
-Dynamic FOV
-== 动态可视角度
-
 Afterimage
 == 残像
-
-Gamma input
-== Gamma输入
 
 Snap Tap
 == 快拍标签
@@ -99,9 +75,6 @@ Fast Actions
 
 Speedrun timer
 == 速度测量计时器
-
-Auto team lock
-== 团队自动锁定
 
 Focus Mode
 == 专注模式
@@ -129,9 +102,6 @@ HUD editor
 
 Game
 == 游戏
-
-Particles
-== 粒子
 
 Check update
 == 检查更新
@@ -232,18 +202,6 @@ Cull map tiles outside FPS fog
 Fast Input
 == 快速输入
 
-Delta input
-== Delta输入
-
-Gamma input
-== Gamma输入
-
-Gamma amount
-== 伽马量
-
-Gamma input others
-== Gamma 输入其他
-
 Sub-Tick aiming
 == 辅助-tick 瞄准点
 
@@ -262,17 +220,8 @@ Hook combo size
 Particles count
 == 颗粒计数
 
-Alpha delay
-== Alpha延迟
-
 Particle type
 == 颗粒类型
-
-Dynamic FOV amount
-== 动态视场角范围
-
-Dynamic FOV smoothness
-== 动态视角平滑度
 
 Enable Afterimage
 == 残像激活
@@ -285,21 +234,6 @@ Afterimage alpha
 
 Afterimage spacing
 == 残像间距
-
-Idle delay
-== 空闲延迟
-
-Aura radius
-== Aura 半径
-
-Particles
-== 粒子
-
-Aura alpha
-== Aura 阿尔法
-
-Aura speed
-== Aura 速度
 
 Enable speedrun timer
 == 启用速通计时器
@@ -394,21 +328,6 @@ No servers loaded
 Enable music player
 == 启用音乐播放器
 
-Camera drift amount
-== 摄像机漂移量
-
-Camera drift smoothness
-== 摄像机漂移的平滑度
-
-Drift direction
-== 漂移方向
-
-Forward
-== 下一页
-
-Backward
-== 上一页
-
 Show finish prediction HUD
 == 显示终点预测HUD
 
@@ -453,6 +372,21 @@ Jelly strength
 
 Jelly duration
 == 果冻的持续时间
+
+Size mode
+== 大小模式
+
+Text scale
+== 文本缩放
+
+Use Music Player color for HUD
+== 将 Music Player 颜色用于 HUD
+
+Music Player / HUD alpha
+== Music Player / HUD 透明度
+
+Mini
+== 迷你
 
 BestClient
 == 
@@ -826,6 +760,18 @@ Info
 Logs
 == 
 
+Rollback is only available while online
+== 
+
+Enable rollback demo recording first
+== 
+
+Rollback recorder is not ready yet
+== 
+
+Wait at least 1 second before rollback
+== 
+
 Enabled
 == 
 
@@ -845,6 +791,147 @@ preview
 == 
 
 Reset All
+== 
+
+Name A-Z
+== 
+
+Name Z-A
+== 
+
+Effect file
+== 
+
+Live-Shaders controls
+== 
+
+Enable Live-Shaders on startup (restart required)
+== 
+
+Saved Live-Shaders startup state. Restart the game to apply it.
+== 
+
+Auto accept
+== 
+
+Show only enabled on the right
+== 
+
+Toggle effects bind
+== 
+
+Live-Shaders runtime files are missing
+== 
+
+This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json.
+== 
+
+Added effects
+== 
+
+The Live-Shaders tab will stay unavailable until the portable ReShade runtime files are present next to the game executable.
+== 
+
+Live-Shaders is disabled
+== 
+
+Enable Live-Shaders with the checkbox above and restart the game. Until then this tab stays inactive.
+== 
+
+To manage shaders here, first enable Live-Shaders above and restart the game.
+== 
+
+Vulkan is required
+== 
+
+Switch the graphics backend to Vulkan in the client settings and restart the game to use the Live-Shaders tab.
+== 
+
+Effect controls are available only when the client is running on the Vulkan renderer.
+== 
+
+Failed to load preset
+== 
+
+The right panel will be available again once the preset can be read.
+== 
+
+Confirm keeping "%s" enabled within %d seconds. Otherwise it will be removed automatically.
+== 
+
+Confirm keeping "%s" enabled within %d seconds. Otherwise it will be disabled automatically.
+== 
+
+The effect was removed automatically because it was not confirmed in time.
+== 
+
+The effect was removed because it was not confirmed.
+== 
+
+The effect was disabled automatically because it was not confirmed in time.
+== 
+
+The effect was disabled because it was not confirmed.
+== 
+
+Keep enabled
+== 
+
+Remove
+== 
+
+Disable
+== 
+
+The effect was confirmed and will stay enabled.
+== 
+
+Available shaders
+== 
+
+Sort
+== 
+
+Search
+== 
+
+The effect is live. Confirm it within 5 seconds to keep it enabled.
+== 
+
+The effect was added to the configured list.
+== 
+
+No available shaders match the current search.
+== 
+
+The effect settings were reset to their defaults.
+== 
+
+The effect was removed from the configured list.
+== 
+
+No supported scalar settings were found for this effect.
+== 
+
+No shaders are configured on the right yet.
+== 
+
+Saved to ReShadePreset.ini and settings_reshade.cfg, then applied live.
+== 
+
+assets & components editors/fun/shop \xe2\x86\x92 Info
+== 
+
+Live-Shaders
+== 
+
+Fun and Shop moved here
+== 
+
+Open in HUD editor
+== 
+
+Join a game first
 == 
 
 Reset to defaults
@@ -904,19 +991,43 @@ Glow alpha
 Glow offset
 == 
 
-Enable in idle mode
-== 
-
 No media files in backgrounds folder
 == 
 
 0 keeps the image fixed to the screen. 100 fixes it to the map for a full parallax effect.
 == 
 
+Eye Comfort
+== 
+
+Enable warm screen filter
+== 
+
+Comfort level
+== 
+
 Crystal Laser
 == 
 
 Sand Shotgun
+== 
+
+Graffiti
+== 
+
+Enable graffiti
+== 
+
+Graffiti size
+== 
+
+Graffiti spray volume
+== 
+
+Hold key for graffiti wheel
+== 
+
+Graffiti wheel key
 == 
 
 Appear animation
@@ -949,6 +1060,36 @@ Text
 Text outline
 == 
 
+Flying Name Plates
+== 
+
+Enable flying name plates
+== 
+
+Lift above player
+== 
+
+Movement drag
+== 
+
+Follow speed
+== 
+
+Motion Blur
+== 
+
+Enable motion blur (frame blend)
+== 
+
+Requires the Vulkan backend
+== 
+
+Temporarily disabled on Linux
+== 
+
+Blend strength
+== 
+
 Module reveal time (ms)
 == 
 
@@ -970,13 +1111,28 @@ Chat typing animation time (ms)
 Killfeed animation time (ms)
 == 
 
-Enable visualizer
-== 
-
 Bottom
 == 
 
 Center
+== 
+
+Up
+== 
+
+Sensitivity
+== 
+
+Smoothing
+== 
+
+Columns
+== 
+
+Soft
+== 
+
+Pill
 == 
 
 Keystrokes
@@ -991,31 +1147,25 @@ Minimal
 Full
 == 
 
+Micro
+== 
+
 Show mouse HUD
+== 
+
+Dot
+== 
+
+Arrow
+== 
+
+Dot Dot
 == 
 
 Dot No Box
 == 
 
 No movement
-== 
-
-Looks like you're on a server where this feature is forbidden
-== 
-
-Radius
-== 
-
-Slice
-== 
-
-Ball
-== 
-
-Smoke
-== 
-
-Shell
 == 
 
 Off (default)
@@ -1031,15 +1181,6 @@ Game no HUD
 == 
 
 Custom size
-== 
-
-Create mixed assets or jump to the name plate editor.
-== 
-
-Open a dedicated component toggles page.
-== 
-
-Edit HUD positions directly above the live game.
 == 
 
 Input
@@ -1069,13 +1210,13 @@ Interpolation
 Fast Input others
 == 
 
-Delta input others
-== 
-
 Best input others
 == 
 
 Delay
+== 
+
+Looks like you're on a server where this feature is forbidden
 == 
 
 High Detail
@@ -1126,19 +1267,49 @@ In game: hold bind key, press 1..6, release key to execute
 Fast Actions key
 == 
 
-Lock team automatically after joining
+Classic
+== 
+
+Progress bar
+== 
+
+Custom bar color
+== 
+
+Bar color
 == 
 
 Focus mode bind
 == 
 
+Show points in tab
+== 
+
 Use BestClient MasterServer
+== 
+
+Lock team automatically after joining
+== 
+
+Auto lock delay
 == 
 
 UI scale
 == 
 
 Real hitbox dot color
+== 
+
+Rollback Demo
+== 
+
+Enable rollback demo recording
+== 
+
+Rollback length
+== 
+
+Rollback bind
 == 
 
 Allowed media domains
@@ -1211,6 +1382,12 @@ BestClient %s is available
 == 
 
 Downloading
+== 
+
+Create mixed assets or jump to the name plate editor.
+== 
+
+Open a dedicated component toggles page.
 == 
 
 Config Files
@@ -1347,33 +1524,3 @@ PTT
 
 Voice chat
 == 
-
-Size mode
-== 大小模式
-
-Show cover art
-== 显示封面
-
-Text scale
-== 文本缩放
-
-Use Music Player color for HUD
-== 将 Music Player 颜色用于 HUD
-
-Music Player / HUD alpha
-== Music Player / HUD 透明度
-
-Animation duration
-== 动画时长
-
-Visualizer columns
-== 可视化柱数
-
-Visualizer column width
-== 可视化柱宽度
-
-Visualizer gap
-== 可视化柱间距
-
-Mini
-== 迷你

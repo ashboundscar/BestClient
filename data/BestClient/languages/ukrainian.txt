@@ -447,10 +447,28 @@ Players
 Logs
 == 
 
+Rollback is only available while online
+== 
+
+Enable rollback demo recording first
+== 
+
+Rollback recorder is not ready yet
+== 
+
+Wait at least 1 second before rollback
+== 
+
 Enabled
 == 
 
 Scale
+== 
+
+Use Music Player color for HUD
+== 
+
+Music Player / HUD alpha
 == 
 
 Reset position
@@ -468,6 +486,135 @@ preview
 Reset All
 == 
 
+Name A-Z
+== 
+
+Name Z-A
+== 
+
+Effect file
+== 
+
+Live-Shaders controls
+== 
+
+Enable Live-Shaders on startup (restart required)
+== 
+
+Saved Live-Shaders startup state. Restart the game to apply it.
+== 
+
+Auto accept
+== 
+
+Show only enabled on the right
+== 
+
+Toggle effects bind
+== 
+
+Live-Shaders runtime files are missing
+== 
+
+This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json.
+== 
+
+Added effects
+== 
+
+The Live-Shaders tab will stay unavailable until the portable ReShade runtime files are present next to the game executable.
+== 
+
+Live-Shaders is disabled
+== 
+
+Enable Live-Shaders with the checkbox above and restart the game. Until then this tab stays inactive.
+== 
+
+To manage shaders here, first enable Live-Shaders above and restart the game.
+== 
+
+Vulkan is required
+== 
+
+Switch the graphics backend to Vulkan in the client settings and restart the game to use the Live-Shaders tab.
+== 
+
+Effect controls are available only when the client is running on the Vulkan renderer.
+== 
+
+Failed to load preset
+== 
+
+The right panel will be available again once the preset can be read.
+== 
+
+Confirm keeping "%s" enabled within %d seconds. Otherwise it will be removed automatically.
+== 
+
+Confirm keeping "%s" enabled within %d seconds. Otherwise it will be disabled automatically.
+== 
+
+The effect was removed automatically because it was not confirmed in time.
+== 
+
+The effect was removed because it was not confirmed.
+== 
+
+The effect was disabled automatically because it was not confirmed in time.
+== 
+
+The effect was disabled because it was not confirmed.
+== 
+
+Keep enabled
+== 
+
+Remove
+== 
+
+Disable
+== 
+
+The effect was confirmed and will stay enabled.
+== 
+
+Available shaders
+== 
+
+Sort
+== 
+
+Search
+== 
+
+The effect is live. Confirm it within 5 seconds to keep it enabled.
+== 
+
+The effect was added to the configured list.
+== 
+
+No available shaders match the current search.
+== 
+
+The effect settings were reset to their defaults.
+== 
+
+The effect was removed from the configured list.
+== 
+
+No supported scalar settings were found for this effect.
+== 
+
+No shaders are configured on the right yet.
+== 
+
+Saved to ReShadePreset.ini and settings_reshade.cfg, then applied live.
+== 
+
+assets & components editors/fun/shop \xe2\x86\x92 Info
+== 
+
 Visuals
 == 
 
@@ -477,13 +624,19 @@ Gameplay
 Others
 == 
 
-Fun
+Live-Shaders
 == 
 
-Shop
+Fun and Shop moved here
 == 
 
-Editors
+Open in HUD editor
+== 
+
+Join a game first
+== 
+
+HUD editor
 == 
 
 Reset to defaults
@@ -567,27 +720,6 @@ Glow alpha
 Glow offset
 == 
 
-Orbit Aura
-== 
-
-Enable in idle mode
-== 
-
-Idle delay
-== 
-
-Aura radius
-== 
-
-Particles
-== 
-
-Aura alpha
-== 
-
-Aura speed
-== 
-
 Media Background
 == 
 
@@ -606,6 +738,15 @@ Map offset
 0 keeps the image fixed to the screen. 100 fixes it to the map for a full parallax effect.
 == 
 
+Eye Comfort
+== 
+
+Enable warm screen filter
+== 
+
+Comfort level
+== 
+
 Sweat Weapon
 == 
 
@@ -616,6 +757,24 @@ Crystal Laser
 == 
 
 Sand Shotgun
+== 
+
+Graffiti
+== 
+
+Enable graffiti
+== 
+
+Graffiti size
+== 
+
+Graffiti spray volume
+== 
+
+Hold key for graffiti wheel
+== 
+
+Graffiti wheel key
 == 
 
 Chat Bubbles
@@ -664,6 +823,51 @@ Text
 == 
 
 Text outline
+== 
+
+Flying Name Plates
+== 
+
+Enable flying name plates
+== 
+
+Lift above player
+== 
+
+Movement drag
+== 
+
+Follow speed
+== 
+
+Afterimage
+== 
+
+Enable Afterimage
+== 
+
+Afterimage frames
+== 
+
+Afterimage alpha
+== 
+
+Afterimage spacing
+== 
+
+Motion Blur
+== 
+
+Enable motion blur (frame blend)
+== 
+
+Requires the Vulkan backend
+== 
+
+Temporarily disabled on Linux
+== 
+
+Blend strength
 == 
 
 Animations
@@ -726,10 +930,10 @@ Dominant cover color
 Translucent
 == 
 
-Enable visualizer
+Size mode
 == 
 
-Visualizer mode
+Mini
 == 
 
 Bottom
@@ -738,10 +942,25 @@ Bottom
 Center
 == 
 
-Visualizer sensitivity
+Up
 == 
 
-Visualizer smoothing
+Text scale
+== 
+
+Sensitivity
+== 
+
+Smoothing
+== 
+
+Columns
+== 
+
+Soft
+== 
+
+Pill
 == 
 
 Keystrokes
@@ -756,79 +975,25 @@ Minimal
 Full
 == 
 
+Micro
+== 
+
 Show mouse HUD
+== 
+
+Dot
+== 
+
+Arrow
+== 
+
+Dot Dot
 == 
 
 Dot No Box
 == 
 
 No movement
-== 
-
-Camera Drift
-== 
-
-Camera drift amount
-== 
-
-Camera drift smoothness
-== 
-
-Drift direction
-== 
-
-Forward
-== 
-
-Backward
-== 
-
-Looks like you're on a server where this feature is forbidden
-== 
-
-Dynamic FOV
-== 
-
-Dynamic FOV amount
-== 
-
-Dynamic FOV smoothness
-== 
-
-Afterimage
-== 
-
-Enable Afterimage
-== 
-
-Afterimage frames
-== 
-
-Afterimage alpha
-== 
-
-Afterimage spacing
-== 
-
-Magic Particles
-== 
-
-Radius
-== 
-
-Alpha delay
-== 
-
-Slice
-== 
-
-Ball
-== 
-
-Smoke
-== 
-
-Shell
 == 
 
 Aspect Ratio
@@ -849,40 +1014,13 @@ Game no HUD
 Custom size
 == 
 
-Create mixed assets or jump to the name plate editor.
-== 
-
-Assets editor
-== 
-
-Open a dedicated component toggles page.
-== 
-
-Components editor
-== 
-
-Edit HUD positions directly above the live game.
-== 
-
-HUD editor
-== 
-
 Fast Input
 == 
 
 Fast input
 == 
 
-Delta input
-== 
-
-Gamma input
-== 
-
 Best input
-== 
-
-Gamma amount
 == 
 
 Prediction offset
@@ -900,12 +1038,6 @@ Interpolation
 Fast Input others
 == 
 
-Delta input others
-== 
-
-Gamma input others
-== 
-
 Best input others
 == 
 
@@ -916,6 +1048,9 @@ Auto margin
 == 
 
 Snap Tap
+== 
+
+Looks like you're on a server where this feature is forbidden
 == 
 
 Optimizer
@@ -1008,6 +1143,18 @@ Finish Prediction
 Show finish prediction HUD
 == 
 
+Classic
+== 
+
+Progress bar
+== 
+
+Custom bar color
+== 
+
+Bar color
+== 
+
 Show time
 == 
 
@@ -1024,12 +1171,6 @@ Show percentage
 == 
 
 Show always
-== 
-
-Auto team lock
-== 
-
-Lock team automatically after joining
 == 
 
 Focus Mode
@@ -1074,6 +1215,9 @@ Hide hud in settings
 Show ESC players list
 == 
 
+Show points in tab
+== 
+
 Shadow of Emotions
 == 
 
@@ -1095,10 +1239,28 @@ Show player below indicator
 Show real hitbox
 == 
 
+Lock team automatically after joining
+== 
+
+Auto lock delay
+== 
+
 UI scale
 == 
 
 Real hitbox dot color
+== 
+
+Rollback Demo
+== 
+
+Enable rollback demo recording
+== 
+
+Rollback length
+== 
+
+Rollback bind
 == 
 
 Browser Utils
@@ -1182,13 +1344,34 @@ All staged component changes will be lost.
 Restart client now so component changes fully apply?
 == 
 
+Components editor
+== 
+
 Disabled components: %d
+== 
+
+Fun
+== 
+
+Shop
 == 
 
 BestClient %s is available
 == 
 
 Downloading
+== 
+
+Editors
+== 
+
+Create mixed assets or jump to the name plate editor.
+== 
+
+Assets editor
+== 
+
+Open a dedicated component toggles page.
 == 
 
 Sudden Death

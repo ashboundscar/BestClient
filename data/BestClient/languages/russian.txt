@@ -1,4 +1,4 @@
-﻿##### authors #####
+##### authors #####
 
 # noxygalaxy
 # shibastik
@@ -39,13 +39,13 @@ Graffiti
 == Граффити
 
 Amount
-== Кол.
+== Количество
 
 Delay
-== Задерж.
+== Задержка
 
 Random
-== Рандом
+== Случайно
 
 Name:
 == Название:
@@ -66,16 +66,16 @@ BestClient Settings
 == Настройки BestClient
 
 Config Files
-== Конфиг файлы
+== Файлы конфигурации
 
 BestClient Developers
 == Разработчики BestClient
 
 Hide Settings Tabs
-== Скрыть вкладки в настройках
+== Скрыть вкладки настроек
 
 Command
-== Command
+== Команда
 
 Reason
 == Причина
@@ -98,68 +98,26 @@ Enable to main menu
 Enable to game background
 == Включить в фоне игры
 
-Magic Particles
-== Магические частицы
-
-Slice
-== Слайс
-
-Ball
-== Болл
-
-Smoke
-== Смоук
-
-Shell
-== Шелл
-
-Camera Drift
-== Дрифт камеры
-
-Camera drift amount
-== Сила дрифта камеры
-
-Camera drift smoothness
-== Плавность дрифта камеры
-
-Drift direction
-== Направление дрифта
-
-Forward
-== Вперед
-
-Backward
-== Назад
-
-Dynamic FOV
-== Динамический угол обзора
-
-Dynamic FOV amount
-== Сила динамического угла обзора
-
-Dynamic FOV smoothness
-== Плавность динамического угла обзора
-
 Afterimage
-== Афтеримедж
+== Афтеримейдж
 
 Enable Afterimage
-== Включить Афтеримедж
+== Включить Афтеримейдж
 
 Afterimage frames
-== Кадры Афтеримеджа
+== Кадры Афтеримейджа
 
 Afterimage alpha
-== Прозрачность Афтеримеджа
+== Прозрачность Афтеримейджа
 
 Afterimage spacing
-== Дистанция Афтеримеджа
+== Расстояние между Афтеримейджами
 
 Focus Mode
-== Фокус-режим
+== Режим фокуса
 
 Enable Focus Mode
-== Включить фокус-режим
+== Включить режим фокуса
 
 Hide Player Names
 == Скрыть имена игроков
@@ -180,28 +138,28 @@ Hide Chat
 == Скрыть чат
 
 Hide Scoreboard
-== Скрыть таблицу
+== Скрыть таблицу результатов
 
 Chat Bubbles
-== Пузырьки чата
+== Пузыри чата
 
 Show Chatbubbles in demo
-== Показывать пузырьки чата в демо
+== Показывать пузыри чата в демо
 
 Show Chatbubbles above you
-== Показывать пузырьки чата над вами
+== Показывать пузыри чата над собой
 
 Chat Bubble Size
-== Размер пузырьков чата
+== Размер пузырей чата
 
 Show the Bubbles for
-== Показывать пузырьки (время)
+== Показывать пузыри в течение
 
 fade in for
-== Появление (время)
+== Время появления
 
 fade out for
-== Исчезновение (время)
+== Время исчезновения
 
 3D Particles
 == 3D частицы
@@ -233,18 +191,6 @@ Off (default)
 Preset
 == Пресет
 
-Orbit Aura
-== Орбитальная аура
-
-Enable in idle mode
-== Включать в режиме бездействия
-
-Idle delay
-== Задержка бездействия
-
-Particles
-== Частицы
-
 Best input
 == Лучший инпут
 
@@ -261,7 +207,7 @@ Interpolation
 == Интерполяция
 
 None
-== Без
+== Нет
 
 Best input others
 == Лучший инпут для других
@@ -282,7 +228,7 @@ Downloading %d%%
 == Загрузка %d%%
 
 Update failed
-== Обновление не удалось
+== Ошибка обновления
 
 Update downloaded
 == Обновление загружено
@@ -291,7 +237,7 @@ Download
 == Скачать
 
 Restart
-== Рестарт
+== Перезапустить
 
 Reset
 == Сброс
@@ -303,7 +249,7 @@ Password
 == Пароль
 
 Search tunings
-== Поиск настроек тюнинга
+== Поиск тюнингов
 
 Value
 == Значение
@@ -318,13 +264,13 @@ Actions for %s
 == Действия для %s
 
 Player actions
-== Действия игрока
+== Действия с игроком
 
 Say
 == Сказать
 
 Say team
-== Сказать команде
+== Написать команде
 
 Broadcast
 == Объявление
@@ -348,10 +294,10 @@ Unmute
 == Разглушить
 
 Vote mute (10 min)
-== Vote mute (10 мин)
+== Войсовый мут (10 мин)
 
 Vote unmute
-== Vote unmute
+== Войсовый размут
 
 Teleport to me
 == Телепортировать ко мне
@@ -363,7 +309,7 @@ Force unpause
 == Снять принудительную паузу
 
 Move to spectators
-== Перевести в зрители
+== Перевести в наблюдатели
 
 Return to game
 == Вернуть в игру
@@ -414,7 +360,7 @@ Super
 == Супер
 
 Invincible
-== Неуязвим
+== Неуязвимый
 
 Jetpack
 == Джетпак
@@ -423,31 +369,31 @@ Endless jump
 == Бесконечный прыжок
 
 Endless hook
-== Бесконечный хук
+== Бесконечный крюк
 
 Solo
 == Соло
 
 Deep frozen
-== Глубоко заморожен
+== Дип-фриз
 
 Live freeze
-== Live freeze
+== Лайв-фриз
 
 Frozen
 == Заморожен
 
 Normal
-== Нормально
+== Обычный
 
 Status
-== Состояние
+== Статус
 
 No other players
 == Нет других игроков
 
 RCON login
-== Логин RCON
+== Вход в RCON
 
 RCON password
 == Пароль RCON
@@ -470,15 +416,14 @@ RCON log
 No log entries yet
 == Записей в логе пока нет
 
-
 No fast actions yet
 == Быстрых действий пока нет
 
 No matches
-== Нет совпадений
+== Совпадений нет
 
 Muted by admin panel
-== Замучен через админ-панель
+== Заглушен через админ-панель
 
 Seconds
 == Секунды
@@ -493,31 +438,31 @@ Kicked by admin panel
 == Кикнут через админ-панель
 
 Respawned by admin panel
-== Респавн через админ-панель
+== Заспавнен через админ-панель
 
 Message
 == Сообщение
 
 Mute player
-== Замутить игрока
+== Заглушить игрока
 
 Ban player
 == Забанить игрока
 
 Kick player
-== Выгнать игрока
+== Кикнуть игрока
 
 Respawn player
-== Респавнить игрока
+== Заспавнить игрока
 
 Force pause player
-== Принудительно поставить игрока на паузу
+== Принудительно поставить на паузу
 
 Say message
-== Сообщение в чат
+== Написать в чат
 
 Say team message
-== Сообщение команде
+== Написать команде
 
 Broadcast message
 == Объявление
@@ -541,7 +486,7 @@ Panel scale
 == Масштаб панели
 
 Log lines
-== Строки лога
+== Количество строк лога
 
 Panel background
 == Фон панели
@@ -597,7 +542,6 @@ Current
 New value
 == Новое значение
 
-
 Changes apply to global tunings (tune).
 == Изменения применяются к глобальным тюнингам (tune).
 
@@ -644,7 +588,7 @@ Gameplay
 == Игровой процесс
 
 Others
-== Остальное
+== Разное
 
 Fun
 == Развлечения
@@ -656,37 +600,37 @@ Editors
 == Редакторы
 
 Reset to defaults
-== Сбросить настройки
+== По умолчанию
 
 Hook combo
-== Hook-комбо
+== Хук-комбо
 
 Mode
 == Режим
 
 hook
-== хук
+== крюк
 
 hammer
 == молот
 
 hook&hammer
-== хук и молот
+== крюк и молот
 
 Max time between hooks
-== Макс. время между хуками
+== Макс. время между крюками
 
 Hook combo sound volume
-== Громкость звука Hook-комбо
+== Громкость звука хук-комбо
 
 Hook combo size
-== Размер Hook-комбо
+== Размер хук-комбо
 
 Jelly Tee
-== Желейный Tee
+== Желейный тии
 
 Enable Jelly Tee
-== Включить Jelly Tee
+== Включить желейный тии
 
 Jelly Others
 == Желейные другие игроки
@@ -707,22 +651,13 @@ Color mode
 == Режим цвета
 
 Custom
-== Кастомизация
+== Свой
 
 Glow alpha
 == Прозрачность свечения
 
 Glow offset
 == Смещение свечения
-
-Aura radius
-== Радиус ауры
-
-Aura alpha
-== Прозрачность ауры
-
-Aura speed
-== Скорость ауры
 
 No media files in backgrounds folder
 == Нет медиафайлов в папке backgrounds
@@ -731,10 +666,10 @@ Map offset
 == Смещение карты
 
 0 keeps the image fixed to the screen. 100 fixes it to the map for a full parallax effect.
-== 0 закрепляет изображение на экране. 100 закрепляет его к карте для полного эффекта параллакса.
+== 0 — изображение прикреплено к экрану. 100 — изображение прикреплено к карте (полный эффект параллакса).
 
 Sweat Weapon
-== Потное оружие
+== Красивое оружие
 
 Enable
 == Включить
@@ -779,40 +714,40 @@ Enable animations
 == Включить анимации
 
 Module settings reveals
-== Появление настроек модулей
+== Анимация раскрытия настроек
 
 Module reveal time (ms)
-== Время появления модуля (мс)
+== Время раскрытия модуля (мс)
 
 ESC menu animation
 == Анимация ESC-меню
 
 ESC menu animation time (ms)
-== Время анимации ESC-меню (мс)
+== Длительность анимации ESC-меню (мс)
 
 Chat message animations
-== Анимации сообщений чата
+== Анимация сообщений чата
 
 Chat message animation time (ms)
-== Время анимации сообщений чата (мс)
+== Длительность анимации сообщений чата (мс)
 
 Chat open animation
 == Анимация открытия чата
 
 Chat open animation time (ms)
-== Время открытия чата (мс)
+== Длительность открытия чата (мс)
 
 Chat typing animation
 == Анимация ввода в чате
 
 Chat typing animation time (ms)
-== Время анимации ввода (мс)
+== Длительность анимации ввода (мс)
 
 Killfeed animation
-== Анимация киллфида
+== Анимация килфида
 
 Killfeed animation time (ms)
-== Время анимации киллфида (мс)
+== Длительность анимации килфида (мс)
 
 Music Player
 == Музыкальный плеер
@@ -832,23 +767,11 @@ Dominant cover color
 Translucent
 == Полупрозрачный
 
-Enable visualizer
-== Включить визуализатор
-
-Visualizer mode
-== Режим визуализатора
-
 Bottom
 == Снизу
 
 Center
 == По центру
-
-Visualizer sensitivity
-== Чувствительность визуализатора
-
-Visualizer smoothing
-== Сглаживание визуализатора
 
 Keystrokes
 == Нажатия клавиш
@@ -865,9 +788,6 @@ Full
 Size mode
 == Режим размера
 
-Show cover art
-== Показывать обложку
-
 Text scale
 == Масштаб текста
 
@@ -875,19 +795,7 @@ Use Music Player color for HUD
 == Использовать цвет Music Player для HUD
 
 Music Player / HUD alpha
-== Альфа Music Player / HUD
-
-Animation duration
-== Длительность анимации
-
-Visualizer columns
-== Колонки визуализатора
-
-Visualizer column width
-== Ширина колонок визуализатора
-
-Visualizer gap
-== Отступ колонок визуализатора
+== Прозрачность Music Player / HUD
 
 Mini
 == Мини
@@ -914,16 +822,10 @@ No movement
 == Без движения
 
 Looks like you're on a server where this feature is forbidden
-== Похоже, вы на сервере, где эта функция запрещена
-
-Radius
-== Радиус
-
-Alpha delay
-== Задержка прозрачности
+== Похоже, на этом сервере данная функция запрещена
 
 Game only
-== Только игра
+== Только в игре
 
 Game no HUD
 == Игра без HUD
@@ -932,53 +834,34 @@ Custom size
 == Свой размер
 
 Create mixed assets or jump to the name plate editor.
-== Создайте смешанные ассеты или перейдите к редактору неймплейтов.
+== Создайте смешанные ассеты или перейдите в редактор неймплейтов.
 
 Assets editor
 == Редактор ассетов
 
 Open a dedicated component toggles page.
-== Открыть отдельную страницу переключения компонентов.
+== Открыть страницу включения компонентов.
 
 Components editor
 == Редактор компонентов
 
-Edit HUD positions directly above the live game.
-== Редактируйте позиции HUD прямо поверх игры.
-
 HUD editor
 == Редактор HUD
 
-
 Fast input
-== Быстрый ввод
-
-Delta input
-== Delta-ввод
-
-Gamma input
-== Gamma-ввод
-
-Gamma amount
-== Сила Gamma
+== Быстрый инпут
 
 Fast Input others
-== Быстрый ввод для других
-
-Delta input others
-== Delta-ввод для других
-
-Gamma input others
-== Gamma-ввод для других
+== Быстрый инпут для других
 
 Sub-Tick aiming
-== Sub-Tick прицеливание
+== Суб-тик прицеливание
 
 Auto margin
-== Автоотступ
+== Авто-отступ
 
 Snap Tap
-== Snap Tap
+== Снап Тап
 
 Optimizer
 == Оптимизатор
@@ -993,7 +876,7 @@ High Detail
 == Высокая детализация
 
 FPS fog (cull outside limit)
-== FPS-туман (отсекать вне лимита)
+== FPS-туман (отсечение за пределами)
 
 DDNet priority: High
 == Приоритет DDNet: высокий
@@ -1002,10 +885,10 @@ Discord priority: Below Normal
 == Приоритет Discord: ниже обычного
 
 Render FPS fog rectangle
-== Рендерить прямоугольник FPS-тумана
+== Показывать прямоугольник FPS-тумана
 
 Cull map tiles outside FPS fog
-== Отсекать тайлы карты вне FPS-тумана
+== Скрывать тайлы карты вне FPS-тумана
 
 FPS fog mode
 == Режим FPS-тумана
@@ -1023,13 +906,13 @@ Visible area (%)
 == Видимая область (%)
 
 Gores mode
-== Gores-режим
+== Горес-режим
 
 Enable gores mode
-== Включить Gores-режим
+== Включить горес-режим
 
 Disable if you have shotgun, grenade or laser
-== Отключать, если есть дробовик, гранатомёт или лазер
+== Отключать при наличии дробовика, гранатомёта или лазера
 
 Fast Actions
 == Быстрые действия
@@ -1062,7 +945,7 @@ Milliseconds
 == Миллисекунды
 
 Auto disable after time end
-== Автоотключение после окончания времени
+== Автоотключение по окончании времени
 
 Finish Prediction
 == Предсказание финиша
@@ -1074,7 +957,7 @@ Show time
 == Показывать время
 
 Time left
-== Осталось времени
+== Оставшееся время
 
 Finish time
 == Время финиша
@@ -1088,9 +971,6 @@ Show percentage
 Show always
 == Показывать всегда
 
-Auto team lock
-== Автоблокировка команды
-
 Lock team automatically after joining
 == Автоматически блокировать команду после входа
 
@@ -1101,13 +981,13 @@ Misc
 == Разное
 
 Use new menu layout
-== Использовать новое меню
+== Использовать новый макет меню
 
 Hide hud in settings
 == Скрывать HUD в настройках
 
 Show ESC players list
-== Показывать список игроков в ESC
+== Показывать список игроков в ESC-меню
 
 Shadow of Emotions
 == Тень эмоций
@@ -1119,7 +999,7 @@ Commands in other layout
 == Команды в другой раскладке
 
 Cinematic camera
-== Кинематографическая камера
+== Синематик-камера
 
 Use BestClient MasterServer
 == Использовать мастер-сервер BestClient
@@ -1143,7 +1023,7 @@ Auto server list refresh
 == Автообновление списка серверов
 
 Use short KoG server name
-== Использовать короткое имя KoG-сервера
+== Использовать сокращённое имя KoG-серверов
 
 Chat Media
 == Медиа в чате
@@ -1161,10 +1041,10 @@ Content filtering
 == Фильтрация контента
 
 Allowed media domains
-== Разрешённые медиа-домены
+== Разрешённые домены
 
 Semicolon-separated allowlist, for example: tenor.com; imgur.com; giphy.com; cdn.discordapp.com
-== Список разрешённых доменов через точку с запятой, например: tenor.com; imgur.com; giphy.com; cdn.discordapp.com
+== Список через точку с запятой, например: tenor.com; imgur.com; giphy.com; cdn.discordapp.com
 
 Media preview width
 == Ширина превью медиа
@@ -1179,16 +1059,16 @@ Hide media bind
 == Бинд скрытия медиа
 
 Voice panel
-== Панель голоса
+== Панель голосового чата
 
 Push-to-talk
-== Нажми-и-говори
+== Push-to-talk
 
 Mute microphone
 == Отключить микрофон
 
 Mute headphones
-== Отключить наушники
+== Отключить звук
 
 Client Indicator
 == Индикатор клиента
@@ -1203,19 +1083,19 @@ Name plate indicator size
 == Размер индикатора в неймплейте
 
 Show indicator in scoreboard
-== Показывать индикатор в таблице счёта
+== Показывать индикатор в таблице результатов
 
 Scoreboard indicator size
-== Размер индикатора в таблице счёта
+== Размер индикатора в таблице результатов
 
 Cancel all changes?
 == Отменить все изменения?
 
 All staged component changes will be lost.
-== Все подготовленные изменения компонентов будут потеряны.
+== Все несохранённые изменения компонентов будут потеряны.
 
 Restart client now so component changes fully apply?
-== Перезапустить клиент сейчас, чтобы изменения компонентов применились полностью?
+== Перезапустить клиент, чтобы изменения компонентов применились?
 
 Disabled components: %d
 == Отключено компонентов: %d
@@ -1254,7 +1134,7 @@ Enable your group
 == Включить свою группу
 
 Radius filter
-== Фильтр радиуса
+== Фильтр по радиусу
 
 Activation mode
 == Режим активации
@@ -1278,7 +1158,7 @@ Connected
 == Подключено
 
 Offline
-== Офлайн
+== Не в сети
 
 Reload servers
 == Обновить серверы
@@ -1308,7 +1188,7 @@ Participant
 == Участник
 
 Voice servers
-== Голосовые серверы
+== Серверы голосового чата
 
 Servers
 == Серверы
@@ -1323,7 +1203,7 @@ No servers loaded. Press Reload
 == Участники
 
 Нет подключенных участников.
-== Нет подключенных участников.
+== Нет подключённых участников.
 
 Local participant
 == Локальный участник
@@ -1344,7 +1224,7 @@ Voice: Off
 == Голос: выкл.
 
 Mode: Push-to-talk
-== Режим: нажми-и-говори
+== Режим: Push-to-talk
 
 Mode: Automatic activation
 == Режим: автоактивация
@@ -1353,13 +1233,13 @@ Connection
 == Соединение
 
 Connecting
-== Подключение
+== Подключение...
 
 Automatic activation
 == Автоактивация
 
 Muted
-== Отключено
+== Заглушено
 
 On
 == Вкл.
@@ -1388,62 +1268,266 @@ PTT
 Voice chat
 == Голосовой чат
 
-Disabled.
-== Отключено.
+Fast actions
+== Быстрые действия
 
-Loaded image.
-== Изображение загружено.
+Reset all
+== Сбросить всё
 
-Loaded video.
-== Видео загружено.
+Rollback is only available while online
+== Откат доступен только в онлайне
 
-No media selected.
-== Медиа не выбрано.
+Enable rollback demo recording first
+== Сначала включите запись демо для отката
 
-Failed to load PNG.
-== Не удалось загрузить PNG.
+Rollback recorder is not ready yet
+== Рекордер отката ещё не готов
 
-Failed to upload PNG.
-== Не удалось загрузить PNG в видеопамять.
+Wait at least 1 second before rollback
+== Подождите хотя бы 1 секунду перед откатом
 
-Failed to read file.
-== Не удалось прочитать файл.
+Name A-Z
+== Имя А-Я
 
-Failed to upload image.
-== Не удалось загрузить изображение в видеопамять.
+Name Z-A
+== Имя Я-А
 
-Failed to decode image.
-== Не удалось декодировать изображение.
+Effect file
+== Файл эффекта
 
-Failed to open video.
-== Не удалось открыть видео.
+Live-Shaders controls
+== Управление Live-Shaders
 
-Failed to read video info.
-== Не удалось прочитать информацию о видео.
+Enable Live-Shaders on startup (restart required)
+== Включить Live-Shaders при запуске (нужен перезапуск)
 
-No video stream found.
-== Видеопоток не найден.
+Saved Live-Shaders startup state. Restart the game to apply it.
+== Состояние Live-Shaders сохранено. Перезапустите игру для применения.
 
-Unsupported video codec.
-== Неподдерживаемый видеокодек.
+Auto accept
+== Автоприём
 
-Failed to initialize video decoder.
-== Не удалось инициализировать видеодекодер.
+Show only enabled on the right
+== Показывать только включённые справа
 
-Invalid video dimensions.
-== Некорректные размеры видео.
+Toggle effects bind
+== Бинд переключения эффектов
 
-Failed to allocate video frames.
-== Не удалось выделить память для кадров видео.
+Live-Shaders runtime files are missing
+== Файлы рантайма Live-Shaders отсутствуют
 
-Failed to allocate RGBA frame.
-== Не удалось выделить память для RGBA-кадра.
+This build does not contain the bundled ReShade64 runtime files. Repack the client with ReShade64.dll and ReShade64.json.
+== В этой сборке нет файлов рантайма ReShade64. Переупакуйте клиент с ReShade64.dll и ReShade64.json.
 
-Failed to initialize video scaler.
-== Не удалось инициализировать масштабирование видео.
+Added effects
+== Добавленные эффекты
 
-Failed to decode first video frame.
-== Не удалось декодировать первый кадр видео.
+The Live-Shaders tab will stay unavailable until the portable ReShade runtime files are present next to the game executable.
+== Вкладка Live-Shaders будет недоступна, пока файлы рантайма ReShade не находятся рядом с исполняемым файлом игры.
 
-Failed while decoding video.
-== Ошибка при декодировании видео.
+Live-Shaders is disabled
+== Live-Shaders отключены
+
+Enable Live-Shaders with the checkbox above and restart the game. Until then this tab stays inactive.
+== Включите Live-Shaders галочкой выше и перезапустите игру. До этого вкладка неактивна.
+
+To manage shaders here, first enable Live-Shaders above and restart the game.
+== Чтобы управлять шейдерами здесь, сначала включите Live-Shaders выше и перезапустите игру.
+
+Vulkan is required
+== Требуется Vulkan
+
+Switch the graphics backend to Vulkan in the client settings and restart the game to use the Live-Shaders tab.
+== Переключите графический бэкенд на Vulkan в настройках клиента и перезапустите игру для использования Live-Shaders.
+
+Effect controls are available only when the client is running on the Vulkan renderer.
+== Управление эффектами доступно только при использовании рендерера Vulkan.
+
+Failed to load preset
+== Не удалось загрузить пресет
+
+The right panel will be available again once the preset can be read.
+== Правая панель станет доступна, когда пресет удастся прочитать.
+
+Confirm keeping "%s" enabled within %d seconds. Otherwise it will be removed automatically.
+== Подтвердите сохранение "%s" в течение %d сек. Иначе он будет удалён автоматически.
+
+Confirm keeping "%s" enabled within %d seconds. Otherwise it will be disabled automatically.
+== Подтвердите сохранение "%s" в течение %d сек. Иначе он будет отключён автоматически.
+
+The effect was removed automatically because it was not confirmed in time.
+== Эффект удалён автоматически: не подтверждён вовремя.
+
+The effect was removed because it was not confirmed.
+== Эффект удалён: не был подтверждён.
+
+The effect was disabled automatically because it was not confirmed in time.
+== Эффект отключён автоматически: не подтверждён вовремя.
+
+The effect was disabled because it was not confirmed.
+== Эффект отключён: не был подтверждён.
+
+Keep enabled
+== Оставить включённым
+
+Remove
+== Удалить
+
+Disable
+== Отключить
+
+The effect was confirmed and will stay enabled.
+== Эффект подтверждён и останется включённым.
+
+Available shaders
+== Доступные шейдеры
+
+Sort
+== Сортировка
+
+Search
+== Поиск
+
+The effect is live. Confirm it within 5 seconds to keep it enabled.
+== Эффект активен. Подтвердите в течение 5 секунд, чтобы оставить его.
+
+The effect was added to the configured list.
+== Эффект добавлен в список.
+
+No available shaders match the current search.
+== Нет шейдеров, соответствующих поиску.
+
+The effect settings were reset to their defaults.
+== Настройки эффекта сброшены по умолчанию.
+
+The effect was removed from the configured list.
+== Эффект удалён из списка.
+
+No supported scalar settings were found for this effect.
+== Поддерживаемые настройки для этого эффекта не найдены.
+
+No shaders are configured on the right yet.
+== Шейдеры ещё не настроены справа.
+
+Saved to ReShadePreset.ini and settings_reshade.cfg, then applied live.
+== Сохранено в ReShadePreset.ini и settings_reshade.cfg, применено.
+
+assets & components editors/fun/shop \xe2\x86\x92 Info
+== Редакторы/развлечения/магазин → Инфо
+
+Live-Shaders
+== Лайв-шейдеры
+
+Fun and Shop moved here
+== Развлечения и магазин перенесены сюда
+
+Open in HUD editor
+== Открыть в редакторе HUD
+
+Join a game first
+== Сначала зайдите в игру
+
+Eye Comfort
+== Защита глаз
+
+Enable warm screen filter
+== Включить тёплый фильтр экрана
+
+Comfort level
+== Уровень комфорта
+
+Enable graffiti
+== Включить граффити
+
+Graffiti size
+== Размер граффити
+
+Graffiti spray volume
+== Громкость спрея граффити
+
+Hold key for graffiti wheel
+== Удерживать клавишу для колеса граффити
+
+Graffiti wheel key
+== Клавиша колеса граффити
+
+Flying Name Plates
+== Летающие неймплейты
+
+Enable flying name plates
+== Включить летающие неймплейты
+
+Lift above player
+== Подъём над игроком
+
+Movement drag
+== Инерция движения
+
+Follow speed
+== Скорость следования
+
+Motion Blur
+== Моушн-блюр
+
+Enable motion blur (frame blend)
+== Включить моушн-блюр (смешивание кадров)
+
+Requires the Vulkan backend
+== Требуется бэкенд Vulkan
+
+Temporarily disabled on Linux
+== Временно отключено на Linux
+
+Blend strength
+== Сила смешивания
+
+Up
+== Вверх
+
+Sensitivity
+== Чувствительность
+
+Smoothing
+== Сглаживание
+
+Columns
+== Столбцы
+
+Soft
+== Мягкий
+
+Pill
+== Пилюля
+
+Fast Input
+== Быстрый инпут
+
+Classic
+== Классический
+
+Progress bar
+== Прогресс-бар
+
+Custom bar color
+== Свой цвет полосы
+
+Bar color
+== Цвет полосы
+
+Show points in tab
+== Показывать очки в табе
+
+Auto lock delay
+== Задержка автоблокировки
+
+Rollback Demo
+== Демо-откат
+
+Enable rollback demo recording
+== Включить запись демо для отката
+
+Rollback length
+== Длина отката
+
+Rollback bind
+== Бинд отката
