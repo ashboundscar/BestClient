@@ -380,16 +380,6 @@ bool CSkins::LoadSkinData(const char *pName, CSkinLoadData &Data) const
 	CheckMetrics(Data.m_Metrics.m_Feet, Data.m_Info.m_pData, Pitch, FeetOffsetX, FeetOffsetY, FeetWidth, FeetHeight);
 	CheckMetrics(Data.m_Metrics.m_Feet, Data.m_Info.m_pData, Pitch, FeetOutlineOffsetX, FeetOutlineOffsetY, FeetOutlineWidth, FeetOutlineHeight);
 
-	// Bounds check: prevent excessive allocation and iteration for oversized skins.
-	// Standard skin is 256x128. Cap at 1024x1024 to guard against OOB and hangs.
-	static constexpr size_t MaxSkinPixels = 1024 * 1024;
-	if(Data.m_Info.m_Width == 0 || Data.m_Info.m_Height == 0 ||
-		Data.m_Info.m_Width > MaxSkinPixels / Data.m_Info.m_Height)
-	{
-		log_warn("skins", "Skin '%s' is too large for grayscale conversion (%" PRIzu "x%" PRIzu "), rejecting", pName, Data.m_Info.m_Width, Data.m_Info.m_Height);
-		Data.m_Info.Free();
-		return false;
-	}
 	Data.m_InfoGrayscale = Data.m_Info.DeepCopy();
 	ConvertToGrayscale(Data.m_InfoGrayscale);
 

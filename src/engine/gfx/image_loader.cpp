@@ -213,14 +213,6 @@ bool CImageLoader::LoadPng(CByteBufferReader &Reader, const char *pContextName, 
 		return false;
 	}
 
-	static constexpr int MAX_IMAGE_DIMENSION = 16384;
-	if(Width > MAX_IMAGE_DIMENSION || Height > MAX_IMAGE_DIMENSION)
-	{
-		log_warn("png", "image \"%s\" dimensions (%dx%d) exceed maximum allowed (%d). Skipping load to avoid main-thread stall.", pContextName, Width, Height, MAX_IMAGE_DIMENSION);
-		Cleanup();
-		return false;
-	}
-
 	if(BitDepth == 16)
 	{
 		png_set_strip_16(pPngStruct);
@@ -252,15 +244,6 @@ bool CImageLoader::LoadPng(CByteBufferReader &Reader, const char *pContextName, 
 	const int ColorChannelCount = png_get_channels(pPngStruct, pPngInfo);
 	const int BytesInRow = png_get_rowbytes(pPngStruct, pPngInfo);
 	dbg_assert(BytesInRow == Width * ColorChannelCount, "bytes in row incorrect.");
-
-	static constexpr size_t MAX_IMAGE_SIZE = 2048ULL * 2048ULL * 4ULL; // 16 MB
-	const size_t TotalImageSize = (size_t)Width * (size_t)Height * (size_t)ColorChannelCount;
-	if(TotalImageSize > MAX_IMAGE_SIZE)
-	{
-		log_warn("png", "image \"%s\" uncompressed size (%zu bytes, %dx%dx%d) exceeds %zu bytes. Skipping load to prevent main-thread stall.", pContextName, TotalImageSize, Width, Height, ColorChannelCount, MAX_IMAGE_SIZE);
-		Cleanup();
-		return false;
-	}
 
 	pRowPointers = new png_bytep[Height];
 	for(int y = 0; y < Height; ++y)
