@@ -2840,6 +2840,7 @@ static const SBestClientComponentEntry gs_aBestClientComponentEntries[] = {
 	{CBestClient::COMPONENT_VISUALS_JELLY_TEE, "Jelly Tee", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_3D_PARTICLES, "3D Particles", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_AFTERIMAGE, "Afterimage", COMPONENTS_GROUP_VISUALS},
+	{CBestClient::COMPONENT_VISUALS_CRYSTAL_LASER, "Crystal Laser", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_GRAFFITI, "Graffiti", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_MUSIC_PLAYER, "Music Player", COMPONENTS_GROUP_VISUALS},
 	{CBestClient::COMPONENT_VISUALS_KEYSTROKES, "Keystrokes", COMPONENTS_GROUP_VISUALS},
@@ -3550,6 +3551,33 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			}
 			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
 		}
+		// Sweat Weapon (left column block)
+		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_CRYSTAL_LASER))
+		{
+			const float ContentHeight = LineSize + MarginSmall + LineSize + MarginSmall + LineSize + 58.0f + MarginSmall + LineSize + 58.0f;
+			CUIRect Content, Label, PreviewLabel, PreviewRect;
+			BeginBlock(Column, ContentHeight, Content);
+
+			Content.HSplitTop(LineSize, &Label, &Content);
+			Ui()->DoLabel(&Label, BCLocalize("Sweat Weapon"), HeadlineFontSize, TEXTALIGN_ML);
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+
+			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcCrystalLaser, BCLocalize("Enable"), &g_Config.m_BcCrystalLaser, &Content, LineSize);
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			Content.HSplitTop(LineSize, &PreviewLabel, &Content);
+			Ui()->DoLabel(&PreviewLabel, BCLocalize("Crystal Laser"), 14.0f, TEXTALIGN_ML);
+			Content.HSplitTop(58.0f, &PreviewRect, &Content);
+			DoLaserPreview(&PreviewRect, ColorHSLA(g_Config.m_ClLaserRifleOutlineColor), ColorHSLA(g_Config.m_ClLaserRifleInnerColor), LASERTYPE_RIFLE);
+
+			Content.HSplitTop(MarginSmall, nullptr, &Content);
+			Content.HSplitTop(LineSize, &PreviewLabel, &Content);
+			Ui()->DoLabel(&PreviewLabel, BCLocalize("Sand Shotgun"), 14.0f, TEXTALIGN_ML);
+			Content.HSplitTop(58.0f, &PreviewRect, &Content);
+			DoLaserPreview(&PreviewRect, ColorHSLA(g_Config.m_ClLaserShotgunOutlineColor), ColorHSLA(g_Config.m_ClLaserShotgunInnerColor), LASERTYPE_SHOTGUN);
+			Column.HSplitTop(MarginBetweenSections, nullptr, &Column);
+		}
+
 		if(!GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_GRAFFITI))
 		{
 			static float s_GraffityPhase = 0.0f;

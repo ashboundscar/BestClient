@@ -30,6 +30,137 @@ ColorRGBA BlendColor(const ColorRGBA &Base, const ColorRGBA &Overlay, float Amou
 		mix(Base.a, Overlay.a, Amount));
 }
 
+bool UseCrystalLaser(int Type)
+{
+	// Legacy laser snapshots can come without a specific type (< 0).
+	// Treat them as player lasers so sweat weapon stays visible on such servers.
+	return g_Config.m_BcCrystalLaser && (Type == LASERTYPE_RIFLE || Type == LASERTYPE_SHOTGUN || Type < 0);
+}
+
+bool UseSandLaserStyle(int Type)
+{
+	return Type == LASERTYPE_SHOTGUN;
+}
+
+struct SCrystalLaserGeometry
+{
+	float m_Len = 0.0f;
+	vec2 m_Dir = vec2(1.0f, 0.0f);
+	vec2 m_Center = vec2(0.0f, 0.0f);
+	bool m_SandStyle = false;
+};
+
+bool BuildCrystalLaserGeometry(vec2 From, vec2 Pos, float Len, int Type, SCrystalLaserGeometry &Out)
+{
+	Out.m_Len = Len;
+	if(Len <= 0.0f)
+		return false;
+
+	Out.m_Dir = normalize(Pos - From);
+	Out.m_Center = mix(From, Pos, 0.5f);
+	Out.m_SandStyle = UseSandLaserStyle(Type);
+	return true;
+}
+
+void DrawLaserShard(IGraphics *pGraphics, vec2 Center, vec2 Dir, float HalfLength, float HalfWidth)
+{
+	vec2 Side = vec2(Dir.y, -Dir.x) * HalfWidth;
+	IGraphics::CFreeformItem Freeform(
+		Center - Dir * HalfLength - Side,
+		Center - Dir * HalfLength + Side,
+		Center + Dir * HalfLength - Side,
+		Center + Dir * HalfLength + Side);
+	pGraphics->QuadsDrawFreeform(&Freeform, 1);
+}
+
+void RenderCrystalLaserBody(IGraphics *pGraphics, vec2 From, vec2 Pos, const ColorRGBA &OuterColor, const ColorRGBA &InnerColor, float WidthScale, float TicksHead, const SCrystalLaserGeometry &Geometry)
+{
+	if(Geometry.m_Len <= 0.0f)
+		return;
+
+	const vec2 Dir = Geometry.m_Dir;
+	const float Len = Geometry.m_Len;
+	const bool SandStyle = Geometry.m_SandStyle;
+	const float Pulse = 0.68f + 0.32f * std::sin(TicksHead * 0.24f);
+	const ColorRGBA StyleTint = SandStyle ? ColorRGBA(0.86f, 0.72f, 0.42f, 1.0f) : ColorRGBA(0.70f, 0.93f, 1.00f, 1.0f);
+	const ColorRGBA GlowColor = BlendColor(OuterColor, StyleTint, SandStyle ? 0.72f : 0.80f).WithAlpha(OuterColor.a * (SandStyle ? (0.24f + 0.16f * Pulse) : (0.28f + 0.18f * Pulse)));
+	const ColorRGBA OuterGlowColor = BlendColor(OuterColor, StyleTint, SandStyle ? 0.82f : 0.88f).WithAlpha(OuterColor.a * (SandStyle ? (0.14f + 0.10f * Pulse) : (0.16f + 0.12f * Pulse)));
+	const ColorRGBA CoreMixColor = SandStyle ? ColorRGBA(0.98f, 0.90f, 0.68f, 1.0f) : ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f);
+	const ColorRGBA CoreColor = BlendColor(InnerColor, CoreMixColor, SandStyle ? 0.64f : 0.72f).WithAlpha(InnerColor.a * (SandStyle ? (0.24f + 0.13f * Pulse) : (0.28f + 0.16f * Pulse)));
+	const ColorRGBA FacetColor = BlendColor(InnerColor, StyleTint, SandStyle ? 0.80f : 0.86f).WithAlpha(InnerColor.a * (SandStyle ? (0.27f + 0.10f * Pulse) : (0.30f + 0.11f * Pulse)));
+	const int SegmentCount = std::clamp((int)(Len / 48.0f), 6, 14);
+
+	pGraphics->TextureClear();
+	pGraphics->BlendAdditive();
+	pGraphics->QuadsBegin();
+
+	pGraphics->SetColor(OuterGlowColor);
+	DrawLaserShard(pGraphics, Geometry.m_Center, Dir, Len * 0.5f, (11.5f + 3.5f * Pulse) * WidthScale);
+	pGraphics->SetColor(GlowColor);
+	DrawLaserShard(pGraphics, Geometry.m_Center, Dir, Len * 0.5f, (8.8f + 2.8f * Pulse) * WidthScale);
+	pGraphics->SetColor(CoreColor);
+	DrawLaserShard(pGraphics, Geometry.m_Center, Dir, Len * 0.5f, (2.2f + 0.9f * Pulse) * WidthScale);
+
+	for(int i = 0; i < SegmentCount; ++i)
+	{
+		const float T = (i + 1.0f) / (SegmentCount + 1.0f);
+		const float Wave = std::sin(TicksHead * 0.17f + T * 12.0f + Len * 0.015f);
+		const float AngleOffset = (i % 2 == 0 ? -35.0f : 35.0f) + Wave * (SandStyle ? 9.0f : 12.0f);
+		const vec2 Center = mix(From, Pos, T);
+		const vec2 ShardDir = normalize(rotate(Dir, AngleOffset));
+		const float HalfLength = (SandStyle ? (8.0f + 7.0f * absolute(Wave)) : (9.0f + 9.0f * absolute(Wave))) * WidthScale;
+		const float HalfWidth = (SandStyle ? (1.4f + 2.8f * (1.0f - T) + 0.8f * absolute(Wave)) : (1.1f + 2.4f * (1.0f - T) + 0.7f * absolute(Wave))) * WidthScale;
+		const vec2 Side = vec2(Dir.y, -Dir.x) * Wave * (SandStyle ? 2.2f : 2.8f) * WidthScale;
+
+		pGraphics->SetColor(FacetColor.WithAlpha(FacetColor.a * (0.85f + 0.25f * std::sin(TicksHead * 0.09f + i))));
+		DrawLaserShard(pGraphics, Center + Side, ShardDir, HalfLength, HalfWidth);
+		DrawLaserShard(pGraphics, Center - Side * 0.55f, normalize(rotate(Dir, -AngleOffset * 0.72f)), HalfLength * 0.72f, HalfWidth * 0.75f);
+
+		pGraphics->SetColor(CoreColor.WithAlpha(CoreColor.a * 1.35f));
+		DrawLaserShard(pGraphics, Center + Side * 0.45f, Dir, HalfLength * 0.52f, HalfWidth * 0.42f);
+	}
+
+	pGraphics->QuadsEnd();
+	pGraphics->BlendNormal();
+}
+
+void RenderCrystalLaserHead(IGraphics *pGraphics, vec2 From, vec2 Pos, const ColorRGBA &OuterColor, const ColorRGBA &InnerColor, float WidthScale, float TicksHead, const SCrystalLaserGeometry &Geometry)
+{
+	if(Geometry.m_Len <= 0.0f)
+		return;
+
+	const vec2 Dir = Geometry.m_Dir;
+	const bool SandStyle = Geometry.m_SandStyle;
+	const float Pulse = 0.72f + 0.28f * std::sin(TicksHead * 0.28f + 0.8f);
+	const ColorRGBA StyleTint = SandStyle ? ColorRGBA(0.96f, 0.82f, 0.52f, 1.0f) : ColorRGBA(0.82f, 0.97f, 1.00f, 1.0f);
+	const ColorRGBA HeadGlowColor = BlendColor(OuterColor, StyleTint, SandStyle ? 0.76f : 0.86f).WithAlpha(OuterColor.a * (SandStyle ? (0.20f + 0.13f * Pulse) : (0.24f + 0.16f * Pulse)));
+	const ColorRGBA HeadColor = BlendColor(InnerColor, StyleTint, SandStyle ? 0.78f : 0.88f).WithAlpha(InnerColor.a * (SandStyle ? (0.34f + 0.14f * Pulse) : (0.42f + 0.18f * Pulse)));
+	const ColorRGBA SparkColor = BlendColor(OuterColor, SandStyle ? ColorRGBA(0.98f, 0.92f, 0.74f, 1.0f) : ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f), SandStyle ? 0.68f : 0.78f).WithAlpha(OuterColor.a * (SandStyle ? (0.22f + 0.12f * Pulse) : (0.28f + 0.16f * Pulse)));
+
+	pGraphics->TextureClear();
+	pGraphics->BlendAdditive();
+	pGraphics->QuadsBegin();
+
+	pGraphics->SetColor(HeadGlowColor);
+	DrawLaserShard(pGraphics, Pos - Dir * (2.5f * WidthScale), Dir, (10.0f + Pulse * 4.0f) * WidthScale, (4.0f + 1.3f * Pulse) * WidthScale);
+
+	pGraphics->SetColor(HeadColor);
+	for(int i = 0; i < 6; ++i)
+	{
+		const float AngleOffset = -58.0f + i * 23.0f + std::sin(TicksHead * 0.13f + i) * (SandStyle ? 3.5f : 5.0f);
+		const vec2 ShardDir = normalize(rotate(Dir, AngleOffset));
+		DrawLaserShard(pGraphics, Pos - Dir * (1.8f * WidthScale), ShardDir, (SandStyle ? (8.0f + Pulse * 3.2f) : (9.5f + Pulse * 4.5f)) * WidthScale, (SandStyle ? (2.3f + 0.9f * Pulse) : (1.9f + 0.8f * Pulse)) * WidthScale);
+	}
+
+	pGraphics->SetColor(SparkColor);
+	DrawLaserShard(pGraphics, Pos - Dir * (2.8f * WidthScale), Dir, (8.5f + 3.0f * Pulse) * WidthScale, (2.5f + 0.8f * Pulse) * WidthScale);
+	DrawLaserShard(pGraphics, Pos - Dir * (2.0f * WidthScale), vec2(-Dir.y, Dir.x), (6.0f + 1.8f * Pulse) * WidthScale, (1.4f + 0.5f * Pulse) * WidthScale);
+	DrawLaserShard(pGraphics, Pos - Dir * (1.3f * WidthScale), normalize(rotate(Dir, 90.0f)), (4.4f + 1.6f * Pulse) * WidthScale, (0.9f + 0.4f * Pulse) * WidthScale);
+
+	pGraphics->QuadsEnd();
+	pGraphics->BlendNormal();
+}
+
 } // namespace
 
 void CItems::RenderProjectile(const CProjectileData *pCurrent, int ItemId)
@@ -372,6 +503,11 @@ void CItems::RenderLaser(const CLaserData *pCurrent, bool IsPredicted)
 void CItems::RenderLaser(vec2 From, vec2 Pos, ColorRGBA OuterColor, ColorRGBA InnerColor, float TicksBody, float TicksHead, int Type) const
 {
 	float Len = distance(Pos, From);
+	const bool CrystalLaser = !GameClient()->m_BestClient.IsComponentDisabled(CBestClient::COMPONENT_VISUALS_CRYSTAL_LASER) && UseCrystalLaser(Type);
+	float CrystalBodyScale = 1.0f;
+	float CrystalHeadScale = 1.0f;
+	SCrystalLaserGeometry CrystalGeometry;
+	const bool HasCrystalGeometry = CrystalLaser && BuildCrystalLaserGeometry(From, Pos, Len, Type, CrystalGeometry);
 
 	if(Len > 0)
 	{
@@ -395,7 +531,11 @@ void CItems::RenderLaser(vec2 From, vec2 Pos, ColorRGBA OuterColor, ColorRGBA In
 			a = Ms / CTuningParams::DEFAULT.m_LaserBounceDelay;
 		}
 		a = std::clamp(a, 0.0f, 1.0f);
-		const float Ia = 1 - a;
+		float Ia = 1 - a;
+		// Keep a small minimum scale so the style does not disappear too early
+		// on servers with aggressive laser timing (e.g. FNG tune settings).
+		CrystalBodyScale = maximum(Ia, 0.12f);
+		CrystalHeadScale = maximum(Ia, 0.32f);
 
 		Graphics()->TextureClear();
 		Graphics()->QuadsBegin();
@@ -422,6 +562,10 @@ void CItems::RenderLaser(vec2 From, vec2 Pos, ColorRGBA OuterColor, ColorRGBA In
 
 		Graphics()->QuadsEnd();
 
+		if(HasCrystalGeometry)
+		{
+			RenderCrystalLaserBody(Graphics(), From, Pos, OuterColor, InnerColor, CrystalBodyScale, TicksHead, CrystalGeometry);
+		}
 	}
 
 	// render head
@@ -484,6 +628,10 @@ void CItems::RenderLaser(vec2 From, vec2 Pos, ColorRGBA OuterColor, ColorRGBA In
 		Graphics()->SetColor(InnerColor);
 		Graphics()->RenderQuadContainerAsSprite(m_ItemsQuadContainerIndex, m_aParticleSplatOffset[CurParticle], Pos.x, Pos.y, 20.f / 24.f, 20.f / 24.f);
 
+		if(HasCrystalGeometry)
+		{
+			RenderCrystalLaserHead(Graphics(), From, Pos, OuterColor, InnerColor, CrystalHeadScale, TicksHead, CrystalGeometry);
+		}
 	}
 }
 
