@@ -181,16 +181,38 @@ void CGraphicsBackend_Threaded::WaitForIdle()
 
 void CGraphicsBackend_Threaded::ProcessError(const SGfxErrorContainer &Error)
 {
-	std::string VerboseStr = "Graphics Assertion:";
+	std::string VerboseStr;
 	for(const auto &ErrStr : Error.m_vErrors)
 	{
-		VerboseStr.append("\n");
+		if(!VerboseStr.empty())
+			VerboseStr.append("\n");
 		if(ErrStr.m_RequiresTranslation)
 			VerboseStr.append(m_TranslateFunc(ErrStr.m_Err.c_str(), ""));
 		else
 			VerboseStr.append(ErrStr.m_Err);
 	}
-	dbg_assert_failed("%s", VerboseStr.c_str());
+
+	// Out of VRAM is an expected, user-recoverable condition (too many/too large assets),
+	// not an internal bug. Show a plain message box and exit cleanly instead of triggering
+	// the crash report dialog.
+	const bool IsOutOfMemory =
+		Error.m_ErrorType == GFX_ERROR_TYPE_OUT_OF_MEMORY_IMAGE ||
+		Error.m_ErrorType == GFX_ERROR_TYPE_OUT_OF_MEMORY_BUFFER ||
+		Error.m_ErrorType == GFX_ERROR_TYPE_OUT_OF_MEMORY_STAGING;
+	if(IsOutOfMemory)
+	{
+		log_error("gfx", "%s", VerboseStr.c_str());
+		IGraphics::CMessageBox MessageBox;
+		MessageBox.m_pTitle = m_TranslateFunc("Out of VRAM", "Graphics error");
+		MessageBox.m_pMessage = VerboseStr.c_str();
+		MessageBox.m_Type = IGraphics::EMessageBoxType::ERROR;
+		ShowMessageBoxWithoutGraphics(MessageBox);
+		// Keep the error state set so no further frames are processed; exit cleanly
+		// (flushing logs and running atexit handlers) rather than aborting.
+		exit(1);
+	}
+
+	dbg_assert_failed("Graphics Assertion:\n%s", VerboseStr.c_str());
 }
 
 bool CGraphicsBackend_Threaded::GetWarning(std::vector<std::string> &WarningStrings)
