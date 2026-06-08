@@ -2,6 +2,7 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "scoreboard.h"
 
+#include <base/str.h>
 #include <base/system.h>
 #include <base/time.h>
 
@@ -1214,8 +1215,46 @@ void CScoreboard::RenderScoreboard(CUIRect Scoreboard, int Team, int CountStart,
 				// TClient
 				if(pInfo->m_ClientId >= 0 && g_Config.m_TcWarList && g_Config.m_TcWarListScoreboard && GameClient()->m_WarList.GetAnyWar(pInfo->m_ClientId))
 					TextRender()->TextColor(GameClient()->m_WarList.GetNameplateColor(pInfo->m_ClientId));
+				else if(pInfo->m_ClientId >= 0 && g_Config.m_BcNameplateGradient)
+				{
+					const auto &RenderInfo = GameClient()->m_aClients[pInfo->m_ClientId].m_RenderInfo;
+					ColorRGBA Body, Feet;
+					if(RenderInfo.m_CustomColoredSkin)
+					{
+						Body = RenderInfo.m_ColorBody;
+						Feet = RenderInfo.m_ColorFeet;
+					}
+					else
+					{
+						Body = RenderInfo.m_BloodColor;
+						Feet = ColorRGBA(1, 1, 1);
+					}
+					size_t Size, Count;
+					str_utf8_stats(aSanitizedName, sizeof(aSanitizedName), SIZE_MAX, &Size, &Count);
+					if(Count > 1)
+					{
+						const char *pStr = aSanitizedName;
+						for(size_t i = 0; i < Count; i++)
+						{
+							int ByteOffset = (int)(pStr - aSanitizedName);
+							const char *pPrev = pStr;
+							str_utf8_decode(&pStr);
+							int ByteLen = (int)(pStr - pPrev);
+							float t = (float)i / (float)(Count - 1);
+							ColorRGBA Col(Body.r + t * (Feet.r - Body.r), Body.g + t * (Feet.g - Body.g), Body.b + t * (Feet.b - Body.b), 1.0f);
+							Cursor.m_vColorSplits.emplace_back(Cursor.m_CharCount + ByteOffset, ByteLen, Col);
+						}
+						TextRender()->TextColor(1.0f, 1.0f, 1.0f, TextColor.a);
+					}
+					else if(Count == 1)
+					{
+						Cursor.m_vColorSplits.emplace_back(Cursor.m_CharCount, -1, Body);
+						TextRender()->TextColor(1.0f, 1.0f, 1.0f, TextColor.a);
+					}
+				}
 
 				TextRender()->TextEx(&Cursor, aSanitizedName);
+				Cursor.m_vColorSplits.clear();
 
 				// ready / watching
 				if(Client()->IsSixup() && Client()->m_TranslationContext.m_aClients[pInfo->m_ClientId].m_PlayerFlags7 & protocol7::PLAYERFLAG_READY)

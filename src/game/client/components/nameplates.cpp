@@ -352,6 +352,14 @@ class CNamePlatePartName : public CNamePlatePartText
 private:
 	char m_aText[std::max<size_t>(MAX_NAME_LENGTH, protocol7::MAX_NAME_ARRAY_SIZE)] = "";
 	float m_FontSize = -INFINITY;
+	bool m_Gradient = false;
+	ColorRGBA m_GradientColorBody = ColorRGBA(1, 1, 1);
+	ColorRGBA m_GradientColorFeet = ColorRGBA(1, 1, 1);
+
+	static ColorRGBA LerpColor(const ColorRGBA &a, const ColorRGBA &b, float t)
+	{
+		return ColorRGBA(a.r + t * (b.r - a.r), a.g + t * (b.g - a.g), a.b + t * (b.b - a.b), 1.0f);
+	}
 
 protected:
 	bool UpdateNeeded(CGameClient &This, const CNamePlateData &Data) override
@@ -360,15 +368,55 @@ protected:
 		if(!m_Visible)
 			return false;
 		m_Color = Data.m_Color;
+		bool UseGradient = false;
+		bool HasWarColor = false;
 		// TClient
 		if(g_Config.m_TcWarList)
 		{
 			if(This.m_WarList.GetWarData(Data.m_ClientId).m_WarName)
+			{
 				m_Color = This.m_WarList.GetNameplateColor(Data.m_ClientId).WithAlpha(Data.m_Color.a);
+				HasWarColor = true;
+			}
 			else if(This.m_WarList.GetWarData(Data.m_ClientId).m_WarClan)
+			{
 				m_Color = This.m_WarList.GetClanColor(Data.m_ClientId).WithAlpha(Data.m_Color.a);
+				HasWarColor = true;
+			}
 		}
-		return m_FontSize != Data.m_FontSize || str_comp(m_aText, Data.m_aName) != 0;
+		if(!HasWarColor && g_Config.m_BcNameplateGradient)
+		{
+			UseGradient = true;
+		}
+
+		bool NeedsUpdate = m_FontSize != Data.m_FontSize || str_comp(m_aText, Data.m_aName) != 0;
+
+		if(UseGradient)
+		{
+			const auto &RenderInfo = This.m_aClients[Data.m_ClientId].m_RenderInfo;
+			ColorRGBA Body, Feet;
+			if(RenderInfo.m_CustomColoredSkin)
+			{
+				Body = RenderInfo.m_ColorBody;
+				Feet = RenderInfo.m_ColorFeet;
+			}
+			else
+			{
+				Body = RenderInfo.m_BloodColor;
+				Feet = ColorRGBA(1, 1, 1);
+			}
+			if(m_GradientColorBody != Body || m_GradientColorFeet != Feet || m_Gradient != UseGradient)
+				NeedsUpdate = true;
+			m_GradientColorBody = Body;
+			m_GradientColorFeet = Feet;
+		}
+		else if(m_Gradient != UseGradient)
+		{
+			NeedsUpdate = true;
+		}
+		m_Gradient = UseGradient;
+
+		return NeedsUpdate;
 	}
 	void UpdateText(CGameClient &This, const CNamePlateData &Data) override
 	{
@@ -376,7 +424,48 @@ protected:
 		str_copy(m_aText, Data.m_aName, sizeof(m_aText));
 		CTextCursor Cursor;
 		Cursor.m_FontSize = m_FontSize;
+
+		if(m_Gradient)
+		{
+			// Count UTF-8 characters
+			size_t Size, Count;
+			str_utf8_stats(m_aText, sizeof(m_aText), SIZE_MAX, &Size, &Count);
+			if(Count > 1)
+			{
+				const char *pStr = m_aText;
+				for(size_t i = 0; i < Count; i++)
+				{
+					int ByteOffset = (int)(pStr - m_aText);
+					const char *pPrev = pStr;
+					str_utf8_decode(&pStr);
+					int ByteLen = (int)(pStr - pPrev);
+					float t = (float)i / (float)(Count - 1);
+					ColorRGBA Col = LerpColor(m_GradientColorBody, m_GradientColorFeet, t);
+					Cursor.m_vColorSplits.emplace_back(ByteOffset, ByteLen, Col);
+				}
+			}
+			else if(Count == 1)
+			{
+				Cursor.m_vColorSplits.emplace_back(0, -1, m_GradientColorBody);
+			}
+		}
+
 		This.TextRender()->CreateOrAppendTextContainer(m_TextContainerIndex, &Cursor, m_aText);
+	}
+	void Render(CGameClient &This, vec2 Pos) const override
+	{
+		if(!m_TextContainerIndex.Valid())
+			return;
+
+		ColorRGBA OutlineColor(0.0f, 0.0f, 0.0f, 0.5f * m_Color.a);
+		ColorRGBA Color;
+		if(m_Gradient)
+			Color = ColorRGBA(1.0f, 1.0f, 1.0f, m_Color.a);
+		else
+			Color = m_Color;
+		This.TextRender()->RenderTextContainer(m_TextContainerIndex,
+			Color, OutlineColor,
+			Pos.x - Size().x / 2.0f, Pos.y - Size().y / 2.0f);
 	}
 
 public:
