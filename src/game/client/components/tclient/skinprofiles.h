@@ -21,7 +21,17 @@ public:
 	char m_SkinName[24];
 	char m_Name[MAX_NAME_LENGTH];
 	char m_Clan[MAX_CLAN_LENGTH];
-	CProfile(int BodyColor, int FeetColor, int CountryFlag, int Emote, const char *pSkinName, const char *pName, const char *pClan);
+	char m_AssetEntities[50];
+	char m_AssetGame[50];
+	char m_AssetEmoticons[50];
+	char m_AssetParticles[50];
+	char m_AssetHud[50];
+	char m_AssetExtras[50];
+	char m_AssetCursor[50];
+	char m_AssetArrow[50];
+	CProfile(int BodyColor, int FeetColor, int CountryFlag, int Emote, const char *pSkinName, const char *pName, const char *pClan,
+		const char *pAssetEntities = "", const char *pAssetGame = "", const char *pAssetEmoticons = "", const char *pAssetParticles = "",
+		const char *pAssetHud = "", const char *pAssetExtras = "", const char *pAssetCursor = "", const char *pAssetArrow = "");
 };
 
 class CSkinProfiles : public CComponent
@@ -32,7 +42,9 @@ class CSkinProfiles : public CComponent
 
 public:
 	std::vector<CProfile> m_Profiles;
-	void AddProfile(int BodyColor, int FeetColor, int CountryFlag, int Emote, const char *pSkinName, const char *pName, const char *pClan);
+	void AddProfile(int BodyColor, int FeetColor, int CountryFlag, int Emote, const char *pSkinName, const char *pName, const char *pClan,
+		const char *pAssetEntities = "", const char *pAssetGame = "", const char *pAssetEmoticons = "", const char *pAssetParticles = "",
+		const char *pAssetHud = "", const char *pAssetExtras = "", const char *pAssetCursor = "", const char *pAssetArrow = "");
 	void ApplyProfile(int Dummy, const CProfile &Profile);
 
 	int Sizeof() const override { return sizeof(*this); }
