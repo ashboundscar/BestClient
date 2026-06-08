@@ -2617,6 +2617,18 @@ protected:
 			return false;
 		}
 
+		// Frame blend reads the previous presented frame's history image as a texture during the
+		// render pass. That image was written by vkCmdCopyImage in a previous submission on this same
+		// queue. A plain barrier here (GPU-side) makes that copy visible to this frame's blend sampling
+		// without stalling the CPU like vkWaitForFences did. When LastPresented == CurImageIndex the
+		// fence wait above already covers it.
+		if(IsFrameBlendEnabled() && m_LastPresentedSwapChainImageIndex != std::numeric_limits<decltype(m_LastPresentedSwapChainImageIndex)>::max() && m_LastPresentedSwapChainImageIndex != m_CurImageIndex)
+		{
+			auto &HistoryImage = m_vFrameBlendImages[m_LastPresentedSwapChainImageIndex];
+			if(HistoryImage.m_Valid)
+				FrameBlendImageBarrier(CommandBuffer, HistoryImage.m_Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		}
+
 		VkRenderPassBeginInfo RenderPassInfo{};
 		RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		RenderPassInfo.renderPass = m_VKRenderPass;
@@ -6353,6 +6365,15 @@ public:
 			Barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
 			SourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			DestinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		}
+		else if(OldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && NewLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		{
+			// no layout change: only make the previous frame's copy into the history image
+			// (recorded in a previous submission on the same queue) visible to this frame's blend sampling
+			Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			Barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			SourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			DestinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		}
 		else
 		{
