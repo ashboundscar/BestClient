@@ -41,7 +41,7 @@ jobs:
           asset-name: BestClient-linux.tar.xz
         - name: windows
           os: windows-latest
-          cmake-args: -G Ninja -DCMAKE_BUILD_TYPE=Release -DTOOLS=OFF -DDOWNLOAD_GTEST=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_RUST_COMPILER_TARGET=x86_64-pc-windows-gnu
+          cmake-args: -A x64 -DTOOLS=OFF -DDOWNLOAD_GTEST=OFF
           cmake-init-env: CXXFLAGS= LDFLAGS=
           package-file: "*-win64.zip"
           artifact-name: release-windows
@@ -51,18 +51,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Prepare Windows MinGW
-      if: contains(matrix.os, 'windows')
-      run: |
-        rustup toolchain install stable-x86_64-pc-windows-gnu
-        rustup target add x86_64-pc-windows-gnu
-        rustup default stable-x86_64-pc-windows-gnu
-        rustup set default-host x86_64-pc-windows-gnu
-        echo "RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu" >> $env:GITHUB_ENV
-        echo "CARGO_BUILD_TARGET=x86_64-pc-windows-gnu" >> $env:GITHUB_ENV
-        echo "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=C:\mingw64\bin\gcc.exe" >> $env:GITHUB_ENV
-        echo "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_AR=C:\mingw64\bin\ar.exe" >> $env:GITHUB_ENV
 
     - name: Prepare Linux
       if: contains(matrix.os, 'ubuntu')
@@ -85,7 +73,7 @@ jobs:
     - name: Package release build
       run: |
         cmake -S . -B build-release ${{ matrix.cmake-args }}
-        cmake --build build-release --target package_default
+        cmake --build build-release --config Release --target package_default
         mkdir artifacts
         mv build-release/${{ matrix.package-file }} artifacts/${{ matrix.asset-name }}
 
