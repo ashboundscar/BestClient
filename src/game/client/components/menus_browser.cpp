@@ -1658,14 +1658,24 @@ void CMenus::RenderServerbrowserBestClient(CUIRect View)
 
 	CUIRect Button, VersionsButton;
 	View.HSplitTop(RowHeight, &Button, &View);
-	Button.VSplitRight(80.0f, &Button, &VersionsButton);
+	if(g_Config.m_BcClientIndicatorVersions)
+	{
+		Button.VSplitRight(80.0f, &Button, &VersionsButton);
+	}
 	if(DoButton_CheckBox(&g_Config.m_BrFilterBestclient, Localize("Show BestClient only"), g_Config.m_BrFilterBestclient, &Button))
 		ToggleBestClientServerFilter();
 
-	static CButtonContainer s_VersionsButtonId;
-	VersionsButton.Draw(s_ShowVersions ? ColorRGBA(0.3f, 0.5f, 0.3f, 0.5f) : ColorRGBA(0.3f, 0.3f, 0.3f, 0.5f), IGraphics::CORNER_ALL, 3.0f);
-	if(DoButton_Menu(&s_VersionsButtonId, Localize("Versions"), 0, &VersionsButton))
-		s_ShowVersions = !s_ShowVersions;
+	if(g_Config.m_BcClientIndicatorVersions)
+	{
+		static CButtonContainer s_VersionsButtonId;
+		VersionsButton.Draw(s_ShowVersions ? ColorRGBA(0.3f, 0.5f, 0.3f, 0.5f) : ColorRGBA(0.3f, 0.3f, 0.3f, 0.5f), IGraphics::CORNER_ALL, 3.0f);
+		if(DoButton_Menu(&s_VersionsButtonId, Localize("Versions"), 0, &VersionsButton))
+			s_ShowVersions = !s_ShowVersions;
+	}
+	else
+	{
+		s_ShowVersions = false;
+	}
 
 	View.HSplitTop(6.0f, nullptr, &View);
 
