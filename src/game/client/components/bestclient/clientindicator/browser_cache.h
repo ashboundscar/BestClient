@@ -25,6 +25,7 @@ public:
 	const std::vector<IServerBrowser::CBestClientPlayerEntry> &Players() const { return m_vPlayers; }
 	bool HasPlayer(const char *pServerAddress, const char *pName, bool *pDeveloper = nullptr) const;
 	bool GetPlayerVersion(const char *pServerAddress, const char *pName, char *pVersion, int VersionSize) const;
+	const std::unordered_map<std::string, std::unordered_map<std::string, std::string>> &PlayerVersionsByServer() const { return m_PlayerVersionsByServer; }
 };
 
 #endif

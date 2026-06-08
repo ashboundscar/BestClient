@@ -35,6 +35,8 @@ public:
 	bool IsPlayerDeveloper(int ClientId) const;
 	bool GetPlayerVersionLabel(int ClientId, char *pVersion, int VersionSize) const;
 
+	const std::unordered_map<std::string, std::unordered_map<std::string, std::string>> &AllPlayerVersions() const { return m_BrowserCache.PlayerVersionsByServer(); }
+
 	void RefreshBrowserCache(bool Force);
 	void RefreshToken(bool Force);
 	void ReapplyBrowserSnapshot();

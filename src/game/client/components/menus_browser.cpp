@@ -1654,10 +1654,18 @@ void CMenus::RenderServerbrowserBestClient(CUIRect View)
 
 	View.Margin(5.0f, &View);
 
-	CUIRect Button;
+	static bool s_ShowVersions = false;
+
+	CUIRect Button, VersionsButton;
 	View.HSplitTop(RowHeight, &Button, &View);
+	Button.VSplitRight(80.0f, &Button, &VersionsButton);
 	if(DoButton_CheckBox(&g_Config.m_BrFilterBestclient, Localize("Show BestClient only"), g_Config.m_BrFilterBestclient, &Button))
 		ToggleBestClientServerFilter();
+
+	static CButtonContainer s_VersionsButtonId;
+	VersionsButton.Draw(s_ShowVersions ? ColorRGBA(0.3f, 0.5f, 0.3f, 0.5f) : ColorRGBA(0.3f, 0.3f, 0.3f, 0.5f), IGraphics::CORNER_ALL, 3.0f);
+	if(DoButton_Menu(&s_VersionsButtonId, Localize("Versions"), 0, &VersionsButton))
+		s_ShowVersions = !s_ShowVersions;
 
 	View.HSplitTop(6.0f, nullptr, &View);
 
@@ -1671,6 +1679,86 @@ void CMenus::RenderServerbrowserBestClient(CUIRect View)
 	Ui()->DoLabel(&Button, aLabel, FontSize, TEXTALIGN_ML);
 
 	View.HSplitTop(4.0f, nullptr, &View);
+
+	if(s_ShowVersions)
+	{
+		const auto &AllVersions = GameClient()->m_ClientIndicator.AllPlayerVersions();
+
+		struct SVersionEntry
+		{
+			std::string m_Name;
+			std::string m_Server;
+		};
+		std::vector<std::pair<std::string, std::vector<SVersionEntry>>> vGrouped;
+
+		for(const auto &ServerEntry : AllVersions)
+		{
+			for(const auto &PlayerEntry : ServerEntry.second)
+			{
+				const std::string &Version = PlayerEntry.second;
+				bool Found = false;
+				for(auto &Group : vGrouped)
+				{
+					if(Group.first == Version)
+					{
+						Group.second.push_back({PlayerEntry.first, ServerEntry.first});
+						Found = true;
+						break;
+					}
+				}
+				if(!Found)
+				{
+					vGrouped.push_back({Version, {{PlayerEntry.first, ServerEntry.first}}});
+				}
+			}
+		}
+
+		std::sort(vGrouped.begin(), vGrouped.end(), [](const auto &A, const auto &B) {
+			return A.first > B.first;
+		});
+
+		int TotalEntries = 0;
+		for(const auto &Group : vGrouped)
+			TotalEntries += 1 + (int)Group.second.size();
+
+		static CListBox s_VersionsListBox;
+		s_VersionsListBox.DoAutoSpacing(1.0f);
+		s_VersionsListBox.SetScrollbarWidth(16.0f);
+		s_VersionsListBox.SetScrollbarMargin(5.0f);
+		s_VersionsListBox.DoStart(RowHeight, TotalEntries, 1, 1, -1, &View, false, IGraphics::CORNER_NONE, true);
+
+		int ItemIndex = 0;
+		for(const auto &Group : vGrouped)
+		{
+			const CListboxItem HeaderItem = s_VersionsListBox.DoNextItem(&vGrouped[0] + ItemIndex, false);
+			ItemIndex++;
+			if(HeaderItem.m_Visible)
+			{
+				HeaderItem.m_Rect.Draw(ColorRGBA(0.2f, 0.4f, 0.6f, 0.5f), IGraphics::CORNER_ALL, 3.0f);
+				char aVersionHeader[128];
+				str_format(aVersionHeader, sizeof(aVersionHeader), "%s (%d)", Group.first.c_str(), (int)Group.second.size());
+				CUIRect HeaderLabel = HeaderItem.m_Rect;
+				HeaderLabel.VMargin(4.0f, &HeaderLabel);
+				Ui()->DoLabel(&HeaderLabel, aVersionHeader, FontSize, TEXTALIGN_ML);
+			}
+
+			for(const auto &Entry : Group.second)
+			{
+				const CListboxItem PlayerItem = s_VersionsListBox.DoNextItem(&vGrouped[0] + ItemIndex, false);
+				ItemIndex++;
+				if(!PlayerItem.m_Visible)
+					continue;
+
+				PlayerItem.m_Rect.Draw(ColorRGBA(0.15f, 0.15f, 0.15f, 0.3f), IGraphics::CORNER_ALL, 2.0f);
+				CUIRect PlayerLabel = PlayerItem.m_Rect;
+				PlayerLabel.VMargin(12.0f, &PlayerLabel);
+				Ui()->DoLabel(&PlayerLabel, Entry.m_Name.c_str(), FontSize, TEXTALIGN_ML);
+			}
+		}
+
+		s_VersionsListBox.DoEnd();
+		return;
+	}
 
 	if(!pSelectedServer)
 	{
