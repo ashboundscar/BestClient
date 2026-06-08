@@ -2030,6 +2030,187 @@ void CMenus::RenderServerbrowserFriends(CUIRect View)
 			s_ScrollRegion.AddRect(Space);
 		}
 	}
+
+	// warlist entries
+	{
+		struct SWarBrowserEntry
+		{
+			const CWarEntry *m_pWarEntry;
+			const CServerInfo *m_pServerInfo;
+			const CServerInfo::CClient *m_pClientInfo;
+		};
+
+		std::vector<SWarBrowserEntry> vWarBrowserEntries;
+		vWarBrowserEntries.reserve(GameClient()->m_WarList.m_vWarEntries.size());
+
+		for(const CWarEntry &WarEntry : GameClient()->m_WarList.m_vWarEntries)
+		{
+			if(WarEntry.m_aName[0] == '\0')
+				continue;
+
+			for(int ServerIndex = 0; ServerIndex < ServerBrowser()->NumServers(); ++ServerIndex)
+			{
+				const CServerInfo *pEntry = ServerBrowser()->Get(ServerIndex);
+				for(int ClientIndex = 0; ClientIndex < pEntry->m_NumClients; ++ClientIndex)
+				{
+					const CServerInfo::CClient &CurrentClient = pEntry->m_aClients[ClientIndex];
+					if(str_comp(CurrentClient.m_aName, WarEntry.m_aName) != 0)
+						continue;
+
+					vWarBrowserEntries.push_back({&WarEntry, pEntry, &CurrentClient});
+				}
+			}
+		}
+
+		std::sort(vWarBrowserEntries.begin(), vWarBrowserEntries.end(), [](const SWarBrowserEntry &Left, const SWarBrowserEntry &Right) {
+			if((Left.m_pServerInfo != nullptr) != (Right.m_pServerInfo != nullptr))
+				return Left.m_pServerInfo != nullptr;
+
+			const char *pLeftName = Left.m_pWarEntry->m_aName[0] != '\0' ? Left.m_pWarEntry->m_aName : Left.m_pWarEntry->m_aClan;
+			const char *pRightName = Right.m_pWarEntry->m_aName[0] != '\0' ? Right.m_pWarEntry->m_aName : Right.m_pWarEntry->m_aClan;
+			const int NameComp = str_comp_nocase(pLeftName, pRightName);
+			if(NameComp != 0)
+				return NameComp < 0;
+
+			return str_comp_nocase(Left.m_pWarEntry->m_pWarType->m_aWarName, Right.m_pWarEntry->m_pWarType->m_aWarName) < 0;
+		});
+
+		static bool s_WarListExtended = true;
+		CUIRect Header, GroupIcon, GroupLabel;
+		List.HSplitTop(ms_ListheaderHeight, &Header, &List);
+		s_ScrollRegion.AddRect(Header);
+		Header.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, Ui()->HotItem() == &s_WarListExtended ? 0.4f : 0.25f), IGraphics::CORNER_ALL, 5.0f);
+		Header.VSplitLeft(Header.h, &GroupIcon, &GroupLabel);
+		GroupIcon.Margin(2.0f, &GroupIcon);
+		TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
+		TextRender()->TextColor(Ui()->HotItem() == &s_WarListExtended ? TextRender()->DefaultTextColor() : ColorRGBA(0.6f, 0.6f, 0.6f, 1.0f));
+		Ui()->DoLabel(&GroupIcon, s_WarListExtended ? FontIcon::SQUARE_MINUS : FontIcon::SQUARE_PLUS, GroupIcon.h * CUi::ms_FontmodHeight, TEXTALIGN_MC);
+		TextRender()->TextColor(TextRender()->DefaultTextColor());
+		TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
+		str_format(aBuf, sizeof(aBuf), "Warlist entries (%d)", (int)vWarBrowserEntries.size());
+		Ui()->DoLabel(&GroupLabel, aBuf, FontSize, TEXTALIGN_ML);
+		if(Ui()->DoButtonLogic(&s_WarListExtended, 0, &Header, BUTTONFLAG_LEFT))
+		{
+			s_WarListExtended = !s_WarListExtended;
+		}
+
+		if(s_WarListExtended)
+		{
+			for(size_t WarIndex = 0; WarIndex < vWarBrowserEntries.size(); ++WarIndex)
+			{
+				{
+					CUIRect Space;
+					List.HSplitTop(SpacingH, &Space, &List);
+					s_ScrollRegion.AddRect(Space);
+				}
+
+				const SWarBrowserEntry &WarItem = vWarBrowserEntries[WarIndex];
+				const bool HasServerInfo = WarItem.m_pServerInfo != nullptr && WarItem.m_pClientInfo != nullptr;
+				if(!HasServerInfo)
+					continue;
+				const void *pWarItemId = static_cast<const void *>(WarItem.m_pClientInfo);
+				const CServerInfo::CClient &ClientInfo = *WarItem.m_pClientInfo;
+				CUIRect Rect;
+				List.HSplitTop(11.0f + 10.0f + 2 * 2.0f + 1.0f + 10.0f, &Rect, &List);
+				s_ScrollRegion.AddRect(Rect);
+				if(s_ScrollRegion.RectClipped(Rect))
+					continue;
+
+				const void *pSkinTooltipId = static_cast<const void *>(&ClientInfo.m_aSkin);
+				const bool Inside = Ui()->HotItem() == pWarItemId || Ui()->HotItem() == &WarItem.m_pServerInfo->m_aCommunityId || Ui()->HotItem() == pSkinTooltipId;
+				int ButtonResult = Ui()->DoButtonLogic(pWarItemId, 0, &Rect, BUTTONFLAG_LEFT);
+				GameClient()->m_Tooltips.DoToolTip(pWarItemId, &Rect, Localize("Click to select server. Double click to join your friend."));
+
+				const bool InSelectedServer = m_SelectedIndex >= 0 && WarItem.m_pServerInfo->m_ServerIndex == ServerBrowser()->SortedGet(m_SelectedIndex)->m_ServerIndex;
+				const float Alpha = 0.25f + (Inside ? 0.1f : 0.0f) + (InSelectedServer ? 0.1f : 0.0f);
+				const ColorRGBA BaseColor = WarItem.m_pWarEntry->m_pWarType->m_Color.WithAlpha(Alpha);
+				const ColorRGBA DrawColor = ClientInfo.m_Afk ? ColorRGBA(BaseColor.r * 0.65f, BaseColor.g * 0.65f, BaseColor.b * 0.65f, BaseColor.a) : BaseColor;
+				Rect.Draw(DrawColor, IGraphics::CORNER_ALL, 5.0f);
+				Rect.Margin(2.0f, &Rect);
+
+				CUIRect NameLabel, ClanLabel, InfoLabel, WarTypeLabel;
+				Rect.HSplitBottom(10.0f, &Rect, &InfoLabel);
+				Rect.HSplitTop(11.0f + 10.0f, &Rect, nullptr);
+				CUIRect Skin;
+				Rect.VSplitLeft(Rect.h, &Skin, &Rect);
+				Rect.VSplitLeft(2.0f, nullptr, &Rect);
+				Rect.HSplitTop(11.0f, &NameLabel, &ClanLabel);
+				NameLabel.VSplitRight(64.0f, &NameLabel, &WarTypeLabel);
+
+				if(ClientInfo.m_aSkin[0] != '\0')
+				{
+					const CTeeRenderInfo TeeInfo = GetTeeRenderInfo(vec2(Skin.w, Skin.h), ClientInfo.m_aSkin, ClientInfo.m_CustomSkinColors, ClientInfo.m_CustomSkinColorBody, ClientInfo.m_CustomSkinColorFeet);
+					const CAnimState *pIdleState = CAnimState::GetIdle();
+					vec2 OffsetToMid;
+					CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
+					const vec2 TeeRenderPos = vec2(Skin.x + TeeInfo.m_Size / 2.0f, Skin.y + Skin.h / 2.0f + OffsetToMid.y);
+					RenderTools()->RenderTee(pIdleState, &TeeInfo, ClientInfo.m_Afk ? EMOTE_BLINK : EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
+					Ui()->DoButtonLogic(pSkinTooltipId, 0, &Skin, BUTTONFLAG_NONE, CUi::EButtonSoundType::SILENT);
+					GameClient()->m_Tooltips.DoToolTip(pSkinTooltipId, &Skin, ClientInfo.m_aSkin);
+				}
+				else if(ClientInfo.m_aaSkin7[protocol7::SKINPART_BODY][0] != '\0')
+				{
+					CTeeRenderInfo TeeInfo;
+					TeeInfo.m_Size = minimum(Skin.w, Skin.h);
+					for(int Part = 0; Part < protocol7::NUM_SKINPARTS; Part++)
+					{
+						GameClient()->m_Skins7.FindSkinPart(Part, ClientInfo.m_aaSkin7[Part], true)->ApplyTo(TeeInfo.m_aSixup[g_Config.m_ClDummy]);
+						GameClient()->m_Skins7.ApplyColorTo(TeeInfo.m_aSixup[g_Config.m_ClDummy], ClientInfo.m_aUseCustomSkinColor7[Part], ClientInfo.m_aCustomSkinColor7[Part], Part);
+					}
+					const CAnimState *pIdleState = CAnimState::GetIdle();
+					vec2 OffsetToMid;
+					CRenderTools::GetRenderTeeOffsetToRenderedTee(pIdleState, &TeeInfo, OffsetToMid);
+					const vec2 TeeRenderPos = vec2(Skin.x + TeeInfo.m_Size / 2.0f, Skin.y + Skin.h / 2.0f + OffsetToMid.y);
+					RenderTools()->RenderTee(pIdleState, &TeeInfo, ClientInfo.m_Afk ? EMOTE_BLINK : EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
+				}
+
+				Ui()->DoLabel(&NameLabel, ClientInfo.m_aName, FontSize - 1.0f, TEXTALIGN_ML);
+				Ui()->DoLabel(&ClanLabel, ClientInfo.m_aClan, FontSize - 2.0f, TEXTALIGN_ML);
+				TextRender()->TextColor(WarItem.m_pWarEntry->m_pWarType->m_Color);
+				Ui()->DoLabel(&WarTypeLabel, WarItem.m_pWarEntry->m_pWarType->m_aWarName, FontSize - 2.0f, TEXTALIGN_MR);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+
+				const CCommunity *pCommunity = ServerBrowser()->Community(WarItem.m_pServerInfo->m_aCommunityId);
+				if(pCommunity != nullptr)
+				{
+					const CCommunityIcon *pIcon = m_CommunityIcons.Find(pCommunity->Id());
+					if(pIcon != nullptr)
+					{
+						CUIRect CommunityIcon;
+						InfoLabel.VSplitLeft(21.0f, &CommunityIcon, &InfoLabel);
+						InfoLabel.VSplitLeft(2.0f, nullptr, &InfoLabel);
+						m_CommunityIcons.Render(pIcon, CommunityIcon, true);
+						Ui()->DoButtonLogic(&WarItem.m_pServerInfo->m_aCommunityId, 0, &CommunityIcon, BUTTONFLAG_NONE, CUi::EButtonSoundType::SILENT);
+						GameClient()->m_Tooltips.DoToolTip(&WarItem.m_pServerInfo->m_aCommunityId, &CommunityIcon, pCommunity->Name());
+					}
+				}
+
+				char aLatency[16];
+				FormatServerbrowserPing(aLatency, WarItem.m_pServerInfo);
+				if(aLatency[0] != '\0')
+					str_format(aBuf, sizeof(aBuf), "%s | %s | %s", WarItem.m_pServerInfo->m_aMap, WarItem.m_pServerInfo->m_aGameType, aLatency);
+				else
+					str_format(aBuf, sizeof(aBuf), "%s | %s", WarItem.m_pServerInfo->m_aMap, WarItem.m_pServerInfo->m_aGameType);
+				Ui()->DoLabel(&InfoLabel, aBuf, FontSize - 2.0f, TEXTALIGN_ML);
+
+				if(ButtonResult)
+				{
+					str_copy(g_Config.m_UiServerAddress, WarItem.m_pServerInfo->m_aAddress);
+					m_ServerBrowserShouldRevealSelection = true;
+					if(ButtonResult == 1 && Ui()->DoDoubleClickLogic(pWarItemId))
+					{
+						Connect(g_Config.m_UiServerAddress);
+					}
+				}
+			}
+		}
+
+		{
+			CUIRect Space;
+			List.HSplitTop(SpacingH, &Space, &List);
+			s_ScrollRegion.AddRect(Space);
+		}
+	}
 	s_ScrollRegion.End();
 
 	if(m_pRemoveFriend != nullptr)
