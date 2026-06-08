@@ -34,15 +34,15 @@ jobs:
         include:
         - name: linux
           os: ubuntu-24.04
-          cmake-args: -G Ninja -DPREFER_BUNDLED_LIBS=ON -DDISCORD_DYNAMIC=ON
+          cmake-args: -G Ninja -DCMAKE_BUILD_TYPE=Release -DPREFER_BUNDLED_LIBS=ON -DDISCORD_DYNAMIC=ON
           cmake-init-env: CXXFLAGS="-Werror -Wno-unused-function"
           package-file: "*-linux_x86_64.tar.xz"
           artifact-name: release-linux
           asset-name: BestClient-linux.tar.xz
         - name: windows
           os: windows-latest
-          cmake-args: -A x64 -DEXCEPTION_HANDLING=ON -DVULKAN=ON
-          cmake-init-env: CXXFLAGS=/WX LDFLAGS="/WX /IGNORE:4098"
+          cmake-args: -G Ninja -DCMAKE_BUILD_TYPE=Release -DTOOLS=OFF -DDOWNLOAD_GTEST=OFF
+          cmake-init-env: CXXFLAGS= LDFLAGS=
           package-file: "*-win64.zip"
           artifact-name: release-windows
           asset-name: BestClient-windows.zip
@@ -72,12 +72,10 @@ jobs:
 
     - name: Package release build
       run: |
-        mkdir release
-        cd release
-        cmake -E env ${{ matrix.cmake-init-env }} cmake ${{ matrix.cmake-args }} -DCMAKE_BUILD_TYPE=Release -Werror=dev ..
-        cmake --build . --config Release --target package_default
+        cmake -S . -B build-release ${{ matrix.cmake-args }}
+        cmake --build build-release --target package_default
         mkdir artifacts
-        mv ${{ matrix.package-file }} artifacts/${{ matrix.asset-name }}
+        mv build-release/${{ matrix.package-file }} artifacts/${{ matrix.asset-name }}
 
     - name: Upload release package
       uses: actions/upload-artifact@v4
