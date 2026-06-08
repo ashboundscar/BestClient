@@ -2916,8 +2916,15 @@ static void ComponentsEditorSetDisabled(int Component, int &MaskLo, int &MaskHi,
 
 void CMenus::RenderSettingsBestClient(CUIRect MainView)
 {
-	MainView.y -= 20.0f;
-	MainView.h += 20.0f;
+	// The old layout calls this function with a 20px top margin that needs full
+	// compensation. The new layout already positions the content below the root
+	// tab bar and tightens the hint area itself (see below), so it must not shift.
+	const bool NewLayout = g_Config.m_BcSettingsLayout == 0;
+	if(!NewLayout)
+	{
+		MainView.y -= 20.0f;
+		MainView.h += 20.0f;
+	}
 
 	enum
 	{
@@ -2950,9 +2957,12 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 		MainView.HSplitTop(18.0f, &HintBar, &MainView);
 		HintBar.VSplitLeft(310.0f, &Badge, nullptr);
 		Badge.HMargin(1.5f, &Badge);
-		Ui()->DoLabel(&Badge, BCLocalize("assets & components editors/fun/shop \xe2\x86\x92 Info"), 14.0f, TEXTALIGN_ML);
+		// New layout has no extra top margin, so top-align the hint to remove the
+		// empty space above it instead of centering it in the bar.
+		Ui()->DoLabel(&Badge, BCLocalize("assets & components editors/fun/shop \xe2\x86\x92 Info"), 14.0f, NewLayout ? TEXTALIGN_TL : TEXTALIGN_ML);
 	}
-	MainView.HSplitTop(4.0f, nullptr, &MainView);
+	if(!NewLayout)
+		MainView.HSplitTop(4.0f, nullptr, &MainView);
 
 	CUIRect TabBar, TabButton;
 	MainView.HSplitTop(24.0f, &TabBar, &MainView);
