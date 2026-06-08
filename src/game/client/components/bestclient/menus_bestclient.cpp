@@ -3604,18 +3604,10 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			{
 				const float BadgeWidth = 52.0f;
 				const float BadgeSpacing = 4.0f;
-				CUIRect TitleLabel, BadgeNew, BadgeBeta;
+				CUIRect TitleLabel, BadgeBeta;
 				Label.VSplitLeft(TextRender()->TextWidth(HeadlineFontSize, BCLocalize("Graffiti")) + BadgeSpacing, &TitleLabel, &Label);
-				Label.VSplitLeft(BadgeWidth, &BadgeNew, &Label);
-				Label.VSplitLeft(BadgeSpacing, nullptr, &Label);
 				Label.VSplitLeft(BadgeWidth, &BadgeBeta, &Label);
 				Ui()->DoLabel(&TitleLabel, BCLocalize("Graffiti"), HeadlineFontSize, TEXTALIGN_ML);
-				BadgeNew.HMargin(1.5f, &BadgeNew);
-				Graphics()->DrawRect4(BadgeNew.x, BadgeNew.y, BadgeNew.w, BadgeNew.h,
-					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
-					IGraphics::CORNER_ALL, 5.0f);
-				Ui()->DoLabel(&BadgeNew, "NEW", 11.0f, TEXTALIGN_MC);
 				BadgeBeta.HMargin(1.5f, &BadgeBeta);
 				Graphics()->DrawRect4(BadgeBeta.x, BadgeBeta.y, BadgeBeta.w, BadgeBeta.h,
 					ColorRGBA(0.85f, 0.15f, 0.15f, 1.0f), ColorRGBA(0.65f, 0.05f, 0.05f, 1.0f),
@@ -5568,8 +5560,34 @@ void CMenus::RenderSettingsBestClient(CUIRect MainView)
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcSilentTyping, BCLocalize("Silent typing"), &g_Config.m_BcSilentTyping, &Content, LineSize);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcChatAltCommandLayout, BCLocalize("Commands in other layout"), &g_Config.m_BcChatAltCommandLayout, &Content, LineSize);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcCinematicCamera, BCLocalize("Cinematic camera"), &g_Config.m_BcCinematicCamera, &Content, LineSize);
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcNameplateGradient, BCLocalize("Gradient nicknames"), &g_Config.m_BcNameplateGradient, &Content, LineSize);
-			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcScoreboardTeamGradients, BCLocalize("Gradient team colors"), &g_Config.m_BcScoreboardTeamGradients, &Content, LineSize);
+			{
+				CUIRect CheckBoxRow, BadgeRect;
+				Content.HSplitTop(LineSize, &CheckBoxRow, &Content);
+				if(DoButton_CheckBox_Common(&g_Config.m_BcNameplateGradient, BCLocalize("Gradient nicknames"), g_Config.m_BcNameplateGradient ? "X" : "", &CheckBoxRow, BUTTONFLAG_LEFT))
+					g_Config.m_BcNameplateGradient ^= 1;
+				const float BadgeWidth = 40.0f;
+				CheckBoxRow.VSplitRight(BadgeWidth, nullptr, &BadgeRect);
+				BadgeRect.HMargin(2.0f, &BadgeRect);
+				Graphics()->DrawRect4(BadgeRect.x, BadgeRect.y, BadgeRect.w, BadgeRect.h,
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					IGraphics::CORNER_ALL, 5.0f);
+				Ui()->DoLabel(&BadgeRect, "NEW", 9.0f, TEXTALIGN_MC);
+			}
+			{
+				CUIRect CheckBoxRow, BadgeRect;
+				Content.HSplitTop(LineSize, &CheckBoxRow, &Content);
+				if(DoButton_CheckBox_Common(&g_Config.m_BcScoreboardTeamGradients, BCLocalize("Gradient team colors"), g_Config.m_BcScoreboardTeamGradients ? "X" : "", &CheckBoxRow, BUTTONFLAG_LEFT))
+					g_Config.m_BcScoreboardTeamGradients ^= 1;
+				const float BadgeWidth = 40.0f;
+				CheckBoxRow.VSplitRight(BadgeWidth, nullptr, &BadgeRect);
+				BadgeRect.HMargin(2.0f, &BadgeRect);
+				Graphics()->DrawRect4(BadgeRect.x, BadgeRect.y, BadgeRect.w, BadgeRect.h,
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					ColorRGBA(1.00f, 0.76f, 0.16f, 1.0f), ColorRGBA(0.92f, 0.56f, 0.02f, 1.0f),
+					IGraphics::CORNER_ALL, 5.0f);
+				Ui()->DoLabel(&BadgeRect, "NEW", 9.0f, TEXTALIGN_MC);
+			}
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcMastersrv, BCLocalize("Use BestClient MasterServer"), &g_Config.m_BcMastersrv, &Content, LineSize);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcShowhudDummyCoordIndicator, BCLocalize("Show player below indicator"), &g_Config.m_BcShowhudDummyCoordIndicator, &Content, LineSize);
 			DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_BcShowRealHitbox, BCLocalize("Show real hitbox"), &g_Config.m_BcShowRealHitbox, &Content, LineSize);
