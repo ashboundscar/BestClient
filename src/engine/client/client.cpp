@@ -81,6 +81,7 @@
 
 #if defined(CONF_FAMILY_WINDOWS)
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 #include <chrono>
@@ -97,6 +98,73 @@ using namespace std::chrono_literals;
 
 static constexpr ColorRGBA CLIENT_NETWORK_PRINT_COLOR = ColorRGBA(0.7f, 1, 0.7f, 1.0f);
 static constexpr ColorRGBA CLIENT_NETWORK_PRINT_ERROR_COLOR = ColorRGBA(1.0f, 0.25f, 0.25f, 1.0f);
+
+#if defined(CONF_FAMILY_WINDOWS)
+static void CleanupLegacyReShadeFiles()
+{
+	char aUserDir[IO_MAX_PATH_LENGTH];
+	if(fs_storage_path("BestClient", aUserDir, sizeof(aUserDir)) != 0)
+		return;
+
+	char aMarkerPath[IO_MAX_PATH_LENGTH];
+	str_format(aMarkerPath, sizeof(aMarkerPath), "%s/.reshade_cleaned", aUserDir);
+	if(fs_is_file(aMarkerPath))
+		return;
+
+	char aBinaryDir[IO_MAX_PATH_LENGTH];
+	if(fs_executable_path(aBinaryDir, sizeof(aBinaryDir)) != 0 || fs_parent_dir(aBinaryDir) != 0)
+		return;
+
+	static constexpr const char *s_apFilesToRemove[] = {
+		"ReShade.ini",
+		"ReShadePreset.ini",
+		"ReShade64.dll",
+		"ReShade64.json",
+		"ReShade64.reshade-disabled.json",
+		"BestClientReShadeBridge.ini",
+		"bestclient_reshade_live.addon",
+		"bestclient_reshade_bridge.addon",
+	};
+
+	for(const char *pFilename : s_apFilesToRemove)
+	{
+		char aFilePath[IO_MAX_PATH_LENGTH];
+		str_format(aFilePath, sizeof(aFilePath), "%s/%s", aBinaryDir, pFilename);
+		if(fs_is_file(aFilePath))
+			fs_remove(aFilePath);
+	}
+
+	char aReShadeDataDir[IO_MAX_PATH_LENGTH];
+	str_format(aReShadeDataDir, sizeof(aReShadeDataDir), "%s/data/reshade", aBinaryDir);
+	if(fs_is_dir(aReShadeDataDir))
+	{
+		std::wstring WidePath = windows_utf8_to_wide(aReShadeDataDir);
+		WidePath.push_back(L'\0');
+		SHFILEOPSTRUCTW FileOp = {};
+		FileOp.wFunc = FO_DELETE;
+		FileOp.pFrom = WidePath.c_str();
+		FileOp.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+		SHFileOperationW(&FileOp);
+	}
+
+	char aRuntimeDir[IO_MAX_PATH_LENGTH];
+	str_format(aRuntimeDir, sizeof(aRuntimeDir), "%s/reshade-runtime", aUserDir);
+	if(fs_is_dir(aRuntimeDir))
+	{
+		std::wstring WideRuntimePath = windows_utf8_to_wide(aRuntimeDir);
+		WideRuntimePath.push_back(L'\0');
+		SHFILEOPSTRUCTW RuntimeOp = {};
+		RuntimeOp.wFunc = FO_DELETE;
+		RuntimeOp.pFrom = WideRuntimePath.c_str();
+		RuntimeOp.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+		SHFileOperationW(&RuntimeOp);
+	}
+
+	IOHANDLE Marker = io_open(aMarkerPath, IOFLAG_WRITE);
+	if(Marker)
+		io_close(Marker);
+}
+#endif
 
 CClient::CClient() :
 	m_DemoPlayer(&m_SnapshotDelta, true, [&]() { UpdateDemoIntraTimers(); }),
@@ -5111,6 +5179,7 @@ int main(int argc, const char **argv)
 	gs_AndroidStarted = true;
 #elif defined(CONF_FAMILY_WINDOWS)
 	CWindowsComLifecycle WindowsComLifecycle(true);
+	CleanupLegacyReShadeFiles();
 #endif
 	CCmdlineFix CmdlineFix(&argc, &argv);
 
