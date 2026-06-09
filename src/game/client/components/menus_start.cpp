@@ -26,15 +26,6 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 {
 	GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_START);
 
-	// render logo
-	const IGraphics::CTextureHandle &LogoTexture = GameClient()->m_Menus.MainMenuLogoTexture();
-	Graphics()->TextureSet(LogoTexture.IsValid() && !LogoTexture.IsNullTexture() ? LogoTexture : g_pData->m_aImages[IMAGE_BANNER].m_Id);
-	Graphics()->QuadsBegin();
-	Graphics()->SetColor(1, 1, 1, 1);
-	IGraphics::CQuadItem QuadItem(MainView.w / 2 - 170, 60, 360, 103);
-	Graphics()->QuadsDrawTL(&QuadItem, 1);
-	Graphics()->QuadsEnd();
-
 	const float Rounding = 10.0f;
 	const float VMargin = MainView.w / 2 - 190.0f;
 	const float ExtMenuBottomOffset = 40.0f;
@@ -78,34 +69,103 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 		GameClient()->m_BestClient.FetchBestClientInfo();
 	}
 
+	// Calculate total height of the centered block (logo + buttons) and center it vertically
+	const float LogoW = 360.0f;
+	const float LogoH = 103.0f;
+	const float LogoGap = 30.0f;
+	const float ButtonH = 40.0f;
+	const float ButtonGap = 5.0f;
+	const int NumButtons = 5;
+	const float ButtonsH = NumButtons * ButtonH + (NumButtons - 1) * ButtonGap;
+	const float TotalBlockH = LogoH + LogoGap + ButtonsH;
+
 	CUIRect Menu;
 	MainView.VMargin(VMargin, &Menu);
-	Menu.HSplitBottom(25.0f, &Menu, nullptr);
 
-	Menu.HSplitBottom(40.0f, &Menu, &Button);
-	CUIRect QuitButton = Button;
-	QuitButton.w = QuitButton.h;
-	QuitButton.x += (Button.w - QuitButton.w) / 2.0f;
-	static CButtonContainer s_QuitButton;
-	bool UsedEscape = false;
-	SetIconMode();
-	if(GameClient()->m_Menus.DoButton_Menu(&s_QuitButton, FontIcon::POWER_OFF, 0, &QuitButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, Rounding, 0.0f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f)) || (UsedEscape = Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE)) || CheckHotKey(KEY_Q))
+	// Center the block vertically, offset upward to account for bottom UI elements
+	const float BlockStartY = MainView.y + (MainView.h - TotalBlockH) / 2.0f - 50.0f;
+
+	// Render logo
 	{
-		ResetIconMode();
-		if(UsedEscape || GameClient()->Editor()->HasUnsavedData() || (GameClient()->CurrentRaceTime() / 60 >= g_Config.m_ClConfirmQuitTime && g_Config.m_ClConfirmQuitTime >= 0))
+		const float LogoX = MainView.w / 2 - LogoW / 2;
+		const float LogoY = BlockStartY;
+		const IGraphics::CTextureHandle &LogoTexture = GameClient()->m_Menus.MainMenuLogoTexture();
+		Graphics()->TextureSet(LogoTexture.IsValid() && !LogoTexture.IsNullTexture() ? LogoTexture : g_pData->m_aImages[IMAGE_BANNER].m_Id);
+		Graphics()->QuadsBegin();
+		Graphics()->SetColor(1, 1, 1, 1);
+		IGraphics::CQuadItem QuadItem(LogoX, LogoY, LogoW, LogoH);
+		Graphics()->QuadsDrawTL(&QuadItem, 1);
+		Graphics()->QuadsEnd();
+	}
+
+	// Position buttons starting below the logo
+	float ButtonY = BlockStartY + LogoH + LogoGap;
+
+	Button.x = Menu.x;
+	Button.w = Menu.w;
+	Button.h = ButtonH;
+
+	// Play
+	Button.y = ButtonY;
+	static CButtonContainer s_PlayButton;
+	if(GameClient()->m_Menus.DoButton_MenuEx(&s_PlayButton, Localize("Play", "Start menu"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "play_game" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || Ui()->ConsumeHotkey(CUi::HOTKEY_ENTER) || CheckHotKey(KEY_P))
+	{
+		NewPage = g_Config.m_UiPage >= CMenus::PAGE_INTERNET && g_Config.m_UiPage <= CMenus::PAGE_FAVORITE_COMMUNITY_5 ? g_Config.m_UiPage : CMenus::PAGE_INTERNET;
+	}
+	ButtonY += ButtonH + ButtonGap;
+
+	// Demos
+	Button.y = ButtonY;
+	static CButtonContainer s_DemoButton;
+	if(GameClient()->m_Menus.DoButton_MenuEx(&s_DemoButton, Localize("Demos"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "demos" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || CheckHotKey(KEY_D))
+	{
+		NewPage = CMenus::PAGE_DEMOS;
+	}
+	ButtonY += ButtonH + ButtonGap;
+
+	// Editor
+	Button.y = ButtonY;
+	static CButtonContainer s_MapEditorButton;
+	const CUIRect EditorButton = Button;
+	if(GameClient()->m_Menus.DoButton_MenuEx(&s_MapEditorButton, Localize("Editor"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "editor" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, GameClient()->Editor()->HasUnsavedData() ? ColorRGBA(0.0f, 1.0f, 0.0f, 0.25f) : ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || CheckHotKey(KEY_E))
+	{
+		g_Config.m_ClEditor = 1;
+		Input()->MouseModeRelative();
+	}
+
+	// "DUO MAPPING" badge in the editor button's top-left corner
+	{
+		CUIRect Badge = EditorButton;
+		Badge.VSplitLeft(90.0f, &Badge, nullptr);
+		Badge.HSplitTop(16.0f, &Badge, nullptr);
+		Badge.Margin(3.0f, &Badge);
+		Graphics()->DrawRect4(Badge.x, Badge.y, Badge.w, Badge.h,
+			ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), ColorRGBA(0.42f, 0.10f, 0.78f, 1.0f),
+			ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), ColorRGBA(0.42f, 0.10f, 0.78f, 1.0f),
+			IGraphics::CORNER_ALL, 4.0f);
+		Ui()->DoLabel(&Badge, "DUO MAPPING", 8.0f, TEXTALIGN_MC);
+	}
+	ButtonY += ButtonH + ButtonGap;
+
+	// Run server
+	Button.y = ButtonY;
+	static CButtonContainer s_LocalServerButton;
+	const bool LocalServerRunning = GameClient()->m_LocalServer.IsServerRunning();
+	if(GameClient()->m_Menus.DoButton_MenuEx(&s_LocalServerButton, LocalServerRunning ? Localize("Stop server") : Localize("Run server"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "local_server" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, LocalServerRunning ? ColorRGBA(0.0f, 1.0f, 0.0f, 0.25f) : ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || (CheckHotKey(KEY_R) && Input()->KeyPress(KEY_R)))
+	{
+		if(LocalServerRunning)
 		{
-			GameClient()->m_Menus.ShowQuitPopup();
+			GameClient()->m_LocalServer.KillServer();
 		}
 		else
 		{
-			GameClient()->m_Menus.QuitWithMenuSfx();
+			GameClient()->m_LocalServer.RunServer({});
 		}
 	}
-	ResetIconMode();
+	ButtonY += ButtonH + ButtonGap;
 
-	Menu.HSplitBottom(100.0f, &Menu, nullptr);
-	Menu.HSplitBottom(5.0f, &Menu, nullptr);
-	Menu.HSplitBottom(40.0f, &Menu, &Button);
+	// Settings
+	Button.y = ButtonY;
 	const CUIRect SettingsButton = Button;
 	static CButtonContainer s_SettingsButton;
 	if(GameClient()->m_Menus.DoButton_MenuEx(&s_SettingsButton, Localize("Settings"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "settings" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || CheckHotKey(KEY_S))
@@ -179,61 +239,30 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	}
 #endif
 
-	Menu.HSplitBottom(5.0f, &Menu, nullptr);
-	Menu.HSplitBottom(40.0f, &Menu, &Button);
-	static CButtonContainer s_LocalServerButton;
-
-	const bool LocalServerRunning = GameClient()->m_LocalServer.IsServerRunning();
-	if(GameClient()->m_Menus.DoButton_MenuEx(&s_LocalServerButton, LocalServerRunning ? Localize("Stop server") : Localize("Run server"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "local_server" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, LocalServerRunning ? ColorRGBA(0.0f, 1.0f, 0.0f, 0.25f) : ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || (CheckHotKey(KEY_R) && Input()->KeyPress(KEY_R)))
+	// Quit button at the bottom
+	CUIRect QuitArea;
+	MainView.VMargin(VMargin, &QuitArea);
+	QuitArea.HSplitBottom(25.0f, &QuitArea, nullptr);
+	QuitArea.HSplitBottom(40.0f, &QuitArea, &Button);
+	CUIRect QuitButton = Button;
+	QuitButton.w = QuitButton.h;
+	QuitButton.x += (Button.w - QuitButton.w) / 2.0f;
+	static CButtonContainer s_QuitButton;
+	bool UsedEscape = false;
+	SetIconMode();
+	if(GameClient()->m_Menus.DoButton_Menu(&s_QuitButton, FontIcon::POWER_OFF, 0, &QuitButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, Rounding, 0.0f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f)) || (UsedEscape = Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE)) || CheckHotKey(KEY_Q))
 	{
-		if(LocalServerRunning)
+		ResetIconMode();
+		if(UsedEscape || GameClient()->Editor()->HasUnsavedData() || (GameClient()->CurrentRaceTime() / 60 >= g_Config.m_ClConfirmQuitTime && g_Config.m_ClConfirmQuitTime >= 0))
 		{
-			GameClient()->m_LocalServer.KillServer();
+			GameClient()->m_Menus.ShowQuitPopup();
 		}
 		else
 		{
-			GameClient()->m_LocalServer.RunServer({});
+			GameClient()->m_Menus.QuitWithMenuSfx();
 		}
 	}
-
-	Menu.HSplitBottom(5.0f, &Menu, nullptr);
-	Menu.HSplitBottom(40.0f, &Menu, &Button);
-	static CButtonContainer s_MapEditorButton;
-	const CUIRect EditorButton = Button;
-	if(GameClient()->m_Menus.DoButton_MenuEx(&s_MapEditorButton, Localize("Editor"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "editor" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, GameClient()->Editor()->HasUnsavedData() ? ColorRGBA(0.0f, 1.0f, 0.0f, 0.25f) : ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || CheckHotKey(KEY_E))
-	{
-		g_Config.m_ClEditor = 1;
-		Input()->MouseModeRelative();
-	}
-
-	// "DUO MAPPING" badge in the editor button's top-left corner
-	{
-		CUIRect Badge = EditorButton;
-		Badge.VSplitLeft(90.0f, &Badge, nullptr);
-		Badge.HSplitTop(16.0f, &Badge, nullptr);
-		Badge.Margin(3.0f, &Badge);
-		Graphics()->DrawRect4(Badge.x, Badge.y, Badge.w, Badge.h,
-			ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), ColorRGBA(0.42f, 0.10f, 0.78f, 1.0f),
-			ColorRGBA(0.62f, 0.28f, 0.95f, 1.0f), ColorRGBA(0.42f, 0.10f, 0.78f, 1.0f),
-			IGraphics::CORNER_ALL, 4.0f);
-		Ui()->DoLabel(&Badge, "DUO MAPPING", 8.0f, TEXTALIGN_MC);
-	}
-
-	Menu.HSplitBottom(5.0f, &Menu, nullptr);
-	Menu.HSplitBottom(40.0f, &Menu, &Button);
-	static CButtonContainer s_DemoButton;
-	if(GameClient()->m_Menus.DoButton_MenuEx(&s_DemoButton, Localize("Demos"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "demos" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || CheckHotKey(KEY_D))
-	{
-		NewPage = CMenus::PAGE_DEMOS;
-	}
-
-	Menu.HSplitBottom(5.0f, &Menu, nullptr);
-	Menu.HSplitBottom(40.0f, &Menu, &Button);
-	static CButtonContainer s_PlayButton;
-	if(GameClient()->m_Menus.DoButton_MenuEx(&s_PlayButton, Localize("Play", "Start menu"), 0, &Button, BUTTONFLAG_LEFT, g_Config.m_ClShowStartMenuImages ? "play_game" : nullptr, IGraphics::CORNER_ALL, Rounding, 0.5f, ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f), g_Config.m_ClShowStartMenuImages) || Ui()->ConsumeHotkey(CUi::HOTKEY_ENTER) || CheckHotKey(KEY_P))
-	{
-		NewPage = g_Config.m_UiPage >= CMenus::PAGE_INTERNET && g_Config.m_UiPage <= CMenus::PAGE_FAVORITE_COMMUNITY_5 ? g_Config.m_UiPage : CMenus::PAGE_INTERNET;
-	}
+	ResetIconMode();
 
 	CUIRect CurVersion, ConsoleButton;
 	MainView.HSplitBottom(74.0f, nullptr, &CurVersion);
