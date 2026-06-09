@@ -456,7 +456,6 @@ void CChat::CLine::Reset(CChat &This)
 CChat::CChat()
 {
 	m_Mode = MODE_NONE;
-	m_JustSentMessage = false;
 	m_BacklogCurLine = 0;
 	m_ScrollbarDragging = false;
 	m_ScrollbarDragOffset = 0.0f;
@@ -6021,7 +6020,6 @@ void CChat::SendChatQueued(const char *pLine)
 
 	const int Team = m_Mode == MODE_ALL ? 0 : 1;
 	AddHistoryEntry(Team, pLine);
-	m_JustSentMessage = true;
 	if(GameClient()->m_VoiceChat.TryHandleChatCommand(pLine))
 		return;
 	if(GameClient()->m_Translate.TryTranslateOutgoingChat(Team, pLine))

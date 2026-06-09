@@ -334,11 +334,9 @@ int CControls::SnapInput(int *pData)
 		for(auto &InputData : m_aInputData)
 			InputData.m_PlayerFlags &= ~PLAYERFLAG_CHATTING;
 
-	// BestClient: silent typing — hide chatting flag while typing, still sends on actual message (1 tick)
-	if(g_Config.m_BcSilentTyping && !GameClient()->m_Chat.m_JustSentMessage)
+	if(g_Config.m_BcSilentTyping)
 		for(auto &InputData : m_aInputData)
 			InputData.m_PlayerFlags &= ~PLAYERFLAG_CHATTING;
-	GameClient()->m_Chat.m_JustSentMessage = false;
 
 	if(g_Config.m_TcNameplatePingCircle)
 		for(auto &InputData : m_aInputData)
