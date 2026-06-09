@@ -78,8 +78,6 @@ CMenus::CMenus()
 	m_NeedRestartSound = false;
 	m_NeedSendinfo = false;
 	m_NeedSendDummyinfo = false;
-	m_BestClientReShadeNoticePending = false;
-	m_BestClientReShadeNoticeDontShowAgain = 0;
 	m_MenuActive = true;
 	m_ShowStart = true;
 
@@ -971,8 +969,6 @@ void CMenus::OnInit()
 		m_ShowStart = false;
 	}
 	m_MenuPage = g_Config.m_UiPage;
-	m_BestClientReShadeNoticePending = g_Config.m_BcReshadeNoticeDoNotShowAgain == 0;
-	m_BestClientReShadeNoticeDontShowAgain = g_Config.m_BcReshadeNoticeDoNotShowAgain;
 
 	m_RefreshButton.Init(Ui(), -1);
 	m_ConnectButton.Init(Ui(), -1);
@@ -1795,32 +1791,10 @@ void CMenus::RenderPopupFullscreen(CUIRect Screen)
 		pTitle = Localize("Save skin");
 		pExtraText = Localize("Are you sure you want to save your skin? If a skin with this name already exists, it will be replaced.");
 	}
-	else if(m_Popup == POPUP_BESTCLIENT_RESHADE_NOTICE)
-	{
-		BgColor = ColorRGBA(0.45f, 0.08f, 0.08f, 0.88f);
-		pTitle = "ReShade";
-		const bool RussianLanguage = str_endswith_nocase(g_Config.m_ClLanguagefile, "russian.txt") != nullptr;
-		pExtraText = RussianLanguage ?
-				     "В этом обновлении появилась новая экспериментальная функция ReShade. Она может работать стабильно не на всех устройствах. Если вы столкнулись с багами или заметили сильное падение fps, рекомендуем отключить эту функцию в настройках." :
-				     "This update introduces a new experimental feature called ReShade. It may not work stably on all devices. If you encounter bugs or notice a significant FPS drop, we recommend disabling this feature in the settings.";
-		TopAlign = true;
-	}
 
 	CUIRect Box, Part;
 	Box = Screen;
-	if(m_Popup == POPUP_BESTCLIENT_RESHADE_NOTICE)
-	{
-		const float PopupWidth = minimum(Screen.w - 220.0f, 1240.0f);
-		const float MessageFontSize = 18.0f;
-		const float MessageWidth = PopupWidth - 40.0f;
-		const float MessageHeight = TextRender()->TextBoundingBox(MessageFontSize, pExtraText, -1, MessageWidth).m_H;
-		const float PopupHeight = minimum(maximum(190.0f + MessageHeight, 300.0f), Screen.h - 120.0f);
-		Box.w = PopupWidth;
-		Box.h = PopupHeight;
-		Box.x = Screen.x + (Screen.w - Box.w) / 2.0f;
-		Box.y = Screen.y + (Screen.h - Box.h) / 2.0f;
-	}
-	else if(m_Popup != POPUP_FIRST_LAUNCH)
+	if(m_Popup != POPUP_FIRST_LAUNCH)
 	{
 		Box.Margin(150.0f, &Box);
 	}
@@ -1844,7 +1818,7 @@ void CMenus::RenderPopupFullscreen(CUIRect Screen)
 	}
 
 	// Extra text (optional)
-	if(m_Popup != POPUP_JOIN_TUTORIAL && m_Popup != POPUP_BESTCLIENT_RESHADE_NOTICE)
+	if(m_Popup != POPUP_JOIN_TUTORIAL)
 	{
 		CUIRect ExtraText;
 		Box.HSplitTop(24.0f, &ExtraText, &Box);
@@ -2011,37 +1985,6 @@ void CMenus::RenderPopupFullscreen(CUIRect Screen)
 
 			Ui()->DoLabel(&Label, Localize("Name"), 18.0f, TEXTALIGN_ML);
 			Ui()->DoLabel(&Name, pEntry->m_Info.m_aName, 18.0f, TEXTALIGN_ML);
-		}
-	}
-	else if(m_Popup == POPUP_BESTCLIENT_RESHADE_NOTICE)
-	{
-		const float MessageFontSize = 18.0f;
-		const float MessageHeight = TextRender()->TextBoundingBox(MessageFontSize, pExtraText, -1, Box.w - 40.0f).m_H;
-		CUIRect MessageRect, CheckBoxRow, ButtonBar;
-		Box.HSplitTop(8.0f, nullptr, &Box);
-		Box.HSplitTop(MessageHeight, &MessageRect, &Box);
-		Box.HSplitTop(24.0f, nullptr, &Box);
-		Box.HSplitTop(28.0f, &CheckBoxRow, &Box);
-		Box.HSplitTop(18.0f, nullptr, &Box);
-		Box.HSplitTop(28.0f, &ButtonBar, &Box);
-		MessageRect.VMargin(20.0f, &MessageRect);
-		CheckBoxRow.VMargin(20.0f, &CheckBoxRow);
-		ButtonBar.VMargin(100.0f, &ButtonBar);
-
-		Ui()->ClipEnable(&MessageRect);
-		Ui()->DoLabel(&MessageRect, pExtraText, MessageFontSize, TEXTALIGN_TL, {.m_MaxWidth = MessageRect.w});
-		Ui()->ClipDisable();
-
-		const bool RussianLanguage = str_endswith_nocase(g_Config.m_ClLanguagefile, "russian.txt") != nullptr;
-		DoButton_CheckBoxAutoVMarginAndSet(&m_BestClientReShadeNoticeDontShowAgain, RussianLanguage ? "Не показывать снова" : "Do not show again", &m_BestClientReShadeNoticeDontShowAgain, &CheckBoxRow, CheckBoxRow.h);
-
-		static CButtonContainer s_ButtonConfirm;
-		if(DoButton_Menu(&s_ButtonConfirm, RussianLanguage ? "Хорошо" : "OK", 0, &ButtonBar) || Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE) || Ui()->ConsumeHotkey(CUi::HOTKEY_ENTER))
-		{
-			g_Config.m_BcReshadeNoticeDoNotShowAgain = m_BestClientReShadeNoticeDontShowAgain ? 1 : 0;
-			ConfigManager()->Save();
-			m_BestClientReShadeNoticePending = false;
-			m_Popup = POPUP_NONE;
 		}
 	}
 	else if(m_Popup == POPUP_LANGUAGE)
@@ -3150,13 +3093,6 @@ void CMenus::OnRender()
 
 	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 		SetActive(true);
-
-	if(m_BestClientReShadeNoticePending && m_Popup == POPUP_NONE)
-	{
-		m_Popup = POPUP_BESTCLIENT_RESHADE_NOTICE;
-		m_BestClientReShadeNoticeDontShowAgain = g_Config.m_BcReshadeNoticeDoNotShowAgain;
-		SetActive(true);
-	}
 
 	if(Client()->State() == IClient::STATE_ONLINE && GameClient()->m_ServerMode == CGameClient::SERVERMODE_PUREMOD)
 	{

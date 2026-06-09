@@ -21,11 +21,6 @@
 #include <game/localization.h>
 #include <game/version.h>
 
-#if defined(CONF_FAMILY_WINDOWS)
-extern void BestClientTriggerReShadeToggle();
-extern void BestClientProcessReShadeToggle(IStorage *pStorage);
-#endif
-
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -692,26 +687,10 @@ void CBestClient::OnRender()
 
 	if(HasHookComboWork())
 		UpdateHookCombo();
-
-#if defined(CONF_FAMILY_WINDOWS)
-	BestClientProcessReShadeToggle(GameClient()->Storage());
-#endif
 }
 
 bool CBestClient::OnInput(const IInput::CEvent &Event)
 {
-#if defined(CONF_FAMILY_WINDOWS)
-	if(Event.m_Flags & IInput::FLAG_PRESS)
-	{
-		const int ModifierMask = CBinds::GetModifierMask(Input()) & ~CBinds::GetModifierMaskOfKey(Event.m_Key);
-		const char *pBind = GameClient()->m_Binds.Get(Event.m_Key, ModifierMask);
-		if(str_comp(pBind, "BC_reshade_toggle_effects") == 0)
-		{
-			BestClientTriggerReShadeToggle();
-			return true;
-		}
-	}
-#endif
 	return false;
 }
 
@@ -1212,15 +1191,6 @@ void CBestClient::ConSaveRollback(IConsole::IResult *pResult, void *pUserData)
 	static_cast<CBestClient *>(pUserData)->SaveRollback();
 }
 
-void CBestClient::ConToggleReShadeEffects(IConsole::IResult *pResult, void *pUserData)
-{
-	(void)pResult;
-	(void)pUserData;
-#if defined(CONF_FAMILY_WINDOWS)
-	BestClientTriggerReShadeToggle();
-#endif
-}
-
 bool CBestClient::NeedUpdate()
 {
 	return str_comp(m_aVersionStr, "0") != 0;
@@ -1283,5 +1253,4 @@ void CBestClient::OnConsoleInit()
 	Console()->Register("BC_deepfly_toggle", "", CFGFLAG_CLIENT, ConToggleDeepfly, this, "Deep fly toggle");
 	Console()->Register("BC_cinematic_camera_toggle", "", CFGFLAG_CLIENT, ConToggleCinematicCamera, this, "Toggle cinematic spectator camera");
 	Console()->Register("BC_save_rollback", "", CFGFLAG_CLIENT, ConSaveRollback, this, "Save the last configured seconds as a rollback demo");
-	Console()->Register("BC_reshade_toggle_effects", "", CFGFLAG_CLIENT, ConToggleReShadeEffects, this, "Toggle all added ReShade effects on/off");
 }
