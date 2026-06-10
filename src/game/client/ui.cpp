@@ -2259,94 +2259,204 @@ CUi::EPopupMenuFunctionResult CUi::PopupColorPicker(void *pContext, CUIRect View
 		return POPUP_CLOSE_CURRENT;
 	}
 
-	CUIRect ColorsArea, HueArea, BottomArea, ModeButtonArea, HueRect, SatRect, ValueRect, HexRect, AlphaRect;
-
-	View.HSplitTop(140.0f, &ColorsArea, &BottomArea);
-	ColorsArea.VSplitRight(20.0f, &ColorsArea, &HueArea);
-
-	BottomArea.HSplitTop(3.0f, nullptr, &BottomArea);
-	HueArea.VSplitLeft(3.0f, nullptr, &HueArea);
-
-	BottomArea.HSplitTop(20.0f, &HueRect, &BottomArea);
-	BottomArea.HSplitTop(3.0f, nullptr, &BottomArea);
-
-	constexpr float ValuePadding = 5.0f;
-	const float HsvValueWidth = (HueRect.w - ValuePadding * 2) / 3.0f;
-	const float HexValueWidth = HsvValueWidth * 2 + ValuePadding;
-
-	HueRect.VSplitLeft(HsvValueWidth, &HueRect, &SatRect);
-	SatRect.VSplitLeft(ValuePadding, nullptr, &SatRect);
-	SatRect.VSplitLeft(HsvValueWidth, &SatRect, &ValueRect);
-	ValueRect.VSplitLeft(ValuePadding, nullptr, &ValueRect);
-
-	BottomArea.HSplitTop(20.0f, &HexRect, &BottomArea);
-	BottomArea.HSplitTop(3.0f, nullptr, &BottomArea);
-	HexRect.VSplitLeft(HexValueWidth, &HexRect, &AlphaRect);
-	AlphaRect.VSplitLeft(ValuePadding, nullptr, &AlphaRect);
-	BottomArea.HSplitTop(20.0f, &ModeButtonArea, &BottomArea);
-
-	const ColorRGBA BlackColor = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f);
-
-	HueArea.Draw(BlackColor, IGraphics::CORNER_NONE, 0.0f);
-	HueArea.Margin(1.0f, &HueArea);
-
-	ColorsArea.Draw(BlackColor, IGraphics::CORNER_NONE, 0.0f);
-	ColorsArea.Margin(1.0f, &ColorsArea);
-
 	ColorHSVA PickerColorHSV = pColorPicker->m_HsvaColor;
 	ColorRGBA PickerColorRGB = pColorPicker->m_RgbaColor;
 	ColorHSLA PickerColorHSL = pColorPicker->m_HslaColor;
 
-	// Color Area
-	ColorRGBA TL, TR, BL, BR;
-	TL = BL = color_cast<ColorRGBA>(ColorHSVA(PickerColorHSV.x, 0.0f, 1.0f));
-	TR = BR = color_cast<ColorRGBA>(ColorHSVA(PickerColorHSV.x, 1.0f, 1.0f));
-	ColorsArea.Draw4(TL, TR, BL, BR, IGraphics::CORNER_NONE, 0.0f);
+	// Layout
+	constexpr float WheelSize = 160.0f;
+	constexpr float SliderH = 12.0f;
+	constexpr float SliderRound = 4.0f;
+	constexpr float FieldH = 18.0f;
+	constexpr float Pad = 4.0f;
+	constexpr float ValuePadding = 4.0f;
 
-	TL = TR = ColorRGBA(0.0f, 0.0f, 0.0f, 0.0f);
-	BL = BR = ColorRGBA(0.0f, 0.0f, 0.0f, 1.0f);
-	ColorsArea.Draw4(TL, TR, BL, BR, IGraphics::CORNER_NONE, 0.0f);
+	CUIRect WheelArea, ValueSliderRect, AlphaSliderRect, BottomArea, HueRect, SatRect, ValueRect, HexRect, AlphaRect, ModeButtonArea;
 
-	// Hue Area
-	static const float s_aaColorIndices[7][3] = {
-		{1.0f, 0.0f, 0.0f}, // red
-		{1.0f, 0.0f, 1.0f}, // magenta
-		{0.0f, 0.0f, 1.0f}, // blue
-		{0.0f, 1.0f, 1.0f}, // cyan
-		{0.0f, 1.0f, 0.0f}, // green
-		{1.0f, 1.0f, 0.0f}, // yellow
-		{1.0f, 0.0f, 0.0f}, // red
-	};
+	View.HSplitTop(WheelSize, &WheelArea, &BottomArea);
+	BottomArea.HSplitTop(Pad, nullptr, &BottomArea);
 
-	const float HuePickerOffset = HueArea.h / 6.0f;
-	CUIRect HuePartialArea = HueArea;
-	HuePartialArea.h = HuePickerOffset;
+	// Value (brightness) slider
+	BottomArea.HSplitTop(SliderH, &ValueSliderRect, &BottomArea);
+	BottomArea.HSplitTop(Pad, nullptr, &BottomArea);
 
-	for(size_t j = 0; j < std::size(s_aaColorIndices) - 1; j++)
+	// Alpha slider (optional)
+	if(pColorPicker->m_Alpha)
 	{
-		TL = ColorRGBA(s_aaColorIndices[j][0], s_aaColorIndices[j][1], s_aaColorIndices[j][2], 1.0f);
-		BL = ColorRGBA(s_aaColorIndices[j + 1][0], s_aaColorIndices[j + 1][1], s_aaColorIndices[j + 1][2], 1.0f);
-
-		HuePartialArea.y = HueArea.y + HuePickerOffset * j;
-		HuePartialArea.Draw4(TL, TL, BL, BL, IGraphics::CORNER_NONE, 0.0f);
+		BottomArea.HSplitTop(SliderH, &AlphaSliderRect, &BottomArea);
+		BottomArea.HSplitTop(Pad, nullptr, &BottomArea);
 	}
 
+	// Numeric fields row
+	BottomArea.HSplitTop(FieldH, &HueRect, &BottomArea);
+	BottomArea.HSplitTop(Pad, nullptr, &BottomArea);
+	const float FieldW = (HueRect.w - ValuePadding * 2) / 3.0f;
+	HueRect.VSplitLeft(FieldW, &HueRect, &SatRect);
+	SatRect.VSplitLeft(ValuePadding, nullptr, &SatRect);
+	SatRect.VSplitLeft(FieldW, &SatRect, &ValueRect);
+	ValueRect.VSplitLeft(ValuePadding, nullptr, &ValueRect);
+
+	// Hex + alpha field row
+	BottomArea.HSplitTop(FieldH, &HexRect, &BottomArea);
+	BottomArea.HSplitTop(Pad, nullptr, &BottomArea);
+	if(pColorPicker->m_Alpha)
+	{
+		const float HexW = FieldW * 2 + ValuePadding;
+		HexRect.VSplitLeft(HexW, &HexRect, &AlphaRect);
+		AlphaRect.VSplitLeft(ValuePadding, nullptr, &AlphaRect);
+	}
+
+	// Mode buttons row
+	BottomArea.HSplitTop(FieldH, &ModeButtonArea, &BottomArea);
+
+	// --- Hue Wheel ---
+	const float CenterX = WheelArea.x + WheelArea.w / 2.0f;
+	const float CenterY = WheelArea.y + WheelArea.h / 2.0f;
+	const float WheelRadius = WheelSize / 2.0f - 2.0f;
+	const float InnerRadius = 0.0f;
+	constexpr int WheelSegments = 64;
+	const float SegAngle = 2.0f * pi / WheelSegments;
+
+	pUI->Graphics()->TextureClear();
+	pUI->Graphics()->QuadsBegin();
+
+	for(int i = 0; i < WheelSegments; i++)
+	{
+		const float A0 = i * SegAngle;
+		const float A1 = (i + 1) * SegAngle;
+		const float Hue0 = (float)i / WheelSegments;
+		const float Hue1 = (float)(i + 1) / WheelSegments;
+
+		const ColorRGBA OuterColor0 = color_cast<ColorRGBA>(ColorHSVA(Hue0, 1.0f, PickerColorHSV.z, 1.0f));
+		const ColorRGBA OuterColor1 = color_cast<ColorRGBA>(ColorHSVA(Hue1, 1.0f, PickerColorHSV.z, 1.0f));
+		const ColorRGBA InnerColor = ColorRGBA(PickerColorHSV.z, PickerColorHSV.z, PickerColorHSV.z, 1.0f);
+
+		// Outer ring quad (two triangles via freeform: center->innerA->outerA / center->outerA->outerB + innerB)
+		// Use two freeform items per segment to make a trapezoid
+		const float Ox0 = CenterX + std::cos(A0) * WheelRadius;
+		const float Oy0 = CenterY + std::sin(A0) * WheelRadius;
+		const float Ox1 = CenterX + std::cos(A1) * WheelRadius;
+		const float Oy1 = CenterY + std::sin(A1) * WheelRadius;
+		const float Ix0 = CenterX + std::cos(A0) * InnerRadius;
+		const float Iy0 = CenterY + std::sin(A0) * InnerRadius;
+		const float Ix1 = CenterX + std::cos(A1) * InnerRadius;
+		const float Iy1 = CenterY + std::sin(A1) * InnerRadius;
+
+		// Triangle: Inner0, Outer0, Outer1
+		IGraphics::CColorVertex aVerts0[4] = {
+			IGraphics::CColorVertex(0, InnerColor),
+			IGraphics::CColorVertex(1, OuterColor0),
+			IGraphics::CColorVertex(2, InnerColor),
+			IGraphics::CColorVertex(3, OuterColor1),
+		};
+		pUI->Graphics()->SetColorVertex(aVerts0, 4);
+		IGraphics::CFreeformItem Trapezoid(Ix0, Iy0, Ox0, Oy0, Ix1, Iy1, Ox1, Oy1);
+		pUI->Graphics()->QuadsDrawFreeform(&Trapezoid, 1);
+	}
+
+	pUI->Graphics()->QuadsEnd();
+
+	// Dark overlay for low value (brightness)
+	pUI->Graphics()->TextureClear();
+	pUI->Graphics()->QuadsBegin();
+	pUI->Graphics()->SetColor(0.0f, 0.0f, 0.0f, 1.0f - PickerColorHSV.z);
+	pUI->Graphics()->DrawCircle(CenterX, CenterY, WheelRadius, WheelSegments);
+	pUI->Graphics()->QuadsEnd();
+
+	// --- Wheel Picker Logic ---
+	// Use m_HuePickerId as the wheel interactive area (full bounding rect)
+	float WheelPickX, WheelPickY;
+	EEditState WheelPickerRes = pUI->DoPickerLogic(&pColorPicker->m_HuePickerId, &WheelArea, &WheelPickX, &WheelPickY);
+	if(WheelPickerRes != EEditState::NONE)
+	{
+		const float Dx = WheelPickX - WheelArea.w / 2.0f;
+		const float Dy = WheelPickY - WheelArea.h / 2.0f;
+		const float Dist = std::sqrt(Dx * Dx + Dy * Dy);
+		float PickedHue = std::atan2(Dy, Dx) / (2.0f * pi);
+		if(PickedHue < 0.0f)
+			PickedHue += 1.0f;
+		const float PickedSat = std::clamp(Dist / WheelRadius, 0.0f, 1.0f);
+		PickerColorHSV.x = PickedHue;
+		PickerColorHSV.y = PickedSat;
+		PickerColorHSL = color_cast<ColorHSLA>(PickerColorHSV);
+		PickerColorRGB = color_cast<ColorRGBA>(PickerColorHSL);
+		pColorPicker->m_State = WheelPickerRes;
+	}
+
+	// --- Wheel Marker ---
+	{
+		const float MarkerAngle = PickerColorHSV.x * 2.0f * pi;
+		const float MarkerDist = PickerColorHSV.y * WheelRadius;
+		const float MarkerX = CenterX + std::cos(MarkerAngle) * MarkerDist;
+		const float MarkerY = CenterY + std::sin(MarkerAngle) * MarkerDist;
+
+		pUI->Graphics()->TextureClear();
+		pUI->Graphics()->QuadsBegin();
+		pUI->Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+		pUI->Graphics()->DrawCircle(MarkerX, MarkerY, 6.0f, 32);
+		pUI->Graphics()->SetColor(0.0f, 0.0f, 0.0f, 1.0f);
+		pUI->Graphics()->DrawCircle(MarkerX, MarkerY, 5.0f, 32);
+		const ColorRGBA WheelMarkerColor = color_cast<ColorRGBA>(ColorHSVA(PickerColorHSV.x, PickerColorHSV.y, PickerColorHSV.z, 1.0f));
+		pUI->Graphics()->SetColor(WheelMarkerColor);
+		pUI->Graphics()->DrawCircle(MarkerX, MarkerY, 4.0f, 32);
+		pUI->Graphics()->QuadsEnd();
+	}
+
+	// --- Value (Brightness) Slider ---
+	{
+		const ColorRGBA SliderColorL = ColorRGBA(0.0f, 0.0f, 0.0f, 1.0f);
+		const ColorRGBA SliderColorR = color_cast<ColorRGBA>(ColorHSVA(PickerColorHSV.x, PickerColorHSV.y, 1.0f, 1.0f));
+		ValueSliderRect.Draw4(SliderColorL, SliderColorR, SliderColorL, SliderColorR, IGraphics::CORNER_ALL, SliderRound);
+
+		// Logic via m_ColorPickerId
+		float SliderPickX, SliderPickY;
+		EEditState SliderRes = pUI->DoPickerLogic(&pColorPicker->m_ColorPickerId, &ValueSliderRect, &SliderPickX, &SliderPickY);
+		if(SliderRes != EEditState::NONE)
+		{
+			PickerColorHSV.z = std::clamp(SliderPickX / ValueSliderRect.w, 0.0f, 1.0f);
+			PickerColorHSL = color_cast<ColorHSLA>(PickerColorHSV);
+			PickerColorRGB = color_cast<ColorRGBA>(PickerColorHSL);
+			pColorPicker->m_State = SliderRes;
+		}
+
+		// Value slider marker — clamp so it stays within the slider rect
+		const float MarkerR = ValueSliderRect.h / 2.0f + 2.0f;
+		const float ValMarkerX = std::clamp(ValueSliderRect.x + PickerColorHSV.z * ValueSliderRect.w, ValueSliderRect.x + MarkerR, ValueSliderRect.x + ValueSliderRect.w - MarkerR);
+		const float ValMarkerY = ValueSliderRect.y + ValueSliderRect.h / 2.0f;
+		pUI->Graphics()->TextureClear();
+		pUI->Graphics()->QuadsBegin();
+		pUI->Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+		pUI->Graphics()->DrawCircle(ValMarkerX, ValMarkerY, MarkerR, 24);
+		pUI->Graphics()->SetColor(0.1f, 0.1f, 0.1f, 1.0f);
+		pUI->Graphics()->DrawCircle(ValMarkerX, ValMarkerY, ValueSliderRect.h / 2.0f + 0.5f, 24);
+		pUI->Graphics()->QuadsEnd();
+	}
+
+	// --- Alpha Slider ---
 	const auto &&RenderAlphaSelector = [&](unsigned OldA) -> SEditResult<int64_t> {
 		if(pColorPicker->m_Alpha)
-		{
 			return pUI->DoValueSelectorWithState(&pColorPicker->m_aValueSelectorIds[3], &AlphaRect, "A:", OldA, 0, 255);
-		}
-		else
-		{
-			char aBuf[8];
-			str_format(aBuf, sizeof(aBuf), "A: %d", OldA);
-			pUI->DoLabel(&AlphaRect, aBuf, 10.0f, TEXTALIGN_MC);
-			AlphaRect.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.65f), IGraphics::CORNER_ALL, 3.0f);
-			return {EEditState::NONE, OldA};
-		}
+		return {EEditState::NONE, (int64_t)OldA};
 	};
 
-	// Editboxes Area
+	if(pColorPicker->m_Alpha)
+	{
+		const ColorRGBA AlphaL = ColorRGBA(0.0f, 0.0f, 0.0f, 1.0f);
+		const ColorRGBA AlphaR = ColorRGBA(PickerColorRGB.r, PickerColorRGB.g, PickerColorRGB.b, 1.0f);
+		AlphaSliderRect.Draw4(AlphaL, AlphaR, AlphaL, AlphaR, IGraphics::CORNER_ALL, SliderRound);
+
+		const float AlphaMarkerX = AlphaSliderRect.x + PickerColorHSV.a * AlphaSliderRect.w;
+		const float AlphaMarkerY = AlphaSliderRect.y + AlphaSliderRect.h / 2.0f;
+		pUI->Graphics()->TextureClear();
+		pUI->Graphics()->QuadsBegin();
+		pUI->Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+		pUI->Graphics()->DrawCircle(AlphaMarkerX, AlphaMarkerY, AlphaSliderRect.h / 2.0f + 2.0f, 24);
+		pUI->Graphics()->SetColor(0.1f, 0.1f, 0.1f, 1.0f);
+		pUI->Graphics()->DrawCircle(AlphaMarkerX, AlphaMarkerY, AlphaSliderRect.h / 2.0f + 0.5f, 24);
+		pUI->Graphics()->QuadsEnd();
+	}
+
+	// --- Numeric fields ---
 	if(pColorPicker->m_ColorMode == SColorPickerPopupContext::MODE_HSVA)
 	{
 		const unsigned OldH = round_to_int(PickerColorHSV.h * 255.0f);
@@ -2455,71 +2565,24 @@ CUi::EPopupMenuFunctionResult CUi::PopupColorPicker(void *pContext, CUIRect View
 	if(HexState != EEditState::NONE)
 		pColorPicker->m_State = HexState;
 
-	// Logic
-	float PickerX, PickerY;
-	EEditState ColorPickerRes = pUI->DoPickerLogic(&pColorPicker->m_ColorPickerId, &ColorsArea, &PickerX, &PickerY);
-	if(ColorPickerRes != EEditState::NONE)
-	{
-		PickerColorHSV.y = PickerX / ColorsArea.w;
-		PickerColorHSV.z = 1.0f - PickerY / ColorsArea.h;
-		PickerColorHSL = color_cast<ColorHSLA>(PickerColorHSV);
-		PickerColorRGB = color_cast<ColorRGBA>(PickerColorHSL);
-		pColorPicker->m_State = ColorPickerRes;
-	}
-
-	EEditState HuePickerRes = pUI->DoPickerLogic(&pColorPicker->m_HuePickerId, &HueArea, &PickerX, &PickerY);
-	if(HuePickerRes != EEditState::NONE)
-	{
-		PickerColorHSV.x = 1.0f - PickerY / HueArea.h;
-		PickerColorHSL = color_cast<ColorHSLA>(PickerColorHSV);
-		PickerColorRGB = color_cast<ColorRGBA>(PickerColorHSL);
-		pColorPicker->m_State = HuePickerRes;
-	}
-
-	// Marker Color Area
-	const float MarkerX = ColorsArea.x + ColorsArea.w * PickerColorHSV.y;
-	const float MarkerY = ColorsArea.y + ColorsArea.h * (1.0f - PickerColorHSV.z);
-
-	const float MarkerOutlineInd = PickerColorHSV.z > 0.5f ? 0.0f : 1.0f;
-	const ColorRGBA MarkerOutline = ColorRGBA(MarkerOutlineInd, MarkerOutlineInd, MarkerOutlineInd, 1.0f);
-
-	pUI->Graphics()->TextureClear();
-	pUI->Graphics()->QuadsBegin();
-	pUI->Graphics()->SetColor(MarkerOutline);
-	pUI->Graphics()->DrawCircle(MarkerX, MarkerY, 4.5f, 32);
-	pUI->Graphics()->SetColor(PickerColorRGB);
-	pUI->Graphics()->DrawCircle(MarkerX, MarkerY, 3.5f, 32);
-	pUI->Graphics()->QuadsEnd();
-
-	// Marker Hue Area
-	CUIRect HueMarker;
-	HueArea.Margin(-2.5f, &HueMarker);
-	HueMarker.h = 6.5f;
-	HueMarker.y = (HueArea.y + HueArea.h * (1.0f - PickerColorHSV.x)) - HueMarker.h / 2.0f;
-
-	const ColorRGBA HueMarkerColor = color_cast<ColorRGBA>(ColorHSVA(PickerColorHSV.x, 1.0f, 1.0f, 1.0f));
-	const float HueMarkerOutlineColor = PickerColorHSV.x > 0.75f ? 1.0f : 0.0f;
-	const ColorRGBA HueMarkerOutline = ColorRGBA(HueMarkerOutlineColor, HueMarkerOutlineColor, HueMarkerOutlineColor, 1.0f);
-
-	HueMarker.Draw(HueMarkerOutline, IGraphics::CORNER_ALL, 1.2f);
-	HueMarker.Margin(1.2f, &HueMarker);
-	HueMarker.Draw(HueMarkerColor, IGraphics::CORNER_ALL, 1.2f);
-
+	// Write back
 	pColorPicker->m_HsvaColor = PickerColorHSV;
 	pColorPicker->m_RgbaColor = PickerColorRGB;
 	pColorPicker->m_HslaColor = PickerColorHSL;
 	if(pColorPicker->m_pHslaColor != nullptr)
 		*pColorPicker->m_pHslaColor = PickerColorHSL.Pack(pColorPicker->m_Alpha);
 
+	// Mode buttons
 	static constexpr SColorPickerPopupContext::EColorPickerMode PICKER_MODES[] = {SColorPickerPopupContext::MODE_HSVA, SColorPickerPopupContext::MODE_RGBA, SColorPickerPopupContext::MODE_HSLA};
 	static constexpr const char *PICKER_MODE_LABELS[] = {"HSVA", "RGBA", "HSLA"};
 	static_assert(std::size(PICKER_MODES) == std::size(PICKER_MODE_LABELS));
+	const float ModeButtonW = (ModeButtonArea.w - ValuePadding * 2) / 3.0f;
 	for(SColorPickerPopupContext::EColorPickerMode Mode : PICKER_MODES)
 	{
 		CUIRect ModeButton;
-		ModeButtonArea.VSplitLeft(HsvValueWidth, &ModeButton, &ModeButtonArea);
+		ModeButtonArea.VSplitLeft(ModeButtonW, &ModeButton, &ModeButtonArea);
 		ModeButtonArea.VSplitLeft(ValuePadding, nullptr, &ModeButtonArea);
-		if(pUI->DoButton_PopupMenu(&pColorPicker->m_aModeButtons[(int)Mode], PICKER_MODE_LABELS[Mode], &ModeButton, 10.0f, TEXTALIGN_MC, 2.0f, false, pColorPicker->m_ColorMode != Mode))
+		if(pUI->DoButton_PopupMenu(&pColorPicker->m_aModeButtons[(int)Mode], PICKER_MODE_LABELS[(int)Mode], &ModeButton, 10.0f, TEXTALIGN_MC, 2.0f, false, pColorPicker->m_ColorMode != Mode))
 		{
 			pColorPicker->m_ColorMode = Mode;
 		}
@@ -2533,5 +2596,7 @@ void CUi::ShowPopupColorPicker(float X, float Y, SColorPickerPopupContext *pCont
 	pContext->m_pUI = this;
 	if(pContext->m_ColorMode == SColorPickerPopupContext::MODE_UNSET)
 		pContext->m_ColorMode = SColorPickerPopupContext::MODE_HSVA;
-	DoPopupMenu(pContext, X, Y, 160.0f + 10.0f, 209.0f + 10.0f, pContext, PopupColorPicker);
+	// Popup width: 170, height: wheel(160) + pad(4) + valslider(12) + pad(4) + fields(18) + pad(4) + hex(18) + pad(4) + modes(18) + margins(10)
+	const float PopupH = 160.0f + 4.0f + 12.0f + 4.0f + (pContext->m_Alpha ? 12.0f + 4.0f : 0.0f) + 18.0f + 4.0f + 18.0f + 4.0f + 18.0f + 10.0f;
+	DoPopupMenu(pContext, X, Y, 170.0f, PopupH, pContext, PopupColorPicker);
 }
