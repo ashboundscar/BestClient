@@ -36,14 +36,14 @@ private:
 	void SetUiMousePos(vec2 Pos);
 
 	void RenderPanel(const CUIRect &Screen);
-	void RenderPlayerActions(CUIRect View, int ClientId);
+	void RenderPlayerActions(CUIRect View, int ClientId, int LocalAuth);
 	void RenderPlayerInfo(CUIRect View, int ClientId);
 	void RenderPlayerList(CUIRect View);
 	void RenderRconLogin(CUIRect View);
 	void RenderLogs(CUIRect View);
-	void RenderFastActions(CUIRect View);
-	void RenderTunings(CUIRect View);
-	void RenderActionPopup(const CUIRect &Screen);
+	void RenderFastActions(CUIRect View, int LocalAuth);
+	void RenderTunings(CUIRect View, int LocalAuth);
+	void RenderActionPopup(const CUIRect &Screen, int LocalAuth);
 	void OpenActionPopup(int ClientId, int ActionType);
 	void CloseActionPopup();
 
@@ -65,7 +65,12 @@ private:
 	int m_FastActionEditIndex = -1;
 	int m_SelectedTuning = -1;
 	int m_LastSelectedTuning = -1;
-	std::deque<std::string> m_RconLogLines;
+	struct SLogLine
+	{
+		std::string m_Text;
+		char m_aTime[9]; // "HH:MM:SS"
+	};
+	std::deque<SLogLine> m_RconLogLines;
 
 	CButtonContainer m_TabPlayersButton;
 	CButtonContainer m_TabInfoButton;

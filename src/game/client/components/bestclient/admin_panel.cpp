@@ -19,6 +19,7 @@
 #include <game/localization.h>
 
 #include <cmath>
+#include <ctime>
 #include <vector>
 
 namespace
@@ -278,13 +279,9 @@ bool CAdminPanel::OnInput(const IInput::CEvent &Event)
 	return true;
 }
 
-void CAdminPanel::RenderPlayerActions(CUIRect View, int ClientId)
+void CAdminPanel::RenderPlayerActions(CUIRect View, int ClientId, int LocalAuth)
 {
 	const bool HasPlayer = ClientId >= 0 && ClientId < MAX_CLIENTS && GameClient()->m_Snap.m_apPlayerInfos[ClientId];
-
-	int LocalAuth = AUTHED_NO;
-	if(GameClient()->m_Snap.m_LocalClientId >= 0)
-		LocalAuth = GameClient()->m_aClients[GameClient()->m_Snap.m_LocalClientId].m_AuthLevel;
 
 	const bool CanMute = HasPlayer && LocalAuth >= AUTHED_HELPER;
 	const bool CanKick = HasPlayer && LocalAuth >= AUTHED_MOD;
@@ -321,7 +318,7 @@ void CAdminPanel::RenderPlayerActions(CUIRect View, int ClientId)
 			const int Style = Enabled ? 0 : -1;
 			if(GameClient()->m_Menus.DoButton_Menu(&Button, pLabel, Style, &ButtonRect))
 			{
-				if(Enabled && Client()->RconAuthed())
+				if(Enabled)
 					Client()->Rcon(pCommand);
 			}
 		}
@@ -523,7 +520,30 @@ void CAdminPanel::RenderPlayerList(CUIRect View)
 
 		RenderTools()->RenderTee(pIdleState, &TeeInfo, EMOTE_NORMAL, vec2(1.0f, 0.0f), TeeRenderPos);
 
-		Ui()->DoLabel(&Label, GameClient()->m_aClients[aPlayerIds[i]].m_aName, 14.0f, TEXTALIGN_ML);
+		const int PlayerAuth = GameClient()->m_aClients[aPlayerIds[i]].m_AuthLevel;
+		if(PlayerAuth > AUTHED_NO)
+		{
+			CUIRect NameRect, AuthRect;
+			Label.VSplitRight(Label.h, &NameRect, &AuthRect);
+			Ui()->DoLabel(&NameRect, GameClient()->m_aClients[aPlayerIds[i]].m_aName, 14.0f, TEXTALIGN_ML);
+
+			ColorRGBA IconColor(1.0f, 1.0f, 1.0f, 0.6f);
+			if(PlayerAuth == AUTHED_ADMIN)
+				IconColor = ColorRGBA(1.0f, 0.7f, 0.2f, 1.0f);
+			else if(PlayerAuth == AUTHED_MOD)
+				IconColor = ColorRGBA(0.4f, 0.8f, 1.0f, 1.0f);
+			else if(PlayerAuth == AUTHED_HELPER)
+				IconColor = ColorRGBA(0.5f, 1.0f, 0.5f, 1.0f);
+			TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
+			TextRender()->TextColor(IconColor);
+			Ui()->DoLabel(&AuthRect, FontIcon::LOCK, AuthRect.h * 0.65f, TEXTALIGN_MC);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+			TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
+		}
+		else
+		{
+			Ui()->DoLabel(&Label, GameClient()->m_aClients[aPlayerIds[i]].m_aName, 14.0f, TEXTALIGN_ML);
+		}
 	}
 
 	Selected = s_ListBox.DoEnd();
@@ -610,14 +630,20 @@ void CAdminPanel::RenderLogs(CUIRect View)
 	s_LogScroll.Begin(&View, &ScrollOffset, &ScrollParams);
 	View.y += ScrollOffset.y;
 
-	for(const std::string &Line : m_RconLogLines)
+	for(const SLogLine &LogEntry : m_RconLogLines)
 	{
 		CUIRect Row;
 		View.HSplitTop(LineHeight, &Row, &View);
 		if(!s_LogScroll.AddRect(Row))
 			continue;
-		TextRender()->TextColor(LogColor(Line.c_str()));
-		Ui()->DoLabel(&Row, Line.c_str(), 12.0f, TEXTALIGN_ML);
+
+		constexpr float TimeWidth = 52.0f;
+		CUIRect TimeRect, TextRect;
+		Row.VSplitLeft(TimeWidth, &TimeRect, &TextRect);
+		TextRender()->TextColor(ColorRGBA(0.6f, 0.6f, 0.6f, 1.0f));
+		Ui()->DoLabel(&TimeRect, LogEntry.m_aTime, 11.0f, TEXTALIGN_ML);
+		TextRender()->TextColor(LogColor(LogEntry.m_Text.c_str()));
+		Ui()->DoLabel(&TextRect, LogEntry.m_Text.c_str(), 12.0f, TEXTALIGN_ML);
 		TextRender()->TextColor(TextRender()->DefaultTextColor());
 	}
 
@@ -632,7 +658,7 @@ if(g_Config.m_BcAdminPanelAutoScroll)
 	s_LogScroll.End();
 }
 
-void CAdminPanel::RenderFastActions(CUIRect View)
+void CAdminPanel::RenderFastActions(CUIRect View, int LocalAuth)
 {
 	CUIRect Header;
 	View.HSplitTop(ACTION_LABEL_HEIGHT, &Header, &View);
@@ -746,7 +772,7 @@ void CAdminPanel::RenderFastActions(CUIRect View)
 
 			if(GameClient()->m_Menus.DoButton_Menu(&m_FastActionRunButtons[i], pCmd, 0, &Run))
 			{
-				if(Client()->RconAuthed())
+				if(LocalAuth >= AUTHED_HELPER)
 					Client()->Rcon(pCmd);
 			}
 
@@ -797,14 +823,28 @@ void CAdminPanel::OnRconLine(const char *pLine)
 		}
 	}
 
-if(m_RconLogLines.size() >= (size_t)g_Config.m_BcAdminPanelLogLines)
-		while(m_RconLogLines.size() >= (size_t)g_Config.m_BcAdminPanelLogLines)
-			m_RconLogLines.pop_front();
+	while(m_RconLogLines.size() >= (size_t)g_Config.m_BcAdminPanelLogLines)
+		m_RconLogLines.pop_front();
+
+	SLogLine Entry;
+	const std::time_t Now = std::time(nullptr);
+	std::tm Tm;
+#if defined(_WIN32)
+	const bool TimeOk = localtime_s(&Tm, &Now) == 0;
+#else
+	const bool TimeOk = localtime_r(&Now, &Tm) != nullptr;
+#endif
+	if(TimeOk)
+		std::strftime(Entry.m_aTime, sizeof(Entry.m_aTime), "%H:%M:%S", &Tm);
+	else
+		str_copy(Entry.m_aTime, "??:??:??");
 
 	if(str_length(pLine) > MAX_LOG_LENGTH)
-		m_RconLogLines.emplace_back(std::string(pLine, pLine + MAX_LOG_LENGTH));
+		Entry.m_Text = std::string(pLine, pLine + MAX_LOG_LENGTH);
 	else
-		m_RconLogLines.emplace_back(pLine);
+		Entry.m_Text = pLine;
+
+	m_RconLogLines.push_back(std::move(Entry));
 }
 
 void CAdminPanel::OpenActionPopup(int ClientId, int ActionType)
@@ -868,7 +908,7 @@ void CAdminPanel::CloseActionPopup()
 	m_ActionPopupClosing = true;
 }
 
-void CAdminPanel::RenderActionPopup(const CUIRect &Screen)
+void CAdminPanel::RenderActionPopup(const CUIRect &Screen, int LocalAuth)
 {
 	if(m_ActionPopupType == ACTION_NONE && m_ActionPopupAnim <= 0.0f)
 		return;
@@ -1066,7 +1106,7 @@ void CAdminPanel::RenderActionPopup(const CUIRect &Screen)
 
 	if(GameClient()->m_Menus.DoButton_Menu(&m_ActionConfirmButton, BCLocalize("Apply"), 0, &Confirm))
 	{
-		const bool CanApply = Client()->RconAuthed() && (m_ActionPopupClientId >= 0 || IsMessageAction);
+		const bool CanApply = LocalAuth >= AUTHED_HELPER && (m_ActionPopupClientId >= 0 || IsMessageAction);
 		if(CanApply)
 		{
 			char aCmd[256];
@@ -1130,7 +1170,7 @@ void CAdminPanel::RenderActionPopup(const CUIRect &Screen)
 		CloseActionPopup();
 	}
 }
-void CAdminPanel::RenderTunings(CUIRect View)
+void CAdminPanel::RenderTunings(CUIRect View, int LocalAuth)
 {
 	CUIRect Top, Search, Left, Right;
 	View.HSplitTop(ACTION_LABEL_HEIGHT, &Top, &View);
@@ -1257,7 +1297,7 @@ void CAdminPanel::RenderTunings(CUIRect View)
 
 	if(GameClient()->m_Menus.DoButton_Menu(&m_TuningApplyButton, BCLocalize("Apply"), 0, &Apply))
 	{
-		if(Client()->RconAuthed() && !m_TuningValueInput.IsEmpty())
+		if(LocalAuth >= AUTHED_ADMIN && !m_TuningValueInput.IsEmpty())
 		{
 			char aCmd[128];
 			str_format(aCmd, sizeof(aCmd), "tune %s %s", CTuningParams::Name(m_SelectedTuning), m_TuningValueInput.GetString());
@@ -1267,7 +1307,7 @@ void CAdminPanel::RenderTunings(CUIRect View)
 
 	if(GameClient()->m_Menus.DoButton_Menu(&m_TuningResetButton, BCLocalize("Reset"), 0, &Reset))
 	{
-		if(Client()->RconAuthed())
+		if(LocalAuth >= AUTHED_ADMIN)
 		{
 			char aCmd[128];
 			str_format(aCmd, sizeof(aCmd), "tune_reset %s", CTuningParams::Name(m_SelectedTuning));
@@ -1277,7 +1317,7 @@ void CAdminPanel::RenderTunings(CUIRect View)
 
 	if(GameClient()->m_Menus.DoButton_Menu(&m_TuningResetAllButton, BCLocalize("Reset all"), 0, &ResetAll))
 	{
-		if(Client()->RconAuthed())
+		if(LocalAuth >= AUTHED_ADMIN)
 			Client()->Rcon("tune_reset");
 	}
 
@@ -1302,6 +1342,10 @@ void CAdminPanel::RenderPanel(const CUIRect &Screen)
 	if(m_OpenAnimation <= 0.0f)
 		return;
 
+	int LocalAuth = AUTHED_NO;
+	if(GameClient()->m_Snap.m_LocalClientId >= 0)
+		LocalAuth = GameClient()->m_aClients[GameClient()->m_Snap.m_LocalClientId].m_AuthLevel;
+
 	const float SizeTarget = Client()->RconAuthed() ? 1.0f : 0.0f;
 	m_SizeAnimation = SizeTarget;
 
@@ -1321,7 +1365,40 @@ void CAdminPanel::RenderPanel(const CUIRect &Screen)
 
 	CUIRect HeaderLeft, HeaderRight;
 	Header.VSplitLeft(Header.w * 0.5f, &HeaderLeft, &HeaderRight);
-	Ui()->DoLabel(&HeaderLeft, BCLocalize("Admin Panel"), 18.0f, TEXTALIGN_ML);
+
+	if(Client()->RconAuthed() && LocalAuth > AUTHED_NO)
+	{
+		const char *pAuthLabel = "";
+		ColorRGBA AuthColor(1.0f, 1.0f, 1.0f, 0.6f);
+		if(LocalAuth == AUTHED_ADMIN)
+		{
+			pAuthLabel = BCLocalize("Admin");
+			AuthColor = ColorRGBA(1.0f, 0.7f, 0.2f, 0.9f);
+		}
+		else if(LocalAuth == AUTHED_MOD)
+		{
+			pAuthLabel = BCLocalize("Mod");
+			AuthColor = ColorRGBA(0.4f, 0.8f, 1.0f, 0.9f);
+		}
+		else if(LocalAuth == AUTHED_HELPER)
+		{
+			pAuthLabel = BCLocalize("Helper");
+			AuthColor = ColorRGBA(0.5f, 1.0f, 0.5f, 0.9f);
+		}
+		CUIRect TitleRect, BadgeRect;
+		HeaderLeft.VSplitLeft(HeaderLeft.h * 7.5f, &TitleRect, &BadgeRect);
+		BadgeRect.VSplitLeft(BadgeRect.w * 0.6f, &BadgeRect, nullptr);
+		Ui()->DoLabel(&TitleRect, BCLocalize("Admin Panel"), 18.0f, TEXTALIGN_ML);
+		BadgeRect.HMargin((BadgeRect.h - 14.0f) * 0.5f, &BadgeRect);
+		BadgeRect.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.35f), IGraphics::CORNER_ALL, 3.0f);
+		TextRender()->TextColor(AuthColor);
+		Ui()->DoLabel(&BadgeRect, pAuthLabel, 11.0f, TEXTALIGN_MC);
+		TextRender()->TextColor(TextRender()->DefaultTextColor());
+	}
+	else
+	{
+		Ui()->DoLabel(&HeaderLeft, BCLocalize("Admin Panel"), 18.0f, TEXTALIGN_ML);
+	}
 
 	if(Client()->RconAuthed())
 	{
@@ -1351,10 +1428,6 @@ void CAdminPanel::RenderPanel(const CUIRect &Screen)
 		CUIRect Footer;
 		Panel.HSplitBottom(26.0f, &Panel, &Footer);
 		Footer.Margin(6.0f, &Footer);
-
-		int LocalAuth = AUTHED_NO;
-		if(GameClient()->m_Snap.m_LocalClientId >= 0)
-			LocalAuth = GameClient()->m_aClients[GameClient()->m_Snap.m_LocalClientId].m_AuthLevel;
 
 		const char *pAuth = BCLocalize("None");
 		if(LocalAuth == AUTHED_ADMIN)
@@ -1411,28 +1484,28 @@ void CAdminPanel::RenderPanel(const CUIRect &Screen)
 	if(!Client()->RconAuthed())
 	{
 		RenderRconLogin(Panel);
-		RenderActionPopup(Screen);
+		RenderActionPopup(Screen, LocalAuth);
 		return;
 	}
 
 	if(m_ActiveTab == TAB_TUNINGS)
 	{
-		RenderTunings(Panel);
-		RenderActionPopup(Screen);
+		RenderTunings(Panel, LocalAuth);
+		RenderActionPopup(Screen, LocalAuth);
 		return;
 	}
 
 	if(m_ActiveTab == TAB_FAST_ACTIONS)
 	{
-		RenderFastActions(Panel);
-		RenderActionPopup(Screen);
+		RenderFastActions(Panel, LocalAuth);
+		RenderActionPopup(Screen, LocalAuth);
 		return;
 	}
 
 	if(m_ActiveTab == TAB_LOGS)
 	{
 		RenderLogs(Panel);
-		RenderActionPopup(Screen);
+		RenderActionPopup(Screen, LocalAuth);
 		return;
 	}
 
@@ -1448,11 +1521,11 @@ void CAdminPanel::RenderPanel(const CUIRect &Screen)
 	CUIRect LeftInner = Left;
 	LeftInner.Margin(ACTION_BLOCK_MARGIN, &LeftInner);
 	if(m_ActiveTab == TAB_PLAYERS)
-		RenderPlayerActions(LeftInner, m_SelectedClientId);
+		RenderPlayerActions(LeftInner, m_SelectedClientId, LocalAuth);
 	else
 		RenderPlayerInfo(LeftInner, m_SelectedClientId);
 
-	RenderActionPopup(Screen);
+	RenderActionPopup(Screen, LocalAuth);
 }
 
 void CAdminPanel::OnRender()
