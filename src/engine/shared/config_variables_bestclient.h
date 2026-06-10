@@ -125,6 +125,7 @@ MACRO_CONFIG_INT(BcAdminPanelLastTab, bc_adminpanel_last_tab, 0, 0, 10, CFGFLAG_
 MACRO_CONFIG_INT(BcAdminPanelDisableAnim, bc_adminpanel_disable_anim, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Disable admin panel animations")
 MACRO_CONFIG_INT(BcAdminPanelScale, bc_adminpanel_scale, 100, 80, 120, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Admin panel scale in percent")
 MACRO_CONFIG_INT(BcAdminPanelLogLines, bc_adminpanel_log_lines, 200, 50, 500, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Maximum lines to keep in admin panel logs")
+MACRO_CONFIG_INT(BcAdminPanelRconLog, bc_adminpanel_rcon_log, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Log F2 console (rcon) output to rcon-log.txt in DDNet appdata")
 MACRO_CONFIG_COL(BcAdminPanelBgColor, bc_adminpanel_bg_color, 0x8C000000, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Admin panel background color")
 MACRO_CONFIG_COL(BcAdminPanelTabInactiveColor, bc_adminpanel_tab_inactive_color, 0xCC00002E, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Admin panel inactive tab color")
 MACRO_CONFIG_COL(BcAdminPanelTabActiveColor, bc_adminpanel_tab_active_color, 0xE6000052, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Admin panel active tab color")

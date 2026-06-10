@@ -8,6 +8,7 @@
 #include <engine/shared/config.h>
 #include <engine/font_icons.h>
 #include <engine/shared/localization.h>
+#include <engine/storage.h>
 #include <engine/textrender.h>
 
 #include <game/client/animstate.h>
@@ -785,6 +786,17 @@ void CAdminPanel::OnRconLine(const char *pLine)
 
 	constexpr int MAX_LOG_LENGTH = 256;
 
+	if(g_Config.m_BcAdminPanelRconLog)
+	{
+		IOHANDLE File = Storage()->OpenFile("rcon-log.txt", IOFLAG_APPEND, IStorage::TYPE_SAVE);
+		if(File)
+		{
+			io_write(File, pLine, str_length(pLine));
+			io_write(File, "\n", 1);
+			io_close(File);
+		}
+	}
+
 if(m_RconLogLines.size() >= (size_t)g_Config.m_BcAdminPanelLogLines)
 		while(m_RconLogLines.size() >= (size_t)g_Config.m_BcAdminPanelLogLines)
 			m_RconLogLines.pop_front();
@@ -1313,10 +1325,17 @@ void CAdminPanel::RenderPanel(const CUIRect &Screen)
 
 	if(Client()->RconAuthed())
 	{
-		CUIRect Settings;
+		CUIRect Settings, LogToggle;
 		HeaderRight.VSplitRight(HEADER_HEIGHT, &HeaderRight, &Settings);
+		HeaderRight.VSplitRight(4.0f, &HeaderRight, nullptr);
+		HeaderRight.VSplitRight(HEADER_HEIGHT, &HeaderRight, &LogToggle);
 		TextRender()->SetFontPreset(EFontPreset::ICON_FONT);
-	const bool OpenSettings = GameClient()->m_Menus.DoButton_Menu(&m_SettingsButton, FontIcon::GEAR, 0, &Settings);
+		const bool OpenSettings = GameClient()->m_Menus.DoButton_Menu(&m_SettingsButton, FontIcon::GEAR, 0, &Settings);
+		const ColorRGBA LogColor = g_Config.m_BcAdminPanelRconLog ? ColorRGBA(0.2f, 1.0f, 0.4f, 1.0f) : ColorRGBA(1.0f, 1.0f, 1.0f, 0.5f);
+		TextRender()->TextColor(LogColor);
+		if(GameClient()->m_Menus.DoButton_Menu(&m_RconLogButton, FontIcon::FILE, 0, &LogToggle))
+			g_Config.m_BcAdminPanelRconLog ^= 1;
+		TextRender()->TextColor(TextRender()->DefaultTextColor());
 		TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
 		if(OpenSettings)
 			OpenActionPopup(-1, ACTION_SETTINGS);

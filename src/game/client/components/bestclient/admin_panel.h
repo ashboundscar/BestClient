@@ -75,6 +75,7 @@ private:
 
 	CButtonContainer m_RconLoginButton;
 	CButtonContainer m_RconLogoutButton;
+	CButtonContainer m_RconLogButton;
 	CButtonContainer m_SettingsButton;
 	CButtonContainer m_FastActionAddButton;
 
