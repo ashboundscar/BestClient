@@ -262,13 +262,13 @@ void CEditor::TestMapLocally()
 	else
 	{
 		char aMapChange[IO_MAX_PATH_LENGTH + 64];
-		str_format(aMapChange, sizeof(aMapChange), "change_map %s", aFilenameNoExt);
+		str_format(aMapChange, sizeof(aMapChange), "sv_map %s", aFilenameNoExt);
 		if(pGameClient->m_LocalServer.RunServer({"sv_register 0", aMapChange}))
 		{
 			m_DuoSession.m_LocalTestingActive = true;
 			OnClose();
 			g_Config.m_ClEditor = 0;
-			Client()->Connect("localhost");
+			Client()->Connect("127.0.0.1");
 		}
 		else
 		{
